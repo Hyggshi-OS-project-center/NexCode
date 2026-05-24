@@ -87,9 +87,13 @@ export function getTerminalTheme(shell: TerminalShell, uiTheme: UiTheme): ITheme
 
 export function getTerminalFontFamily(shell: TerminalShell): string {
   if (shell === 'cmd') {
-    return 'Consolas, "Lucida Console", "Courier New", monospace';
+    // "Cascadia Mono" and "Noto Sans Mono" cover Unicode ranges (Vietnamese,
+    // CJK, emoji fallback) that Consolas / Lucida Console / Courier New miss.
+    // Listed after Consolas so the classic CMD look is preserved on systems
+    // that already have Consolas; broader Unicode support activates elsewhere.
+    return 'Consolas, "Cascadia Mono", "Cascadia Code", "Noto Sans Mono", "Lucida Console", "Courier New", monospace';
   }
-  return 'Consolas, "Cascadia Mono", "Cascadia Code", monospace';
+  return 'Consolas, "Cascadia Mono", "Cascadia Code", "Noto Sans Mono", monospace';
 }
 
 export function getTerminalPanelTitle(shell: TerminalShell): string {

@@ -22,21 +22,27 @@ export function stdioEncodingForShell(_shell: TerminalShell, _exe: string): Term
   return 'utf8';
 }
 
-function looksUtf16Le(buf: Buffer): boolean {
-  const n = Math.min(buf.length, 128);
-  if (n < 4) return false;
-  let asciiNulls = 0;
-  for (let i = 1; i < n; i += 2) {
-    if (buf[i] === 0 && buf[i - 1] >= 0x20 && buf[i - 1] <= 0x7e) asciiNulls++;
-  }
-  return asciiNulls >= 4;
-}
-
-/** Detect UTF-16 LE / UTF-8 BOM on the first chunk, else fall back to preferred. */
-export function resolveStreamEncoding(buf: Buffer, preferred: TerminalStdioEncoding): TerminalStdioEncoding {
+/**
+ * Detect encoding from the first chunk of shell output.
+ *
+ * Only BOM bytes are used as evidence — the previous heuristic (`looksUtf16Le`)
+ * was too aggressive: the initial CMD banner (printed in the system OEM
+ * encoding before `chcp 65001` takes effect) could contain byte patterns that
+ * looked like UTF-16 LE, permanently switching the decoder and corrupting
+ * all subsequent output.
+ *
+ * BOM detection is still useful for edge cases (e.g. PowerShell scripts that
+ * emit a UTF-16 LE BOM), so we keep those two checks.
+ */
+export function resolveStreamEncoding(
+  buf: Buffer,
+  preferred: TerminalStdioEncoding,
+): TerminalStdioEncoding {
+  // UTF-16 LE BOM: FF FE
   if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) return 'utf16le';
+  // UTF-8 BOM: EF BB BF
   if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) return 'utf8';
-  if (looksUtf16Le(buf)) return 'utf16le';
+  // No BOM — trust the encoding that the shell startup script configured
   return preferred;
 }
 
@@ -45,17 +51,30 @@ export interface TerminalStreamDecoder {
   end(): string;
 }
 
-export function createTerminalDecoder(preferred: TerminalStdioEncoding = 'utf8'): TerminalStreamDecoder {
+export function createTerminalDecoder(
+  preferred: TerminalStdioEncoding = 'utf8',
+): TerminalStreamDecoder {
   let encoding = preferred;
   let decoder = new StringDecoder(encoding);
-  let settled = preferred !== 'utf8';
+  // Always inspect the first chunk for a BOM, then commit to an encoding.
+  let settled = false;
 
   return {
     write(buf: Buffer): string {
       if (!settled && buf.length) {
-        encoding = resolveStreamEncoding(buf, preferred);
+        const detected = resolveStreamEncoding(buf, preferred);
         settled = true;
-        if (encoding !== preferred) decoder = new StringDecoder(encoding);
+        if (detected !== encoding) {
+          encoding = detected;
+          decoder = new StringDecoder(encoding);
+        }
+        // Strip BOM bytes so they don't appear in the terminal output
+        if (encoding === 'utf16le' && buf[0] === 0xff && buf[1] === 0xfe) {
+          return decoder.write(buf.slice(2));
+        }
+        if (encoding === 'utf8' && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
+          return decoder.write(buf.slice(3));
+        }
       }
       return decoder.write(buf);
     },
@@ -73,9 +92,15 @@ export function toPowerShellEncodedCommand(script: string): string {
 /** UTF-8 console + prompt text only (no OSC on stdout — avoids mojibake in piped mode) */
 export function buildPowerShellEncodedStartup(_exe: string): string {
   const script =
+    // Force UTF-8 on all console I/O streams
     '$__nc=[System.Text.UTF8Encoding]::new($false);' +
     '[Console]::InputEncoding=[Console]::OutputEncoding=$__nc;' +
     '$OutputEncoding=$__nc;' +
+    // PSReadLine tweaks for piped/non-PTY sessions:
+    //   - BellStyle None     — silence the bell (avoids stray \x07 bytes)
+    //   - ViModeIndicator None — suppress VT cursor-shape changes (ESC[5q etc.)
+    // Wrapped in try/catch so it is safe on PS 2.x / Server Core without PSReadLine.
+    'try{Set-PSReadLineOption -BellStyle None -ViModeIndicator None}catch{};' +
     POWERSHELL_PIPED_PROMPT_HOOK;
   return toPowerShellEncodedCommand(script);
 }

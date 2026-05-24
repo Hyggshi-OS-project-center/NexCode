@@ -1,0 +1,78 @@
+/* VS Code–inspired palettes — neutral grays, no vibrant accents */
+
+:root,
+[data-theme="dark"] {
+  --bg-app: #1e1e1e;
+  --bg-sidebar: #252526;
+  --bg-activity: #333333;
+  --bg-editor: #1e1e1e;
+  --bg-panel: #252526;
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-active: rgba(255, 255, 255, 0.1);
+  --bg-selected: #37373d;
+  --bg-tab: #2d2d2d;
+  --bg-tab-active: #1e1e1e;
+  --bg-titlebar: #323233;
+  --bg-statusbar: #252526;
+  --bg-input: #3c3c3c;
+  --bg-terminal: #1e1e1e;
+  --bg-dropdown: #252526;
+
+  --text-primary: #cccccc;
+  --text-secondary: #969696;
+  --text-muted: #6e6e6e;
+  --text-accent: #cccccc;
+  --text-statusbar: #cccccc;
+
+  --border: #3c3c3c;
+  --border-subtle: #2b2b2b;
+  --border-strong: #454545;
+  --focus-border: #505050;
+
+  --accent: #cccccc;
+  --accent-soft: #969696;
+  --accent-glow: transparent;
+  --success: #89d185;
+  --warning: #cca700;
+  --danger: #f14c4c;
+
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.36);
+  --transition: 0.1s ease;
+}
+
+[data-theme="light"] {
+  --bg-app: #ffffff;
+  --bg-sidebar: #f3f3f3;
+  --bg-activity: #f3f3f3;
+  --bg-editor: #ffffff;
+  --bg-panel: #f3f3f3;
+  --bg-hover: rgba(0, 0, 0, 0.05);
+  --bg-active: rgba(0, 0, 0, 0.08);
+  --bg-selected: #e4e6f1;
+  --bg-tab: #ececec;
+  --bg-tab-active: #ffffff;
+  --bg-titlebar: #f3f3f3;
+  --bg-statusbar: #f3f3f3;
+  --bg-input: #ffffff;
+  --bg-terminal: #ffffff;
+  --bg-dropdown: #ffffff;
+
+  --text-primary: #333333;
+  --text-secondary: #616161;
+  --text-muted: #6e6e6e;
+  --text-accent: #333333;
+  --text-statusbar: #616161;
+
+  --border: #d4d4d4;
+  --border-subtle: #e5e5e5;
+  --border-strong: #c8c8c8;
+  --focus-border: #007acc;
+
+  --accent: #333333;
+  --accent-soft: #616161;
+  --accent-glow: transparent;
+}

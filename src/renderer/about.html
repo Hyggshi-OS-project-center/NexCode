@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>About NexCode IDE</title>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        font-family: "Segoe UI", system-ui, sans-serif;
+        font-size: 13px;
+        color: #cccccc;
+        background: #252526;
+        overflow: hidden;
+        user-select: none;
+      }
+      .about-shell {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 28px 32px 20px;
+        min-height: 100vh;
+      }
+      .about-logo {
+        width: 72px;
+        height: 72px;
+        margin-bottom: 14px;
+        object-fit: contain;
+      }
+      .about-logo.hidden {
+        display: none;
+      }
+      .about-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #ffffff;
+        margin-bottom: 6px;
+      }
+      .about-tagline {
+        text-align: center;
+        color: #969696;
+        line-height: 1.45;
+        max-width: 320px;
+        margin-bottom: 16px;
+      }
+      .about-version {
+        color: #cccccc;
+        margin-bottom: 4px;
+      }
+      .about-version code {
+        font-family: Consolas, "Courier New", monospace;
+        font-size: 12px;
+        color: #d4d4d4;
+      }
+      .about-meta {
+        font-size: 11px;
+        color: #6e6e6e;
+        margin-top: 8px;
+        text-align: center;
+        line-height: 1.5;
+      }
+      .about-actions {
+        margin-top: auto;
+        padding-top: 22px;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+      }
+      .about-ok {
+        min-width: 88px;
+        padding: 6px 24px;
+        font-size: 13px;
+        font-family: inherit;
+        color: #ffffff;
+        background: #0e639c;
+        border: 1px solid #0e639c;
+        border-radius: 2px;
+        cursor: pointer;
+      }
+      .about-ok:hover {
+        background: #1177bb;
+        border-color: #1177bb;
+      }
+      .about-ok:focus {
+        outline: 1px solid #007fd4;
+        outline-offset: 1px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="about-shell">
+      <img id="about-logo" class="about-logo hidden" alt="" width="72" height="72" />
+      <h1 id="about-title" class="about-title">NexCode IDE</h1>
+      <p id="about-tagline" class="about-tagline">Loading…</p>
+      <p class="about-version">Version <code id="about-version">—</code></p>
+      <p id="about-meta" class="about-meta"></p>
+      <div class="about-actions">
+        <button type="button" class="about-ok" id="about-ok">OK</button>
+      </div>
+    </div>
+    <script type="module" src="./about.ts"></script>
+  </body>
+</html>

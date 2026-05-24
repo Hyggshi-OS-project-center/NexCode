@@ -38,8 +38,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build (Vite + TypeScript)
+        run: npm run build
+
       - name: Package Electron app (Linux)
-        run: npm run pack
+        run: npx electron-builder --linux --config.directories.output=dist/pack-out
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

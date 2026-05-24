@@ -1,0 +1,37 @@
+/**
+ * Single source for Windows file associations (electron-builder + docs).
+ * `progId` must be unique (do not use generic names like "Python" — they clash with Windows).
+ */
+module.exports = [
+  { ext: ['js', 'mjs', 'cjs'], icon: 'win32/javascript.ico', progId: 'NexCodeIDE.JavaScript', description: 'JavaScript Source File' },
+  { ext: ['jsx', 'tsx'], icon: 'win32/react.ico', progId: 'NexCodeIDE.React', description: 'React Source File' },
+  { ext: ['ts'], icon: 'win32/typescript.ico', progId: 'NexCodeIDE.TypeScript', description: 'TypeScript Source File' },
+  { ext: ['json', 'jsonc'], icon: 'win32/json.ico', progId: 'NexCodeIDE.Json', description: 'JSON Document' },
+  { ext: ['py', 'pyw'], icon: 'win32/python.ico', progId: 'NexCodeIDE.Python', description: 'Python Source File' },
+  { ext: ['html', 'htm'], icon: 'win32/html.ico', progId: 'NexCodeIDE.Html', description: 'HTML Document' },
+  { ext: ['css'], icon: 'win32/css.ico', progId: 'NexCodeIDE.Css', description: 'CSS Stylesheet' },
+  { ext: ['scss'], icon: 'win32/sass.ico', progId: 'NexCodeIDE.Scss', description: 'SCSS Stylesheet' },
+  { ext: ['sass'], icon: 'win32/sass.ico', progId: 'NexCodeIDE.Sass', description: 'Sass Stylesheet' },
+  { ext: ['less'], icon: 'win32/less.ico', progId: 'NexCodeIDE.Less', description: 'Less Stylesheet' },
+  { ext: ['md', 'mdx', 'markdown'], icon: 'win32/markdown.ico', progId: 'NexCodeIDE.Markdown', description: 'Markdown Document' },
+  { ext: ['java', 'class', 'jar'], icon: 'win32/java.ico', progId: 'NexCodeIDE.Java', description: 'Java Source File' },
+  { ext: ['c', 'h'], icon: 'win32/c.ico', progId: 'NexCodeIDE.C', description: 'C Source File' },
+  { ext: ['cpp', 'cc', 'cxx', 'hpp', 'rs'], icon: 'win32/cpp.ico', progId: 'NexCodeIDE.Cpp', description: 'C++ Source File' },
+  { ext: ['cs'], icon: 'win32/csharp.ico', progId: 'NexCodeIDE.CSharp', description: 'C# Source File' },
+  { ext: ['php'], icon: 'win32/php.ico', progId: 'NexCodeIDE.Php', description: 'PHP Source File' },
+  { ext: ['rb'], icon: 'win32/ruby.ico', progId: 'NexCodeIDE.Ruby', description: 'Ruby Source File' },
+  { ext: ['go'], icon: 'win32/go.ico', progId: 'NexCodeIDE.Go', description: 'Go Source File' },
+  { ext: ['kt', 'kts'], icon: 'win32/kotlin.ico', progId: 'NexCodeIDE.Kotlin', description: 'Kotlin Source File' },
+  { ext: ['lua'], icon: 'win32/lua.ico', progId: 'NexCodeIDE.Lua', description: 'Lua Source File' },
+  { ext: ['luau'], icon: 'win32/luau.ico', progId: 'NexCodeIDE.Luau', description: 'Luau Source File' },
+  { ext: ['hosc'], icon: 'win32/hosc.ico', progId: 'NexCodeIDE.Hosc', description: 'Hyggshi OS Code Language Source File' },
+  { ext: ['vue'], icon: 'win32/vue.ico', progId: 'NexCodeIDE.Vue', description: 'Vue Component' },
+  { ext: ['sql'], icon: 'win32/sql.ico', progId: 'NexCodeIDE.Sql', description: 'SQL Script' },
+  { ext: ['ps1', 'psm1'], icon: 'win32/powershell.ico', progId: 'NexCodeIDE.PowerShell', description: 'PowerShell Script' },
+  { ext: ['sh', 'bash', 'bat', 'cmd'], icon: 'win32/shell.ico', progId: 'NexCodeIDE.Shell', description: 'Shell Script' },
+  { ext: ['yml', 'yaml'], icon: 'win32/yaml.ico', progId: 'NexCodeIDE.Yaml', description: 'YAML Document' },
+  { ext: ['xml', 'svg', 'vsix'], icon: 'win32/xml.ico', progId: 'NexCodeIDE.Xml', description: 'XML Document' },
+  { ext: ['pug', 'jade'], icon: 'win32/jade.ico', progId: 'NexCodeIDE.Pug', description: 'Pug Template' },
+  { ext: ['ini', 'cfg', 'conf', 'env'], icon: 'win32/config.ico', progId: 'NexCodeIDE.Config', description: 'Configuration File' },
+  { ext: ['txt', 'log', 'text'], icon: 'win32/default.ico', progId: 'NexCodeIDE.Text', description: 'Text Document' },
+];

@@ -1,0 +1,98 @@
+{
+  "name": "NexCode-ide",
+  "productName": "NexCode IDE",
+  "version": "1.0.0",
+  "description": "NexCode IDE — desktop code editor",
+  "main": "dist/main/main.js",
+  "author": "Hyggshi OS major project center",
+  "license": "MIT",
+  "scripts": {
+    "dev": "npm run build:main && concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
+    "dev:renderer": "vite build --watch --mode development",
+    "dev:electron": "wait-on dist/renderer/index.html && electron .",
+    "icons": "node scripts/generate-icons.mjs && node scripts/ensure-default-win32-icon.mjs && node scripts/normalize-win32-icons.mjs && node scripts/copy-win32-icons.mjs",
+    "build": "npm run icons && npm run build:main && npm run build:renderer",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:renderer": "vite build",
+    "prepack:clean": "node scripts/prepack-clean.mjs",
+    "pack": "npm run build && node scripts/pack-installer.mjs",
+    "pack:portable": "npm run build && node scripts/pack-portable.mjs",
+    "start": "electron .",
+    "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit"
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
+    "monaco-editor": "^0.52.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "concurrently": "^9.1.2",
+    "decode-ico": "^0.4.1",
+    "electron": "^34.3.0",
+    "electron-builder": "^25.1.8",
+    "rcedit": "^5.0.2",
+    "sharp": "^0.33.5",
+    "to-ico": "^1.1.5",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.2",
+    "wait-on": "^8.0.3"
+  },
+  "build": {
+    "extends": "./electron-builder.config.cjs",
+    "appId": "com.nexcode.ide",
+    "productName": "NexCode IDE",
+    "icon": "build/icon.ico",
+    "afterPack": "./scripts/after-pack.cjs",
+    "directories": {
+      "output": "dist/pack-out",
+      "buildResources": "build"
+    },
+    "extraResources": [
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      }
+    ],
+    "files": [
+      "dist/main/**/*",
+      "dist/renderer/**/*",
+      "dist/shared/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "icon": "icon.ico",
+      "executableName": "NexCode IDE",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}-${version}-setup.${ext}",
+      "shortcutName": "NexCode IDE",
+      "installerIcon": "icon.ico",
+      "uninstallerIcon": "icon.ico",
+      "installerHeaderIcon": "icon.ico"
+    }
+  }
+}

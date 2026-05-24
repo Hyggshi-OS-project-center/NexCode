@@ -1,4 +1,4 @@
-name: Build Nexus IDE (Windows)
+name: Build NexCode IDE (Windows)
 
 on:
   push:
@@ -24,17 +24,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build (Vite + TypeScript)
-        run: npm run build
-
-      - name: Package Electron app
-        run: npm run dist
+      # `pack` đã bao gồm build bên trong: npm run build && node scripts/pack-installer.mjs
+      # Không cần chạy `npm run build` riêng nữa để tránh build 2 lần
+      - name: Package Electron app (NSIS installer)
+        run: npm run pack
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NexusIDE-Windows
-          path: dist/*.exe
+          name: NexCode-IDE-Windows
+          path: dist/pack-out/*.exe   # ← output dir theo electron-builder.config
           retention-days: 7

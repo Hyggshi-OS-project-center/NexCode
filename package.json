@@ -4,7 +4,10 @@
   "version": "1.0.0",
   "description": "NexCode IDE — desktop code editor",
   "main": "dist/main/main.js",
-  "author": "Hyggshi OS major project center",
+  "author": {
+    "name": "Hyggshi OS major project center",
+    "email": "hyggshidev@gmail.com"
+  },
   "license": "MIT",
   "scripts": {
     "dev": "npm run build:main && concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
@@ -95,6 +98,7 @@
       "category": "Development",
       "executableName": "nexcode-ide",
       "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "maintainer": "Hyggshi OS major project center <hyggshidev@gmail.com>",
       "target": [
         {
           "target": "AppImage",

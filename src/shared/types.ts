@@ -50,6 +50,8 @@ export interface AppSettings {
   openRouterApiKey: string;
   /** OpenRouter model id, e.g. openai/gpt-4o-mini */
   openRouterModel: string;
+  /** Enable Chromium sandbox (requires restart) — off by default for memory savings */
+  sandbox: boolean;
 }
 
 /** One turn in the Gemini chat history */
@@ -124,6 +126,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   aiProvider: 'gemini',
   openRouterApiKey: '',
   openRouterModel: 'openai/gpt-4o-mini',
+  sandbox: false,
 };
 
 export type IpcChannel =

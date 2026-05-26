@@ -128,6 +128,14 @@ export class SettingsPanel {
           </div>
         </div>
         <div class="settings-group">
+          <h3>Security</h3>
+          <div class="setting-row">
+            <label>Sandbox</label>
+            <input type="checkbox" id="set-sandbox" ${s.sandbox ? 'checked' : ''} />
+          </div>
+          <p class="settings-hint">Enables the Chromium sandbox for stronger process isolation. Requires an app restart to take effect.</p>
+        </div>
+        <div class="settings-group">
           <h3>About</h3>
           <p class="settings-hint">Product information is shown in the About window (Help -> About NexCode IDE).</p>
           <button type="button" class="welcome-btn" id="btn-settings-about">About NexCode IDE...</button>
@@ -140,6 +148,7 @@ export class SettingsPanel {
     this.bind('set-tabSize', 'change', (el) => this.patch({ tabSize: Number((el as HTMLInputElement).value) }));
     this.bind('set-wordWrap', 'change', (el) => this.patch({ wordWrap: (el as HTMLInputElement).checked }));
     this.bind('set-minimap', 'change', (el) => this.patch({ minimap: (el as HTMLInputElement).checked }));
+    this.bind('set-sandbox', 'change', (el) => this.patch({ sandbox: (el as HTMLInputElement).checked }));
     this.bind('set-autoSave', 'change', (el) => this.patch({ autoSave: (el as HTMLInputElement).checked }));
     this.bind('set-autoSaveDelay', 'change', (el) => this.patch({ autoSaveDelayMs: Number((el as HTMLInputElement).value) }));
     this.bind('set-terminalFont', 'change', (el) => this.patch({ terminalFontSize: Number((el as HTMLInputElement).value) }));
@@ -217,9 +226,9 @@ export class SettingsPanel {
 
   private escapeAttr(value: string): string {
     return value
-      .replace(/&/g, '&amp;')
-      .replace(/"/g, '&quot;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+      .replace(/&/g, '&')
+      .replace(/"/g, '"')
+      .replace(/</g, '<')
+      .replace(/>/g, '>');
   }
 }

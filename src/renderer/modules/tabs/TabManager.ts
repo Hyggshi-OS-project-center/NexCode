@@ -1,5 +1,5 @@
 /**
- * Tab bar — manages open file tabs and coordinates with the editor.
+ * Tab bar — manages open file tabs, with drag-and-drop reordering (free towing).
  */
 export interface OpenTab {
   path: string;
@@ -76,13 +76,23 @@ export class TabManager {
 
   private render(): void {
     this.bar.innerHTML = '';
-    this.tabs.forEach((tab) => {
+    let dragSourceIdx: number | null = null;
+
+    // Persistent drop-position indicator line
+    const indicator = document.createElement('div');
+    indicator.className = 'tab-drop-indicator';
+
+    this.tabs.forEach((tab, idx) => {
       const el = document.createElement('div');
       el.className = `editor-tab${tab.path === this.activePath ? ' active' : ''}${tab.dirty ? ' dirty' : ''}`;
+      el.draggable = true;
+      el.dataset.tabIdx = String(idx);
       el.innerHTML = `
         <span class="tab-name">${tab.name}</span>
         <button class="tab-close" title="Close">×</button>
       `;
+
+      // Click to select / close
       el.addEventListener('click', (e) => {
         if ((e.target as HTMLElement).classList.contains('tab-close')) {
           e.stopPropagation();
@@ -91,6 +101,58 @@ export class TabManager {
           this.setActive(tab.path);
         }
       });
+
+      // Middle-click to close
+      el.addEventListener('auxclick', (e) => {
+        if ((e as MouseEvent).button === 1) {
+          e.preventDefault();
+          this.closeTab(tab.path);
+        }
+      });
+
+      // ── Drag-and-drop free towing ─────────────────────────────────
+      el.addEventListener('dragstart', (e) => {
+        dragSourceIdx = idx;
+        el.classList.add('tab-dragging');
+        e.dataTransfer!.effectAllowed = 'move';
+        e.dataTransfer!.setData('text/plain', String(idx));
+      });
+
+      el.addEventListener('dragend', () => {
+        el.classList.remove('tab-dragging');
+        dragSourceIdx = null;
+        indicator.remove();
+        this.bar.querySelectorAll('.editor-tab').forEach((t) => t.classList.remove('tab-drag-over'));
+      });
+
+      el.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer!.dropEffect = 'move';
+        if (dragSourceIdx === idx) return;
+        this.bar.querySelectorAll('.editor-tab').forEach((t) => t.classList.remove('tab-drag-over'));
+        el.classList.add('tab-drag-over');
+        const rect = el.getBoundingClientRect();
+        const barRect = this.bar.getBoundingClientRect();
+        const insertBefore = (e as DragEvent).clientX < rect.left + rect.width / 2;
+        indicator.style.left = `${(insertBefore ? rect.left : rect.right) - barRect.left}px`;
+        if (!indicator.parentElement) this.bar.appendChild(indicator);
+      });
+
+      el.addEventListener('dragleave', () => {
+        el.classList.remove('tab-drag-over');
+      });
+
+      el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (dragSourceIdx === null || dragSourceIdx === idx) return;
+        const [moved] = this.tabs.splice(dragSourceIdx, 1);
+        // Recalculate target index after splice
+        const targetIdx = dragSourceIdx < idx ? idx - 1 : idx;
+        this.tabs.splice(targetIdx, 0, moved);
+        dragSourceIdx = null;
+        this.render();
+      });
+
       this.bar.appendChild(el);
     });
   }

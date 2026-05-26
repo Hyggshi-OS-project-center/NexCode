@@ -133,7 +133,7 @@ export class EditorManager {
       const file = e.dataTransfer?.files[0];
       if (file) {
         const text = await file.text();
-        const path = file.path || file.name;
+        const path = (file as any).path || file.name;
         await this.openFile(path, text);
       }
     });

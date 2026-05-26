@@ -1,0 +1,61 @@
+name: Build NexCode IDE (Linux)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libnotify-dev \
+            libnss3 \
+            libxss1 \
+            libxtst6 \
+            xauth \
+            xvfb \
+            libgbm-dev \
+            libasound2-dev
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build (Vite + TypeScript)
+        run: npm run build
+
+      - name: Package Electron app (Linux)
+        run: npx electron-builder --linux --config.directories.output=dist/pack-out
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexCode-IDE-Linux-AppImage
+          path: dist/pack-out/*.AppImage
+          retention-days: 7
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NexCode-IDE-Linux-deb
+          path: dist/pack-out/*.deb
+          retention-days: 7

@@ -441,6 +441,8 @@ body {
   display: none !important;
 }
 
+/* editor-split-root visibility when preview active is managed via .hidden class in JS */
+
 .monaco-pane {
   flex: 1;
   min-height: 0;

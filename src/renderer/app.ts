@@ -14,6 +14,7 @@ import { DEFAULT_SETTINGS } from '../shared/types';
 import { EditorManager } from './modules/editor/EditorManager';
 import { EditorIdleEasterEgg } from './modules/editor/EditorIdleEasterEgg';
 import { BinaryFileView } from './modules/editor/BinaryFileView';
+import { MarkdownPreview } from './modules/editor/MarkdownPreview';
 import { EditorBanner } from './modules/editor/EditorBanner';
 import { hasManyInvisibleCharacters } from './utils/textAnalysis';
 import { Explorer } from './modules/explorer/Explorer';
@@ -30,6 +31,7 @@ import { KeyboardShortcuts } from './modules/keyboard/KeyboardShortcuts';
 import type { ShortcutAction } from '../shared/shortcuts';
 import { getRunSpec } from './utils/runCommand';
 import { parentDir, pathsEqual } from './utils/pathUtils';
+import { startMemoryMonitor } from './utils/memoryMonitor';
 import { GitPanel } from './modules/git/GitPanel';
 import { ChatPanel } from './modules/chat/ChatPanel';
 import { SplashScreen } from './modules/ui/SplashScreen';
@@ -78,6 +80,8 @@ class NexusApp {
   private chatPanel!: ChatPanel;
   private idleEasterEgg!: EditorIdleEasterEgg;
   private moments!: NexCodeMoments;
+  private mdPreview!: MarkdownPreview;
+  /** Trimmed terminal output sample for moment detection — capped to reduce memory */
   private terminalOutputSample = '';
 
   private isLegacySplash2025Enabled(): boolean {
@@ -116,6 +120,12 @@ class NexusApp {
     this.idleEasterEgg = new EditorIdleEasterEgg('editor-container');
     this.binaryView = new BinaryFileView('editor-container');
     this.editorBanner = new EditorBanner('editor-container');
+    this.mdPreview = new MarkdownPreview('editor-container');
+    this.mdPreview.onHide(() => {
+      // Restore editor layout after closing preview
+      this.editor.show();
+      requestAnimationFrame(() => this.editor.layout());
+    });
     this.contextMenu = new ContextMenu('context-menu');
     this.explorer = new Explorer(
       'panel-explorer',
@@ -204,6 +214,14 @@ class NexusApp {
     document.getElementById('btn-toggle-terminal')?.addEventListener('click', () => this.terminal.toggle());
     document.getElementById('btn-split-down')?.addEventListener('click', () => this.editor.splitDown());
     document.getElementById('status-branch')?.addEventListener('click', () => void this.showSidebarPanel('git'));
+    document.getElementById('btn-md-preview')?.addEventListener('click', () => {
+      const path = this.tabs.getActivePath();
+      const content = path ? (this.editor.getContent(path) ?? '') : '';
+      const filename = path ? (path.split(/[\/\\]/).pop() ?? '') : '';
+      this.mdPreview.toggle(content, filename);
+      requestAnimationFrame(() => this.editor.layout());
+    });
+    document.getElementById('btn-extensions')?.addEventListener('click', () => void this.openExtensionMarketplace());
 
     document.querySelectorAll('.activity-item').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -231,7 +249,7 @@ class NexusApp {
 
   private handleTerminalOutput(data: string): void {
     const clean = data.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '');
-    this.terminalOutputSample = (this.terminalOutputSample + clean).slice(-24000);
+    this.terminalOutputSample = (this.terminalOutputSample + clean).slice(-8000);
     const lower = this.terminalOutputSample.toLowerCase();
 
     const explicitErrorCount = [...lower.matchAll(/(?:found\s+)?(\d+)\s+(?:errors?|diagnostics?)/g)]
@@ -355,6 +373,16 @@ class NexusApp {
               if (!this.tabs.hasTabs()) this.welcome.show();
               else void this.showSidebarPanel('explorer');
             },
+          },
+          { separator: true },
+          {
+            label: 'Extension Marketplace',
+            action: () => void this.openExtensionMarketplace(),
+          },
+          { separator: true },
+          {
+            label: 'View License',
+            action: () => void this.showLicense(),
           },
           {
             label: 'About NexCode IDE',
@@ -719,6 +747,18 @@ class NexusApp {
     this.statusBar.setFile(path);
     void this.refreshOutline();
 
+    // Auto-update Markdown preview if it is open
+    const isMarkdown = /\.md$/i.test(path);
+    const previewBtn = document.getElementById('btn-md-preview') as HTMLButtonElement | null;
+    if (previewBtn) previewBtn.style.display = isMarkdown ? '' : 'none';
+    if (isMarkdown && this.mdPreview.isVisible()) {
+      const filename = path.split(/[\/\\]/).pop() ?? '';
+      this.mdPreview.update(content);
+      this.mdPreview.setTitle(filename);
+    } else if (!isMarkdown) {
+      this.mdPreview.hide();
+    }
+
     if (checkUnicode && hasManyInvisibleCharacters(content) && !this.unicodeHighlightDisabled) {
       this.editor.setUnicodeHighlight(true);
       this.editorBanner.showInvisibleUnicodeWarning(() => {
@@ -728,6 +768,69 @@ class NexusApp {
     } else if (!checkUnicode || this.unicodeHighlightDisabled) {
       this.editorBanner.hide();
     }
+  }
+
+  /** Open the Extension Marketplace (browser-based Open VSX). */
+  private async openExtensionMarketplace(): Promise<void> {
+    // Open Open VSX in the system browser if shell.openExternal is available,
+    // otherwise show a friendly notice in the terminal.
+    try {
+      await (window.electronAPI as unknown as Record<string, (url: string) => Promise<void>>)['openExternal']?.(
+        'https://open-vsx.org',
+      );
+    } catch {
+      await this.terminal.show();
+      await this.terminal.sendCommand(
+        this.formatTerminalMessage('Extension Marketplace: open https://open-vsx.org in your browser'),
+        true,
+      );
+    }
+  }
+
+  /** Show the NexCode license in a terminal message. */
+  private async showLicense(): Promise<void> {
+    const licenseText = [
+      '─'.repeat(60),
+      'NexCode IDE — License',
+      '─'.repeat(60),
+      'MIT License',
+      '',
+      'Copyright (c) 2025 NexCode Contributors',
+      '',
+      'Permission is hereby granted, free of charge, to any person',
+      'obtaining a copy of this software and associated documentation',
+      'files (the "Software"), to deal in the Software without',
+      'restriction, including without limitation the rights to use,',
+      'copy, modify, merge, publish, distribute, sublicense, and/or',
+      'sell copies of the Software, and to permit persons to whom the',
+      'Software is furnished to do so, subject to the following',
+      'conditions:',
+      '',
+      'The above copyright notice and this permission notice shall be',
+      'included in all copies or substantial portions of the Software.',
+      '',
+      'THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.',
+      '─'.repeat(60),
+    ].join('\n');
+
+    // Show in a modal overlay
+    const existing = document.getElementById('license-modal');
+    if (existing) { existing.remove(); return; }
+    const modal = document.createElement('div');
+    modal.id = 'license-modal';
+    modal.className = 'license-modal';
+    modal.innerHTML = `
+      <div class="license-modal-box">
+        <div class="license-modal-header">
+          <span>NexCode IDE — License</span>
+          <button id="btn-license-close" class="icon-btn" title="Close">×</button>
+        </div>
+        <pre class="license-modal-body">${licenseText}</pre>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    document.getElementById('btn-license-close')?.addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
   }
 
   private async switchToFile(path: string): Promise<void> {
@@ -887,17 +990,28 @@ class NexusApp {
     if (this.tabs.hasTabs()) {
       this.welcome.hide();
       const active = this.tabs.getActivePath();
+      const isMarkdown = active ? /\.md$/i.test(active) : false;
+      const previewBtn = document.getElementById('btn-md-preview') as HTMLButtonElement | null;
+      if (previewBtn) previewBtn.style.display = isMarkdown ? '' : 'none';
+
       if (active && this.binaryMeta.has(active) && !this.forceTextOpen.has(active)) {
         this.showBinaryTab(active);
+        this.mdPreview.hide();
       } else {
         this.binaryView.hide();
         this.editor.show();
         this.updateRunButtonForActiveTab();
+        if (!isMarkdown) {
+          this.mdPreview.hide();
+        }
       }
     } else {
       this.welcome.show();
       this.editor.hide();
       this.binaryView.hide();
+      this.mdPreview.hide();
+      const previewBtn = document.getElementById('btn-md-preview') as HTMLButtonElement | null;
+      if (previewBtn) previewBtn.style.display = 'none';
       this.updateRunButtonForActiveTab();
     }
     requestAnimationFrame(() => {

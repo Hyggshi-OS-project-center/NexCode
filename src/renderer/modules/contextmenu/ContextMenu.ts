@@ -2,7 +2,7 @@
  * Custom right-click context menu for editor and explorer.
  */
 export interface MenuItem {
-  label: string;
+  label?: string;
   shortcut?: string;
   action?: () => void;
   separator?: boolean;

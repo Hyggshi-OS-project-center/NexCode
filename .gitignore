@@ -121,3 +121,5 @@ Thumbs.db
 *.ntvs*
 *.njsproj
 *.sln
+
+.continue

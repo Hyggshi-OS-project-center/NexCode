@@ -52,7 +52,6 @@ jobs:
           name: NexCode-IDE-Linux-AppImage
           path: dist/pack-out/*.AppImage
           retention-days: 7
-
       - name: Upload .deb artifact
         uses: actions/upload-artifact@v4
         with:

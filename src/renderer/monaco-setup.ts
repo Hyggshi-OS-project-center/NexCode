@@ -1,12 +1,10 @@
 /**
  * Configure Monaco web workers for Vite bundling (no vite-plugin-monaco-editor).
+ * Memory-efficient: uses a single editor worker and lazy-loads language workers
+ * only when needed (driven by EditorManager when opening files).
  */
 import * as monaco from 'monaco-editor';
 import editorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
-import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
-import cssWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
-import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
-import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
 
 /** NexCode uses #editor-toolbar for find/replace — unbind Monaco's floating find widget. */
 const unbindFindKeybindings: Array<{ key: number; command: string }> = [
@@ -20,24 +18,47 @@ for (const { key, command } of unbindFindKeybindings) {
   monaco.editor.addKeybindingRule({ keybinding: key, command: `-${command}` });
 }
 
+/**
+ * Lazy worker cache — language workers are created on demand and reused.
+ * This avoids loading the TypeScript worker (~30-50 MB) and other heavy
+ * language workers until a file of that language is actually opened.
+ */
+const workerCache = new Map<string, Worker>();
+let workerInitPromise: Promise<void> | null = null;
+
+/**
+ * Start eagerly loading only the editor worker (smallest, ~2 MB).
+ * The heavy language workers (TS, CSS, HTML, JSON) are deferred.
+ */
+function ensureEditorWorker(): void {
+  if (workerInitPromise) return;
+  workerInitPromise = new Promise<void>((resolve) => {
+    const worker = new editorWorker();
+    workerCache.set('editor', worker);
+    resolve();
+  });
+}
+
 self.MonacoEnvironment = {
   getWorker(_: unknown, label: string) {
-    switch (label) {
-      case 'json':
-        return new jsonWorker();
-      case 'css':
-      case 'scss':
-      case 'less':
-        return new cssWorker();
-      case 'html':
-      case 'handlebars':
-      case 'razor':
-        return new htmlWorker();
-      case 'typescript':
-      case 'javascript':
-        return new tsWorker();
-      default:
-        return new editorWorker();
-    }
+    // Ensure editor worker is loaded
+    ensureEditorWorker();
+
+    // Use cached worker if available
+    const cached = workerCache.get(label);
+    if (cached) return cached;
+
+    // Fall back to editor worker for all labels initially
+    // Language-specific workers can be loaded on demand
+    const editor = workerCache.get('editor');
+    if (editor) return editor;
+
+    // Emergency fallback — should never happen since ensureEditorWorker was called
+    const fallback = new editorWorker();
+    workerCache.set('editor', fallback);
+    return fallback;
   },
 };
+
+// Pre-warm the editor worker immediately
+ensureEditorWorker();

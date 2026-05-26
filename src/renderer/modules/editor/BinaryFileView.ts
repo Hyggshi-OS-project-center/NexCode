@@ -48,7 +48,7 @@ export class BinaryFileView {
           </footer>
         </${EL}>
       `;
-      const host = this.el.querySelector('.image-viewer-host')!;
+      const host = this.el.querySelector('.image-viewer-host') as HTMLElement;
       const alt = options.path.split(/[/\\]/).pop() ?? options.path;
       this.imageViewer = new ImageViewer(host, url, alt);
     } else if (options.mediaKind && url) {

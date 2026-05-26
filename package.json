@@ -4,7 +4,10 @@
   "version": "1.0.0",
   "description": "NexCode IDE — desktop code editor",
   "main": "dist/main/main.js",
-  "author": "Hyggshi OS major project center",
+  "author": {
+    "name": "Hyggshi OS major project center",
+    "email": "hyggshidev@gmail.com"
+  },
   "license": "MIT",
   "scripts": {
     "dev": "npm run build:main && concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
@@ -69,15 +72,11 @@
       "target": [
         {
           "target": "portable",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         },
         {
           "target": "nsis",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         }
       ]
     },
@@ -93,6 +92,34 @@
       "installerIcon": "icon.ico",
       "uninstallerIcon": "icon.ico",
       "installerHeaderIcon": "icon.ico"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Development",
+      "executableName": "nexcode-ide",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "maintainer": "Hyggshi OS major project center <hyggshidev@gmail.com>",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "deb": {
+      "packageCategory": "devel",
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "libasound2"
+      ]
     }
   }
 }

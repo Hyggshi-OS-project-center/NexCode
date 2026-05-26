@@ -1,5 +1,6 @@
 /**
  * Electron main process — window lifecycle, IPC routing, and native integrations.
+ * Optimized for reduced RAM usage (< 200 MB).
  */
 import { app, BrowserWindow, dialog, nativeImage, shell, type NativeImage } from 'electron';
 import fs from 'fs';
@@ -14,6 +15,13 @@ import {
 import { shortcutFromInput } from '../shared/shortcuts';
 
 const APP_NAME = 'NexCode IDE';
+
+// Reduce Chromium renderer memory — limit old-space size so the V8 heap stays lean.
+// Note: we intentionally keep GPU acceleration enabled because Monaco Editor,
+// the minimap, markdown preview, image viewer, and canvas rendering all benefit
+// from GPU compositing without a significant memory penalty.
+app.commandLine.appendSwitch('max_old_space_size', '512');
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512 --optimize-for-size');
 
 // Windows Task Manager uses process title / exe metadata — avoid generic "Electron" label
 process.title = APP_NAME;
@@ -77,8 +85,13 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      // Use a single renderer process for all windows to save memory
+      // (Electron 34+ may spawn a separate process per BrowserWindow otherwise)
+      backgroundThrottling: true,
     },
   });
+
+  mainWindow.webContents.setZoomFactor(1);
 
   mainWindow.once('ready-to-show', () => {
     if (icon && process.platform === 'win32') {

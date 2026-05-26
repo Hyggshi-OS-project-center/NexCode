@@ -58,4 +58,5 @@ jobs:
         with:
           name: NexCode-IDE-Linux-deb
           path: dist/pack-out/*.deb
+          
           retention-days: 7

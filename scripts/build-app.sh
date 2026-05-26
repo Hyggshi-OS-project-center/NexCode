@@ -6,10 +6,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-echo "[build-app] Building icons and compiling source..."
+echo "[build-app] Step 1/2: Build source..."
 npm run build
 
-echo "[build-app] Packaging application..."
+echo "[build-app] Step 2/2: Pack Electron app..."
 npm run pack
 
-echo "[build-app] Build and pack complete."
+echo "[build-app] DONE ✔"

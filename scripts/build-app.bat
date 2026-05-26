@@ -3,11 +3,21 @@ REM ============================================
 REM build-app.bat — Full production build
 REM ============================================
 setlocal
+
 cd /d "%~dp0.."
+
 echo [build-app] Building icons and compiling source...
 call npm run build
 if %errorlevel% neq 0 (
-  echo [build-app] FAILED
+  echo [build-app] Build FAILED
   exit /b %errorlevel%
 )
-echo [build-app] Build complete.
+
+echo [build-app] Packaging application...
+call npm run pack
+if %errorlevel% neq 0 (
+  echo [build-app] Pack FAILED
+  exit /b %errorlevel%
+)
+
+echo [build-app] Build and pack complete.

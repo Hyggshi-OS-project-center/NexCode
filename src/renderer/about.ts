@@ -21,8 +21,17 @@ async function init(): Promise<void> {
   document.getElementById('about-version')!.textContent = info.version;
 
   const meta = document.getElementById('about-meta')!;
-  const lines = [info.author ? `© ${info.author}` : '', `Electron ${info.electron}`].filter(Boolean);
-  meta.textContent = lines.join(' · ');
+  const versionLabel = info.installType ? `${info.version} (${info.installType})` : info.version;
+  document.getElementById('about-version')!.textContent = versionLabel;
+  const lines = [
+    info.author ? `© ${info.author}` : '',
+    `Electron ${info.electron}`,
+    info.chromium ? `Chromium ${info.chromium}` : '',
+    info.node ? `Node.js ${info.node}` : '',
+    info.v8 ? `V8 ${info.v8}` : '',
+    info.os ? `OS: ${info.os}` : '',
+  ].filter(Boolean);
+  meta.textContent = lines.join('\n');
 
   if (info.iconUrl) {
     const logo = document.getElementById('about-logo') as HTMLImageElement;
@@ -31,7 +40,22 @@ async function init(): Promise<void> {
     logo.classList.remove('hidden');
   }
 
-  document.getElementById('about-ok')?.addEventListener('click', () => window.aboutAPI.close());
+  const closeAboutWindow = (): void => {
+    if (window.aboutAPI?.close) {
+      try {
+        window.aboutAPI.close();
+        return;
+      } catch {
+        /* fallback to window close */
+      }
+    }
+    window.close();
+  };
+
+  document.getElementById('about-ok')?.addEventListener('click', closeAboutWindow);
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeAboutWindow();
+  });
 }
 
 void init();

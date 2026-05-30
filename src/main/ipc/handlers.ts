@@ -231,6 +231,11 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
       description,
       author,
       electron: process.versions.electron,
+      chromium: process.versions.chrome ?? process.versions.chromium,
+      node: process.versions.node,
+      v8: process.versions.v8,
+      os: `${os.type()} ${os.arch()} ${os.release()}`,
+      installType: app.isPackaged ? 'User setup' : 'Development',
       iconUrl,
     };
   });

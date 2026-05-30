@@ -120,6 +120,11 @@ export interface AboutInfo {
   description: string;
   author: string;
   electron: string;
+  chromium?: string;
+  node?: string;
+  v8?: string;
+  os?: string;
+  installType?: string;
   iconUrl: string | null;
 }
 

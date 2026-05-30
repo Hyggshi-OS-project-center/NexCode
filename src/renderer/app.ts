@@ -882,6 +882,104 @@ class NexusApp {
     }
   }
 
+  private openWelcome(): void {
+    this.tabs.openTab(WELCOME_TAB_PATH);
+    this.welcome.show();
+    this.editor.hide();
+    this.binaryView.hide();
+    this.editorBanner.hide();
+    this.mdPreview.hide();
+    this.releaseNotes.hide();
+    this.statusBar.setFile('Welcome');
+    this.statusBar.setInternalPage('Welcome');
+    this.updateRunButtonForActiveTab();
+  }
+
+  private handleRenamedPath(oldPath: string, newPath: string, isDirectory: boolean): void {
+    const normalize = (path: string) => path.replace(/\//g, '\\');
+    const oldNormalized = normalize(oldPath);
+    const newNormalized = normalize(newPath);
+    const isUnderOld = (path: string) =>
+      path === oldPath ||
+      path === oldNormalized ||
+      path.startsWith(`${oldPath}\\`) ||
+      path.startsWith(`${oldNormalized}\\`) ||
+      path.startsWith(`${oldPath}/`) ||
+      path.startsWith(`${oldNormalized}/`);
+    const getRenamed = (path: string): string => {
+      if (path === oldPath || path === oldNormalized) return newPath;
+      if (path.startsWith(oldPath)) return newPath + path.slice(oldPath.length);
+      if (path.startsWith(oldNormalized)) return newPath + path.slice(oldNormalized.length);
+      return path;
+    };
+
+    const renameMap = <T>(map: Map<string, T>): void => {
+      for (const key of [...map.keys()]) {
+        if (isUnderOld(key)) {
+          const value = map.get(key)!;
+          map.delete(key);
+          map.set(getRenamed(key), value);
+        }
+      }
+    };
+
+    const renameSet = (set: Set<string>): void => {
+      for (const key of [...set]) {
+        if (isUnderOld(key)) {
+          set.delete(key);
+          set.add(getRenamed(key));
+        }
+      }
+    };
+
+    const renameStringArray = (items: string[]): void => {
+      for (const item of items) {
+        if (isUnderOld(item)) {
+          this.tabs.renameTab(item, getRenamed(item));
+        }
+      }
+    };
+
+    if (isDirectory) {
+      renameStringArray(this.tabs.getTabs().map((tab) => tab.path));
+      this.tabs.getTabs().forEach((tab) => {
+        if (isUnderOld(tab.path)) {
+          this.editor.renamePath(tab.path, getRenamed(tab.path));
+        }
+      });
+      renameMap(this.fileSnapshots);
+      renameMap(this.binaryMeta);
+      renameSet(this.forceTextOpen);
+      renameSet(this.dirtyFiles);
+    } else {
+      this.tabs.renameTab(oldPath, newPath);
+      this.editor.renamePath(oldPath, newPath);
+      if (this.fileSnapshots.has(oldPath)) {
+        const snapshot = this.fileSnapshots.get(oldPath)!;
+        this.fileSnapshots.delete(oldPath);
+        this.fileSnapshots.set(newPath, snapshot);
+      }
+      if (this.binaryMeta.has(oldPath)) {
+        const meta = this.binaryMeta.get(oldPath)!;
+        this.binaryMeta.delete(oldPath);
+        this.binaryMeta.set(newPath, meta);
+      }
+      if (this.forceTextOpen.has(oldPath)) {
+        this.forceTextOpen.delete(oldPath);
+        this.forceTextOpen.add(newPath);
+      }
+      if (this.dirtyFiles.has(oldPath)) {
+        this.dirtyFiles.delete(oldPath);
+        this.dirtyFiles.add(newPath);
+      }
+    }
+
+    const active = this.tabs.getActivePath();
+    if (active && (active === oldPath || isUnderOld(active))) {
+      this.statusBar.setFile(getRenamed(active));
+    }
+  }
+
   private async openReleaseNotesAfterUpdate(): Promise<void> {
     try {
       const version = await this.releaseNotes.getCurrentVersion();
@@ -957,6 +1055,19 @@ class NexusApp {
       return;
     }
 
+    if (path === WELCOME_TAB_PATH) {
+      this.welcome.show();
+      this.editor.hide();
+      this.binaryView.hide();
+      this.editorBanner.hide();
+      this.mdPreview.hide();
+      this.releaseNotes.hide();
+      this.statusBar.setFile('Welcome');
+      this.statusBar.setInternalPage('Welcome');
+      this.updateRunButtonForActiveTab();
+      return;
+    }
+
     if (this.binaryMeta.has(path) && !this.forceTextOpen.has(path)) {
       this.showBinaryTab(path);
       this.statusBar.setFile(path);
@@ -995,8 +1106,8 @@ class NexusApp {
 
   private async saveActiveFile(): Promise<void> {
     const path = this.tabs.getActivePath();
-    if (this.releaseNotes.isReleaseNotesPath(path)) return;
-    if (!path || (this.binaryMeta.has(path) && !this.forceTextOpen.has(path))) return;
+    if (!path || this.releaseNotes.isReleaseNotesPath(path) || path === WELCOME_TAB_PATH) return;
+    if (this.binaryMeta.has(path) && !this.forceTextOpen.has(path)) return;
     await this.saveFile(path, true);
   }
 
@@ -1115,28 +1226,41 @@ class NexusApp {
 
   private updateViewState(): void {
     if (this.tabs.hasTabs()) {
-      this.welcome.hide();
       const active = this.tabs.getActivePath();
       const isMarkdown = active ? /\.md$/i.test(active) : false;
       const previewBtn = document.getElementById('btn-md-preview') as HTMLButtonElement | null;
       if (previewBtn) previewBtn.style.display = isMarkdown ? '' : 'none';
 
-      if (active && this.binaryMeta.has(active) && !this.forceTextOpen.has(active)) {
-        this.showBinaryTab(active);
-        this.mdPreview.hide();
-      } else if (this.releaseNotes.isReleaseNotesPath(active)) {
+      if (active === WELCOME_TAB_PATH) {
+        this.welcome.show();
         this.editor.hide();
         this.binaryView.hide();
         this.editorBanner.hide();
         this.mdPreview.hide();
-        void this.releaseNotes.show();
-      } else {
         this.releaseNotes.hide();
-        this.binaryView.hide();
-        this.editor.show();
+        this.statusBar.setFile('Welcome');
+        this.statusBar.setInternalPage('Welcome');
         this.updateRunButtonForActiveTab();
-        if (!isMarkdown) {
+      } else {
+        this.welcome.hide();
+
+        if (active && this.binaryMeta.has(active) && !this.forceTextOpen.has(active)) {
+          this.showBinaryTab(active);
           this.mdPreview.hide();
+        } else if (this.releaseNotes.isReleaseNotesPath(active)) {
+          this.editor.hide();
+          this.binaryView.hide();
+          this.editorBanner.hide();
+          this.mdPreview.hide();
+          void this.releaseNotes.show();
+        } else {
+          this.releaseNotes.hide();
+          this.binaryView.hide();
+          this.editor.show();
+          this.updateRunButtonForActiveTab();
+          if (!isMarkdown) {
+            this.mdPreview.hide();
+          }
         }
       }
     } else {

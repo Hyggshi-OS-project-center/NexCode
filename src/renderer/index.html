@@ -41,14 +41,20 @@
     </nav>
     <div class="titlebar-center" id="titlebar-path"></div>
     <div class="titlebar-nav">
+      <button class="titlebar-update-btn hidden" type="button" id="btn-update" aria-label="Update NexCode IDE">
+        Update
+      </button>
+      <button class="titlebar-nav-btn" type="button" id="titlebar-btn-agent" title="Open AI IDE Agent" aria-label="Open AI IDE Agent">
+        <img class="titlebar-nav-icon" src="../icons/Icon-system/Icon-Agents.ico" alt="" width="16" height="16" />
+      </button>
       <button class="titlebar-nav-btn" type="button" id="titlebar-btn-sidebar" title="Toggle sidebar">▢</button>
       <button class="titlebar-nav-btn" type="button" id="titlebar-nav-back" title="Back">←</button>
       <button class="titlebar-nav-btn" type="button" id="titlebar-nav-forward" title="Forward">→</button>
     </div>
     <div class="titlebar-controls">
-      <button class="titlebar-btn" id="btn-minimize" title="Minimize">─</button>
-      <button class="titlebar-btn" id="btn-maximize" title="Maximize">□</button>
-      <button class="titlebar-btn titlebar-btn-close" id="btn-close" title="Close">×</button>
+      <button class="titlebar-btn" id="btn-minimize" title="Minimize">&#xE921;</button>
+      <button class="titlebar-btn" id="btn-maximize" title="Maximize">&#xE922;</button>
+      <button class="titlebar-btn titlebar-btn-close" id="btn-close" title="Close">&#xE8BB;</button>
     </div>
   </header>
 
@@ -68,6 +74,9 @@
       </button>
       <button class="activity-item" data-panel="chat" title="Chat AI" aria-label="Chat AI">
         <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 2.75A1.75 1.75 0 0 1 3.75 1h8.5A1.75 1.75 0 0 1 14 2.75v6.5A1.75 1.75 0 0 1 12.25 11H7.9l-3.2 2.6a.5.5 0 0 1-.82-.39V11H3.75A1.75 1.75 0 0 1 2 9.25v-6.5z"/></svg>
+      </button>
+      <button class="activity-item" id="activity-bar-agent" title="AI IDE Agent" aria-label="AI IDE Agent">
+        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1.5a.75.75 0 0 1 .75.75V3h.75a2.5 2.5 0 0 1 2.5 2.5V8a2.5 2.5 0 0 1-2.5 2.5H6.5A2.5 2.5 0 0 1 4 8V5.5A2.5 2.5 0 0 1 6.5 3h.75v-.75A.75.75 0 0 1 8 1.5ZM5.5 6a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm5 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2ZM6 11.5h4a2.5 2.5 0 0 1-4 0ZM2.75 5a.75.75 0 0 1 .75.75V8A4.75 4.75 0 0 0 8.25 12.75h1.5A4.75 4.75 0 0 0 14.5 8V5.75a.75.75 0 0 1 1.5 0V8A6.25 6.25 0 0 1 9.75 14.25h-1.5A6.25 6.25 0 0 1 2 8V5.75A.75.75 0 0 1 2.75 5Z"/></svg>
       </button>
       <button class="activity-item" data-panel="settings" title="Settings" aria-label="Settings">
         <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M7.429 1.525a6.593 6.593 0 0 1 1.142 0c.036.003.108.036.137.146l.289 1.105c.147.56.55.967.997 1.189.174.086.341.183.501.29.435.283.956.37 1.424.144l1.01-.483a.145.145 0 0 1 .187.04c.196.273.373.562.528.862a6.57 6.57 0 0 1 .44 1.011.144.144 0 0 1-.083.167l-.966.4c-.456.188-.724.62-.72 1.067.002.176 0 .352-.005.527-.013.449.258.878.72 1.063l.966.396a.144.144 0 0 1 .082.168 6.53 6.53 0 0 1-.97 1.869.145.145 0 0 1-.187.04l-1.01-.482c-.468-.226-.989-.14-1.424.143a5.08 5.08 0 0 1-.502.29c-.446.222-.85.629-.997 1.188l-.289 1.106c-.029.11-.1.143-.137.146a6.63 6.63 0 0 1-1.142 0c-.036-.003-.108-.036-.137-.146l-.289-1.106c-.147-.56-.55-.966-.997-1.188a5.085 5.085 0 0 1-.501-.29c-.435-.283-.956-.37-1.424-.144l-1.01.483a.145.145 0 0 1-.187-.04 6.53 6.53 0 0 1-.97-1.868.144.144 0 0 1 .083-.168l.966-.396c.462-.185.733-.614.72-1.063a6.16 6.16 0 0 1-.005-.527c.004-.447-.264-.879-.72-1.067l-.966-.4a.144.144 0 0 1-.082-.167 6.57 6.57 0 0 1 .968-1.873.145.145 0 0 1 .187-.04l1.01.483c.468.226.989.14 1.424-.144.16-.107.327-.204.5-.29.447-.222.85-.629.998-1.189l.289-1.105c.029-.11.1-.143.137-.146zM8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg>

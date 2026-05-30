@@ -36,6 +36,7 @@ import { GitPanel } from './modules/git/GitPanel';
 import { ChatPanel } from './modules/chat/ChatPanel';
 import { SplashScreen } from './modules/ui/SplashScreen';
 import { NexCodeMoments } from './modules/ui/NexCodeMoments';
+import { UpdateController } from './modules/update/UpdateController';
 import splashImageRandom1Url from '@icons/loading/my-splash-Random1.png?url';
 import splashImageRandom2Url from '@icons/loading/my-splash-Random2.png?url';
 import splashImageRandom3Url from '@icons/loading/my-splash-Random3.png?url';
@@ -80,9 +81,24 @@ class NexusApp {
   private chatPanel!: ChatPanel;
   private idleEasterEgg!: EditorIdleEasterEgg;
   private moments!: NexCodeMoments;
+  private updates!: UpdateController;
   private mdPreview!: MarkdownPreview;
   /** Trimmed terminal output sample for moment detection — capped to reduce memory */
   private terminalOutputSample = '';
+  private settingsApplyQueue: Promise<void> = Promise.resolve();
+
+  private async syncWindowControlState(): Promise<void> {
+    const maximizeBtn = document.getElementById('btn-maximize');
+    if (!maximizeBtn) return;
+    try {
+      const isMaximized = await window.electronAPI.isMaximized();
+      maximizeBtn.innerHTML = isMaximized ? '&#xE923;' : '&#xE922;';
+      maximizeBtn.setAttribute('title', isMaximized ? 'Restore' : 'Maximize');
+    } catch {
+      maximizeBtn.innerHTML = '&#xE922;';
+      maximizeBtn.setAttribute('title', 'Maximize');
+    }
+  }
 
   private isLegacySplash2025Enabled(): boolean {
     try {
@@ -114,6 +130,7 @@ class NexusApp {
 
     this.statusBar = new StatusBar();
     this.moments = new NexCodeMoments();
+    this.updates = new UpdateController();
     this.statusBar.applySettings(this.settings);
 
     this.editor = new EditorManager('monaco-host', this.settings);
@@ -196,6 +213,7 @@ class NexusApp {
     this.bindUI();
     this.bindTitlebarMenus();
     this.bindContextMenus();
+    this.updates.init();
     void this.showSidebarPanel('explorer');
     this.updateViewState();
     splash.hide();
@@ -203,8 +221,13 @@ class NexusApp {
 
   private bindUI(): void {
     document.getElementById('btn-minimize')?.addEventListener('click', () => window.electronAPI.minimizeWindow());
-    document.getElementById('btn-maximize')?.addEventListener('click', () => window.electronAPI.maximizeWindow());
+    document.getElementById('btn-maximize')?.addEventListener('click', () => {
+      window.electronAPI.maximizeWindow();
+      window.setTimeout(() => void this.syncWindowControlState(), 60);
+    });
     document.getElementById('btn-close')?.addEventListener('click', () => window.electronAPI.closeWindow());
+    window.addEventListener('resize', () => void this.syncWindowControlState());
+    void this.syncWindowControlState();
 
     document.getElementById('btn-open-folder')?.addEventListener('click', () => void this.openFolder());
     document.getElementById('btn-run')?.addEventListener('click', () => void this.runActiveFile());
@@ -222,6 +245,8 @@ class NexusApp {
       requestAnimationFrame(() => this.editor.layout());
     });
     document.getElementById('btn-extensions')?.addEventListener('click', () => void this.openExtensionMarketplace());
+    document.getElementById('titlebar-btn-agent')?.addEventListener('click', () => window.electronAPI.openAgent());
+    document.getElementById('activity-bar-agent')?.addEventListener('click', () => window.electronAPI.openAgent());
 
     document.querySelectorAll('.activity-item').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -238,6 +263,7 @@ class NexusApp {
     window.addEventListener('beforeunload', () => {
       if (this.fileWatchTimer !== null) window.clearInterval(this.fileWatchTimer);
       this.idleEasterEgg.dispose();
+      this.updates.dispose();
       this.terminal.dispose();
     });
   }
@@ -378,6 +404,11 @@ class NexusApp {
           {
             label: 'Extension Marketplace',
             action: () => void this.openExtensionMarketplace(),
+          },
+          { separator: true },
+          {
+            label: 'Open AI IDE Agent',
+            action: () => window.electronAPI.openAgent(),
           },
           { separator: true },
           {
@@ -582,15 +613,20 @@ class NexusApp {
   }
 
   private async applySettings(partial: Partial<AppSettings>): Promise<void> {
-    this.settings = await window.electronAPI.setSettings(partial);
-    document.body.dataset.theme = this.settings.theme;
-    this.editor.applySettings(this.settings);
-    this.terminal.applySettings(this.settings);
-    this.chatPanel.updateSettings();
-    if (partial.terminalShell !== undefined && this.terminal.isVisible()) {
-      void this.terminal.recreateForShellChange();
-    }
-    this.statusBar.applySettings(this.settings);
+    const apply = async () => {
+      this.settings = await window.electronAPI.setSettings(partial);
+      document.body.dataset.theme = this.settings.theme;
+      this.editor.applySettings(this.settings);
+      this.terminal.applySettings(this.settings);
+      this.chatPanel.updateSettings();
+      if (partial.terminalShell !== undefined && this.terminal.isVisible()) {
+        await this.terminal.recreateForShellChange();
+      }
+      this.statusBar.applySettings(this.settings);
+    };
+
+    this.settingsApplyQueue = this.settingsApplyQueue.then(apply, apply);
+    return this.settingsApplyQueue;
   }
 
   private async openFolder(): Promise<void> {
@@ -627,6 +663,11 @@ class NexusApp {
 
   private async setWorkspaceFolder(folder: string, updateTerminalShell: boolean): Promise<void> {
     this.workspacePath = folder;
+    try {
+      await window.electronAPI.setWorkspacePath(folder);
+    } catch {
+      /* Older running main processes may not have this handler until restart. */
+    }
     this.terminal.setCwd(folder);
     this.statusBar.setTerminalCwd(folder);
     document.getElementById('titlebar-path')!.textContent = folder;
@@ -886,6 +927,7 @@ class NexusApp {
       document.getElementById('status-file')!.textContent = `Saved ${path.split(/[/\\]/).pop()}`;
     }
     this.explorer.getTimeline().push(path, 'Saved');
+    void this.explorer.refreshGitDecorations();
     this.pluginHost.emit('fileSaved', path);
   }
 

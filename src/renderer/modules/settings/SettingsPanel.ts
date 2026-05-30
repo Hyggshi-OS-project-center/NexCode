@@ -133,7 +133,7 @@ export class SettingsPanel {
             <label>Sandbox</label>
             <input type="checkbox" id="set-sandbox" ${s.sandbox ? 'checked' : ''} />
           </div>
-          <p class="settings-hint">Enables the Chromium sandbox for stronger process isolation. Requires an app restart to take effect.</p>
+          <p class="settings-hint">When ON: stronger security isolation (each renderer runs in a restricted sandbox). When OFF (default): preload scripts have full Node.js access enabling file ops, terminal, and native features. Requires restart.</p>
         </div>
         <div class="settings-group">
           <h3>About</h3>

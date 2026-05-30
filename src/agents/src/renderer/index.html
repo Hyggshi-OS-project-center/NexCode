@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; connect-src 'self' https:;">
+    <title>NexCode AI Agent</title>
+    <link rel="stylesheet" href="./styles/styles.css">
+</head>
+<body data-theme="dark">
+    <header id="agent-titlebar" class="agent-titlebar">
+        <div class="titlebar-left titlebar-drag">
+            <button class="chrome-icon" id="btn-toggle-sidebar" title="Toggle sidebar" aria-label="Toggle sidebar">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3.75h12A1.25 1.25 0 0 1 17.25 5v10A1.25 1.25 0 0 1 16 16.25H4A1.25 1.25 0 0 1 2.75 15V5A1.25 1.25 0 0 1 4 3.75Zm3.5 1.5v9.5H16V5.25H7.5Z"/></svg>
+            </button>
+            <button class="chrome-icon" id="btn-session-back" title="Back" aria-label="Back">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.7 4.22 3.47 9.47a.75.75 0 0 0 0 1.06l5.23 5.25 1.06-1.06-3.97-3.97H16.5v-1.5H5.79l3.97-3.97-1.06-1.06Z"/></svg>
+            </button>
+            <button class="chrome-icon" id="btn-session-forward" title="Forward" aria-label="Forward">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m11.3 4.22-1.06 1.06 3.97 3.97H3.5v1.5h10.71l-3.97 3.97 1.06 1.06 5.23-5.25a.75.75 0 0 0 0-1.06L11.3 4.22Z"/></svg>
+            </button>
+        </div>
+        <div class="titlebar-center titlebar-drag" id="titlebar-agent-status">
+            <span class="titlebar-status-text">NexCode Agent</span>
+        </div>
+        <div class="titlebar-actions">
+            <button class="titlebar-btn titlebar-btn-icon" id="btn-agent-settings" title="Settings" aria-label="Settings">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.94 2.5h2.12l.4 2.04c.43.15.83.32 1.2.53l1.73-1.16 1.5 1.5-1.16 1.73c.21.37.38.77.53 1.2l2.04.4v2.12l-2.04.4c-.15.43-.32.83-.53 1.2l1.16 1.73-1.5 1.5-1.73-1.16c-.37.21-.77.38-1.2.53l-.4 2.04H8.94l-.4-2.04a6.37 6.37 0 0 1-1.2-.53l-1.73 1.16-1.5-1.5 1.16-1.73a6.37 6.37 0 0 1-.53-1.2l-2.04-.4V8.74l2.04-.4c.15-.43.32-.83.53-1.2L4.11 5.41l1.5-1.5 1.73 1.16c.37-.21.77-.38 1.2-.53l.4-2.04Zm1.06 5A2.5 2.5 0 1 0 10 12.5 2.5 2.5 0 0 0 10 7.5Z"/></svg>
+            </button>
+            <button class="titlebar-btn titlebar-btn-icon" id="btn-run-prompt" title="Run" aria-label="Run">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 4.6v10.8l8.3-5.4L6 4.6Z"/></svg>
+            </button>
+            <button class="titlebar-btn titlebar-btn-icon terminal-icon" id="btn-toggle-terminal" title="Terminal" aria-label="Terminal">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.75 4h12.5A1.75 1.75 0 0 1 18 5.75v8.5A1.75 1.75 0 0 1 16.25 16H3.75A1.75 1.75 0 0 1 2 14.25v-8.5A1.75 1.75 0 0 1 3.75 4Zm1.56 3.72L4.25 8.78 6.47 11l-2.22 2.22 1.06 1.06L8.59 11 5.31 7.72ZM9 13.5h5.25V12H9v1.5Z"/></svg>
+            </button>
+        </div>
+        <div class="titlebar-controls-right">
+            <button class="win-btn win-btn-minimize" id="btn-agent-minimize" title="Minimize" aria-label="Minimize"></button>
+            <button class="win-btn win-btn-maximize" id="btn-agent-maximize" title="Maximize" aria-label="Maximize"></button>
+            <button class="win-btn win-btn-close" id="btn-agent-close" title="Close" aria-label="Close"></button>
+        </div>
+    </header>
+
+    <div id="agent-layout">
+        <aside id="session-sidebar" class="session-sidebar">
+            <div class="sidebar-header">
+                <h1>Sessions</h1>
+                <div class="sidebar-actions">
+                    <button class="new-session-btn" id="btn-new-session">New <kbd>Ctrl+N</kbd></button>
+                    <button class="sidebar-icon-btn" id="btn-session-filter" title="Filters" aria-label="Filters">
+                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6.5h7.1a2 2 0 0 0 3.8 0H16v-1.5h-1.1a2 2 0 0 0-3.8 0H4v1.5Zm0 8.5h1.1a2 2 0 0 0 3.8 0H16v-1.5H8.9a2 2 0 0 0-3.8 0H4V15Z"/></svg>
+                    </button>
+                    <button class="sidebar-icon-btn" id="btn-session-search" title="Search" aria-label="Search">
+                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M8.5 3a5.5 5.5 0 0 1 4.35 8.86l3.65 3.64-1 1-3.64-3.65A5.5 5.5 0 1 1 8.5 3Zm0 1.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="session-search-row hidden" id="session-search-row">
+                <input id="session-search-input" class="session-search-input" type="search" placeholder="Search sessions">
+            </div>
+            <div class="workspace-label" id="workspace-label">IDE</div>
+            <div id="session-list" class="session-list"></div>
+            <button class="more-workspaces" id="btn-more-workspaces" type="button">+2 WORKSPACES</button>
+            <button class="customizations" id="btn-customizations" type="button">
+                <span>Customizations</span>
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5-1.06-1.06L10 10.38 6.06 6.44 5 7.5Z"/></svg>
+            </button>
+        </aside>
+
+        <main id="agent-main" class="agent-panel">
+            <div id="chat-messages" class="chat-messages"></div>
+
+            <div id="input-area" class="input-area">
+                <div class="composer-context">
+                    <span>New session in</span>
+                    <button class="context-pill" id="btn-workspace-context" type="button">
+                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2.75 6A1.75 1.75 0 0 1 4.5 4.25h4.2l1.35 1.5h5.45A1.75 1.75 0 0 1 17.25 7.5v6A1.75 1.75 0 0 1 15.5 15.25h-11A1.75 1.75 0 0 1 2.75 13.5V6Zm1.75-.25A.25.25 0 0 0 4.25 6v7.5c0 .14.11.25.25.25h11a.25.25 0 0 0 .25-.25v-6a.25.25 0 0 0-.25-.25H9.38L8.03 5.75H4.5Z"/></svg>
+                        <span id="workspace-context-name">IDE</span>
+                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5-1.06-1.06L10 10.38 6.06 6.44 5 7.5Z"/></svg>
+                    </button>
+                    <span>with</span>
+                    <button class="context-pill" id="btn-model-context" type="button">
+                        <span class="model-spark"></span>
+                        <span id="provider-name">Gemini</span>
+                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5-1.06-1.06L10 10.38 6.06 6.44 5 7.5Z"/></svg>
+                    </button>
+                </div>
+                <div class="input-card">
+                    <textarea id="agent-input" class="agent-input" placeholder="What are you trying to achieve?" rows="3" autocomplete="off" spellcheck="false"></textarea>
+                    <div class="composer-footer">
+                        <div class="input-toolbar">
+                            <button class="toolbar-btn" id="btn-attach-file" title="Attach file" aria-label="Attach file">+</button>
+                            <button class="toolbar-btn" id="btn-attach-image" title="Attach image" aria-label="Attach image">
+                                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 3.5h11A1.5 1.5 0 0 1 17 5v10a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 15V5a1.5 1.5 0 0 1 1.5-1.5Zm0 1.5v8.06l3.08-3.08 2.17 2.17 3.17-3.17L15.5 11.56V5h-11Zm0 10h11v-1.32l-2.58-2.58-3.17 3.17-2.17-2.17L4.5 15Z"/></svg>
+                            </button>
+                            <button class="toolbar-btn" id="btn-add-editor-context" title="Send editor context" aria-label="Send editor context">
+                                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 2.75h6.6L15.25 6.4V17A1.25 1.25 0 0 1 14 18.25H5A1.25 1.25 0 0 1 3.75 17V4A1.25 1.25 0 0 1 5 2.75Zm6 1.5V7h2.75L11 4.25ZM6 10h7v1.5H6V10Zm0 3h7v1.5H6V13Z"/></svg>
+                            </button>
+                            <button class="toolbar-btn" id="btn-clear-chat" title="Clear chat" aria-label="Clear chat">
+                                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 3.25h5l.75 1.5H16v1.5H4v-1.5h2.75l.75-1.5ZM5.25 7.5h9.5l-.55 8.7a1.75 1.75 0 0 1-1.75 1.55h-4.9A1.75 1.75 0 0 1 5.8 16.2L5.25 7.5Z"/></svg>
+                            </button>
+                        </div>
+                        <button id="btn-send" class="send-btn" title="Send" aria-label="Send">
+                            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3.25 4.72 8.53l1.06 1.06 3.47-3.47V17h1.5V6.12l3.47 3.47 1.06-1.06L10 3.25Z"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="provider-meta">
+                    <span id="provider-model">gemini-2.5-flash</span>
+                    <span id="provider-status" class="provider-status"><span class="status-dot status-idle"></span><span>Idle</span></span>
+                </div>
+            </div>
+        </main>
+
+        <aside id="inspector-panel" class="inspector-panel">
+            <div class="inspector-tabs">
+                <button id="tab-changes" class="inspector-tab" type="button">Changes</button>
+                <button id="tab-files" class="inspector-tab active" type="button">Files</button>
+            </div>
+            <div id="files-empty" class="files-empty">
+                <svg viewBox="0 0 64 64" aria-hidden="true">
+                    <path d="M19 8h21l11 11v32a5 5 0 0 1-5 5H19a5 5 0 0 1-5-5V13a5 5 0 0 1 5-5Zm20 3v10h10" />
+                    <path d="M25 19h11l6 6v22H25V19Zm10 1v7h7" />
+                </svg>
+                <p>Folders and files will appear here.</p>
+            </div>
+            <div id="action-log-bar" class="action-log-bar">
+                <button class="action-log-toggle" id="btn-toggle-actions">
+                    <span>Action Log</span>
+                    <span id="action-count" class="action-count">0</span>
+                    <span class="action-chevron">></span>
+                </button>
+            </div>
+            <div id="action-log-panel" class="action-log-panel hidden">
+                <div id="action-log-list" class="action-log-list"></div>
+            </div>
+        </aside>
+    </div>
+
+    <div id="settings-overlay" class="settings-overlay hidden">
+        <div class="settings-panel">
+            <div class="settings-header">
+                <h2>Agent Settings</h2>
+                <button class="settings-close" id="btn-settings-close">x</button>
+            </div>
+            <div class="settings-body">
+                <div class="setting-group">
+                    <label class="setting-label">AI Provider</label>
+                    <select id="setting-provider" class="setting-select">
+                        <option value="gemini">Google Gemini</option>
+                        <option value="openrouter">OpenRouter</option>
+                    </select>
+                </div>
+                <div class="setting-group" id="group-gemini-key">
+                    <label class="setting-label">Gemini API Key</label>
+                    <input type="password" id="setting-gemini-key" class="setting-input" placeholder="Enter your Gemini API key">
+                    <button class="setting-toggle-vis" id="toggle-gemini-vis" title="Toggle visibility">Show</button>
+                </div>
+                <div class="setting-group" id="group-gemini-model">
+                    <label class="setting-label">Gemini Model</label>
+                    <select id="setting-gemini-model" class="setting-select">
+                        <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                        <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                        <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                        <option value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite</option>
+                    </select>
+                </div>
+                <div class="setting-group hidden" id="group-openrouter-key">
+                    <label class="setting-label">OpenRouter API Key</label>
+                    <input type="password" id="setting-openrouter-key" class="setting-input" placeholder="Enter your OpenRouter API key">
+                    <button class="setting-toggle-vis" id="toggle-openrouter-vis" title="Toggle visibility">Show</button>
+                </div>
+                <div class="setting-group hidden" id="group-openrouter-model">
+                    <label class="setting-label">OpenRouter Model</label>
+                    <input type="text" id="setting-openrouter-model" class="setting-input" placeholder="e.g., openai/gpt-4o-mini">
+                </div>
+                <div class="setting-group">
+                    <label class="setting-label">Max Turns per Request</label>
+                    <input type="number" id="setting-max-turns" class="setting-input" value="10" min="1" max="50">
+                </div>
+                <div class="setting-actions">
+                    <button id="btn-settings-save" class="setting-btn primary">Save</button>
+                    <button id="btn-settings-reset" class="setting-btn">Reset</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="file-picker" class="hidden" multiple>
+    <input type="file" id="image-picker" class="hidden" accept="image/png,image/jpeg,image/gif,image/webp" multiple>
+
+    <template id="message-template">
+        <div class="message">
+            <div class="message-avatar"></div>
+            <div class="message-content">
+                <div class="message-header">
+                    <span class="message-sender"></span>
+                    <span class="message-timestamp"></span>
+                </div>
+                <div class="message-body"></div>
+            </div>
+            <div class="message-actions">
+                <button class="msg-action-btn" title="Copy">Copy</button>
+            </div>
+        </div>
+    </template>
+
+    <template id="session-item-template">
+        <div class="session-item" role="button" tabindex="0">
+            <span class="session-dot"></span>
+            <span class="session-main">
+                <span class="session-title"></span>
+                <span class="session-meta"></span>
+            </span>
+            <button class="session-delete" type="button" title="Delete" aria-label="Delete session">x</button>
+        </div>
+    </template>
+
+    <template id="action-item-template">
+        <div class="action-item">
+            <span class="action-icon"></span>
+            <span class="action-label"></span>
+            <span class="action-time"></span>
+        </div>
+    </template>
+
+    <div id="attachment-preview-area" class="attachment-preview-area hidden">
+        <div id="attachment-list" class="attachment-list"></div>
+    </div>
+
+    <div id="loading-indicator" class="loading-indicator hidden">
+        <div class="loading-spinner"></div>
+        <span class="loading-text">Agent is thinking...</span>
+        <button id="btn-cancel-request" class="cancel-btn">Cancel</button>
+    </div>
+
+    <script src="./modules/preload.js"></script>
+    <script src="./modules/agent.js"></script>
+</body>
+</html>

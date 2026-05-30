@@ -36,6 +36,8 @@ export class EditorManager {
   private breakpoints = new Map<string, Set<number>>();
   private primaryBreakpointDecorations: monaco.editor.IEditorDecorationsCollection | null = null;
   private secondaryBreakpointDecorations: monaco.editor.IEditorDecorationsCollection | null = null;
+  private primaryDebugLineDecorations: monaco.editor.IEditorDecorationsCollection | null = null;
+  private secondaryDebugLineDecorations: monaco.editor.IEditorDecorationsCollection | null = null;
 
   constructor(hostId: string, settings: AppSettings) {
     this.host = document.getElementById(hostId)!;
@@ -144,11 +146,13 @@ export class EditorManager {
     host: HTMLElement,
     pane: EditorPane,
   ): void {
-    if (pane === 'primary' && !this.primaryBreakpointDecorations) {
-      this.primaryBreakpointDecorations = editor.createDecorationsCollection([]);
+    if (pane === 'primary') {
+      if (!this.primaryBreakpointDecorations) this.primaryBreakpointDecorations = editor.createDecorationsCollection([]);
+      if (!this.primaryDebugLineDecorations) this.primaryDebugLineDecorations = editor.createDecorationsCollection([]);
     }
-    if (pane === 'secondary' && !this.secondaryBreakpointDecorations) {
-      this.secondaryBreakpointDecorations = editor.createDecorationsCollection([]);
+    if (pane === 'secondary') {
+      if (!this.secondaryBreakpointDecorations) this.secondaryBreakpointDecorations = editor.createDecorationsCollection([]);
+      if (!this.secondaryDebugLineDecorations) this.secondaryDebugLineDecorations = editor.createDecorationsCollection([]);
     }
 
     editor.onMouseDown((e) => {
@@ -327,6 +331,40 @@ export class EditorManager {
 
   hasBreakpoint(path: string, line: number): boolean {
     return this.breakpoints.get(path)?.has(line) ?? false;
+  }
+
+  setDebugLineDecoration(path: string, line: number | null): void {
+    this.applyDebugLineToPane(this.editor, this.primaryDebugLineDecorations, path, line);
+    this.applyDebugLineToPane(this.editorSecondary, this.secondaryDebugLineDecorations, path, line);
+  }
+
+  private applyDebugLineToPane(
+    editor: monaco.editor.IStandaloneCodeEditor | null,
+    collection: monaco.editor.IEditorDecorationsCollection | null,
+    path: string,
+    line: number | null,
+  ): void {
+    if (!editor || !collection) return;
+    const model = editor.getModel();
+    if (!model) return;
+    if (this.pathForModel(model) !== path) return;
+
+    if (line === null) {
+      collection.clear();
+      return;
+    }
+
+    collection.set([
+      {
+        range: new monaco.Range(line, 1, line, 1),
+        options: {
+          isWholeLine: true,
+          className: 'debug-current-line-highlight',
+          glyphMarginClassName: 'debug-current-line-glyph',
+          glyphMarginHoverMessage: { value: 'Current Instruction Pointer' },
+        },
+      },
+    ]);
   }
 
   private refreshBreakpointDecorations(path: string): void {

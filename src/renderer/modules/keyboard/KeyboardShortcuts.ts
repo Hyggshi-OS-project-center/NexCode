@@ -13,6 +13,8 @@ export interface ShortcutActions {
   run: () => void;
   openNexCat?: () => void;
   toggleBreakpoint?: () => void;
+  stepOver?: () => void;
+  stopDebug?: () => void;
   closeSearch?: () => void;
 }
 
@@ -43,11 +45,19 @@ export class KeyboardShortcuts {
     if (e.defaultPrevented || e.repeat) return false;
 
     if (e.key === 'F5') {
-      this.actions.run();
+      if (e.shiftKey && this.actions.stopDebug) {
+        this.actions.stopDebug();
+      } else {
+        this.actions.run();
+      }
       return true;
     }
     if (e.key === 'F9' && this.actions.toggleBreakpoint) {
       this.actions.toggleBreakpoint();
+      return true;
+    }
+    if (e.key === 'F10' && this.actions.stepOver) {
+      this.actions.stepOver();
       return true;
     }
 

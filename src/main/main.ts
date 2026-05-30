@@ -2,7 +2,7 @@
  * Electron main process — window lifecycle, IPC routing, and native integrations.
  * Optimized for reduced RAM usage (< 200 MB).
  */
-import { app, BrowserWindow, dialog, nativeImage, shell, type NativeImage } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell, type NativeImage } from 'electron';
 import fs from 'fs';
 import path from 'path';
 import { registerIpcHandlers, shutdownTerminals } from './ipc/handlers';
@@ -13,6 +13,7 @@ import {
   setupOpenFileHandlers,
 } from './openFiles';
 import { shortcutFromInput } from '../shared/shortcuts';
+import { UpdateService } from './update/UpdateService';
 
 const APP_NAME = 'NexCode IDE';
 
@@ -31,7 +32,9 @@ if (process.platform === 'win32') {
 }
 
 let mainWindow: BrowserWindow | null = null;
+let agentWindow: BrowserWindow | null = null;
 let crashMessageShown = false;
+let updateService: UpdateService | null = null;
 
 const isDev = !app.isPackaged;
 
@@ -102,6 +105,7 @@ function createWindow(): void {
 
   mainWindow.webContents.once('did-finish-load', () => {
     sendPendingOpenPaths(() => mainWindow);
+    void updateService?.checkForUpdates(true);
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -130,6 +134,69 @@ function createWindow(): void {
   });
 }
 
+function resolveAgentRendererPath(): string | null {
+  const candidates = [
+    path.join(__dirname, '../../dist/agents/renderer/index.html'),
+    path.join(__dirname, '../../src/agents/src/renderer/index.html'),
+  ];
+  for (const file of candidates) {
+    if (fs.existsSync(file)) return file;
+  }
+  return null;
+}
+
+function resolveAgentPreloadPath(): string | null {
+  const candidates = [
+    path.join(__dirname, '../agents/renderer/modules/preload.js'),
+    path.join(__dirname, '../../src/agents/src/renderer/modules/preload.js'),
+  ];
+  for (const file of candidates) {
+    if (fs.existsSync(file)) return file;
+  }
+  return null;
+}
+
+function createOrFocusAgentWindow(): void {
+  if (agentWindow && !agentWindow.isDestroyed()) {
+    if (agentWindow.isMinimized()) agentWindow.restore();
+    agentWindow.focus();
+    return;
+  }
+
+  const rendererPath = resolveAgentRendererPath();
+  const preloadPath = resolveAgentPreloadPath();
+  if (!rendererPath || !preloadPath) {
+    dialog.showErrorBox(
+      'AI IDE Agent unavailable',
+      'Could not find AI Agent UI files. Please rebuild the app and try again.',
+    );
+    return;
+  }
+
+  agentWindow = new BrowserWindow({
+    width: 1120,
+    height: 760,
+    minWidth: 900,
+    minHeight: 560,
+    title: 'NexCode AI Agent',
+    frame: false,
+    backgroundColor: '#1e1e1e',
+    parent: mainWindow ?? undefined,
+    webPreferences: {
+      preload: preloadPath,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      backgroundThrottling: true,
+    },
+  });
+
+  void agentWindow.loadFile(rendererPath);
+  agentWindow.on('closed', () => {
+    agentWindow = null;
+  });
+}
+
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!gotSingleInstanceLock) {
@@ -152,6 +219,18 @@ app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return;
 
   registerIpcHandlers(() => mainWindow);
+  updateService = new UpdateService(() => mainWindow);
+  ipcMain.handle('update:check', () => updateService?.checkForUpdates(false));
+  ipcMain.handle('update:start', () => updateService?.downloadAndInstall());
+  ipcMain.on('agent:open', () => createOrFocusAgentWindow());
+  ipcMain.on('agent-window:minimize', () => agentWindow?.minimize());
+  ipcMain.on('agent-window:maximize', () => {
+    if (!agentWindow) return;
+    if (agentWindow.isMaximized()) agentWindow.unmaximize();
+    else agentWindow.maximize();
+  });
+  ipcMain.on('agent-window:close', () => agentWindow?.close());
+  ipcMain.handle('agent-window:is-maximized', () => agentWindow?.isMaximized() ?? false);
   queueOpenPaths(parseOpenPathsFromArgv(process.argv));
   createWindow();
 

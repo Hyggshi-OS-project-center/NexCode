@@ -29,6 +29,15 @@ export interface FileStatResult {
 export type TerminalShell = 'cmd' | 'powershell' | 'bash';
 export type AiProvider = 'gemini' | 'openrouter';
 
+export interface ShellAdapter {
+  SHELL: TerminalShell;
+  formatPrompt(cwd: string | null): string;
+  normalizeCommand(line: string, cwd: string | null, home: string): string;
+  listCompletions(input: string, cwd: string | null, home: string): unknown;
+  applyCompletion(input: string, dir: string, match: string, replaceStart: number): string;
+  getParentPathHint(cwd: string | null): string | null;
+}
+
 export interface AppSettings {
   theme: 'dark' | 'light';
   fontSize: number;
@@ -162,10 +171,16 @@ export type IpcChannel =
   | 'path:home'
   | 'extensions:search'
   | 'ai:chat'
+  | 'ai:get-workspace-path'
+  | 'ai:set-workspace-path'
   | 'shortcut:trigger'
   | 'app:open-paths'
   | 'git:status'
-  | 'git:exec';
+  | 'git:exec'
+  | 'update:check'
+  | 'update:start'
+  | 'update:available'
+  | 'update:progress';
 
 /** Paths to open from OS file association or second-instance launch */
 export interface OpenPathsPayload {
@@ -206,6 +221,54 @@ export interface MarketplaceExtensionResult {
   ratingCount: number | null;
 }
 
+export interface GitHubReleaseAsset {
+  name: string;
+  browser_download_url: string;
+  size?: number;
+  content_type?: string;
+}
+
+export interface GitHubRelease {
+  tag_name: string;
+  name?: string;
+  html_url?: string;
+  assets: GitHubReleaseAsset[];
+}
+
+export type UpdateInstallMode = 'installed' | 'portable' | 'zip';
+
+export interface UpdateInfo {
+  currentVersion: string;
+  latestVersion: string;
+  releaseName: string;
+  releaseUrl: string | null;
+  assetName: string;
+  assetUrl: string;
+  installMode: UpdateInstallMode;
+}
+
+export type UpdateProgressStage =
+  | 'checking'
+  | 'downloading'
+  | 'verifying'
+  | 'preparing'
+  | 'restarting'
+  | 'installing'
+  | 'completed'
+  | 'error';
+
+export interface UpdateProgress {
+  stage: UpdateProgressStage;
+  message: string;
+  percent?: number;
+}
+
+export interface UpdateCheckResult {
+  available: boolean;
+  info?: UpdateInfo;
+  error?: string;
+}
+
 export interface ElectronAPI {
   openFolder: () => Promise<string | null>;
   openFile: () => Promise<string | null>;
@@ -240,11 +303,18 @@ export interface ElectronAPI {
   gitExec: (cwd: string, args: string[]) => Promise<GitExecResult>;
   getHomePath: () => Promise<string>;
   searchMarketplaceExtensions: (query: string, limit?: number) => Promise<MarketplaceExtensionResult[]>;
+  getWorkspacePath: () => Promise<string | null>;
+  setWorkspacePath: (workspacePath: string | null) => Promise<void>;
   aiChat: (
     messages: AiChatMessage[],
     workspacePath?: string | null,
     editorContext?: AiEditorContext | null,
   ) => Promise<AiChatResult>;
+  openAgent: () => void;
+  checkForUpdates: () => Promise<UpdateCheckResult>;
+  startUpdate: () => Promise<void>;
+  onUpdateAvailable: (callback: (info: UpdateInfo) => void) => () => void;
+  onUpdateProgress: (callback: (progress: UpdateProgress) => void) => () => void;
 }
 
 declare global {

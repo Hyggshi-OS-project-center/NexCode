@@ -128,6 +128,9 @@ body {
   font-size: 12px;
   border-radius: 4px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .titlebar-nav-btn:hover {
@@ -135,31 +138,36 @@ body {
   color: var(--text-primary);
 }
 
+.titlebar-update-btn {
+  height: 24px;
+  min-width: 74px;
+  padding: 0 14px;
+  border: 1px solid #16825d;
+  border-radius: 6px;
+  background: #0e639c;
+  color: #ffffff;
+  font: 600 12px/22px inherit;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-update-btn:hover {
+  background: #1177bb;
+}
+
+.titlebar-nav-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+  object-fit: contain;
+  pointer-events: none;
+}
+
 .titlebar-controls {
   display: flex;
   -webkit-app-region: no-drag;
 }
-
-.titlebar-btn {
-  width: 46px;
-  height: 30px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
-  cursor: pointer;
-  transition: background var(--transition);
-}
-
-.titlebar-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.titlebar-btn-close:hover {
-  background: #c42b1c;
-  color: #fff;
-}
+/* Window button visuals are defined in components.css */
 
 /* Workbench grid */
 .app-shell {
@@ -230,18 +238,23 @@ body {
   color: var(--text-primary);
 }
 
-[data-theme="light"] .activity-item.active::before {
-  background: #333333;
-}
-
 .activity-item.active::before {
   content: "";
   position: absolute;
   left: 0;
-  top: 0;
-  bottom: 0;
+  top: 10px;
+  bottom: 10px;
   width: 2px;
+  border-radius: 2px;
   background: var(--text-primary);
+}
+
+[data-theme="light"] .activity-item.active::before {
+   background: #333333;
+}
+
+#activity-bar-agent {
+  color: var(--text-primary);
 }
 
 /* Side bar */
@@ -270,8 +283,10 @@ body {
 
 .sidebar-content {
   flex: 1;
-  overflow: auto;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .nexcode-moment-host {
@@ -291,6 +306,179 @@ body {
   color: var(--text-primary);
   box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
   animation: nexcode-moment-in 180ms ease-out;
+}
+
+.update-popup {
+  position: fixed;
+  z-index: 95000;
+  width: 304px;
+  padding: 13px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.36);
+  animation: nexcode-moment-in 150ms ease-out;
+}
+
+.update-popup-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.update-popup-body {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.update-popup-body span {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.update-toast {
+  position: fixed;
+  right: 22px;
+  bottom: 34px;
+  z-index: 94000;
+  width: min(340px, calc(100vw - 44px));
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid #3794ff;
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.32);
+  animation: nexcode-moment-in 180ms ease-out;
+}
+
+.update-toast span {
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.update-toast-error {
+  border-color: var(--danger);
+}
+
+.update-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 96000;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.38);
+}
+
+.update-dialog {
+  width: min(460px, calc(100vw - 32px));
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text-primary);
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.46);
+  overflow: hidden;
+}
+
+.update-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.update-dialog h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.update-dialog p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.update-dialog-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.update-dialog-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.update-progress-track {
+  height: 3px;
+  background: var(--border-subtle);
+  overflow: hidden;
+}
+
+.update-progress-bar {
+  width: 8%;
+  height: 100%;
+  background: #3794ff;
+  transition: width 180ms ease;
+}
+
+.update-stage-list {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.update-stage-list li {
+  position: relative;
+  padding-left: 20px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.update-stage-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 5px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+
+.update-stage-list li.active {
+  color: var(--text-primary);
+}
+
+.update-stage-list li.active::before {
+  background: #3794ff;
+  box-shadow: 0 0 0 4px rgba(55, 148, 255, 0.18);
+}
+
+.update-stage-list li.done {
+  color: var(--text-secondary);
+}
+
+.update-stage-list li.done::before {
+  background: #4ec9b0;
+}
+
+.update-dialog-error .update-progress-bar {
+  background: var(--danger);
 }
 
 .nexcode-moment-title {

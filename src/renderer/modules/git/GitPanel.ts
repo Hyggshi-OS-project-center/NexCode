@@ -85,7 +85,8 @@ export class GitPanel {
   private fileRow(file: GitChangedFile): string {
     const code = `${file.index}${file.worktree}`.trim() || '?';
     const label = statusLabel(file);
-    return `<li class="git-change-item" title="${escapeHtml(file.path)}">
+    const tone = statusTone(file);
+    return `<li class="git-change-item git-change-${tone}" title="${escapeHtml(file.path)}">
       <span class="git-change-code">${escapeHtml(code)}</span>
       <span class="git-change-path">${escapeHtml(file.path)}</span>
       <span class="git-change-label">${escapeHtml(label)}</span>
@@ -149,6 +150,17 @@ function statusLabel(file: GitChangedFile): string {
   if (index === 'D' || worktree === 'D') return 'Deleted';
   if (index === 'R') return 'Renamed';
   return 'Changed';
+}
+
+function statusTone(file: GitChangedFile): string {
+  const { index, worktree } = file;
+  if (index === '?' && worktree === '?') return 'untracked';
+  if (index === 'U' || worktree === 'U') return 'conflict';
+  if (index === 'D' || worktree === 'D') return 'deleted';
+  if (index === 'A' || worktree === 'A') return 'added';
+  if (index === 'R') return 'renamed';
+  if (index === 'M' || worktree === 'M') return 'modified';
+  return 'changed';
 }
 
 function escapeHtml(text: string): string {

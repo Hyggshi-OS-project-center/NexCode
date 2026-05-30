@@ -10,6 +10,10 @@ echo "[build-app] Step 1/2: Build source..."
 npm run build
 
 echo "[build-app] Step 2/2: Pack Electron app..."
-npm run pack
+if [ "$(uname)" = "Linux" ]; then
+  npm run pack:linux
+else
+  npm run pack
+fi
 
 echo "[build-app] DONE ✔"

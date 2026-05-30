@@ -13,18 +13,23 @@ const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const outDir = `dist/pack-${stamp}`;
 const outAbs = path.join(root, outDir);
 
-console.log(`Packing to ${outDir} ...`);
+const targetLinux = process.argv.includes('--linux') || process.platform !== 'win32';
+const platformArg = targetLinux ? '--linux AppImage' : '--win portable';
+console.log(`Packing portable package for ${targetLinux ? 'linux' : process.platform} to ${outDir} ...`);
 
-execSync(`npx electron-builder --win portable --config.directories.output=${outDir}`, {
+execSync(`npx electron-builder ${platformArg} --config.directories.output=${outDir}`, {
   cwd: root,
   stdio: 'inherit',
   env: { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: process.env.CSC_IDENTITY_AUTO_DISCOVERY || 'false' },
 });
 
-const portable = fs
-  .readdirSync(outAbs)
-  .find((name) => name.toLowerCase().includes('portable') && name.endsWith('.exe'));
+const files = fs.readdirSync(outAbs);
+const portable = files.find((name) =>
+  (!targetLinux && name.toLowerCase().includes('portable') && name.endsWith('.exe')) ||
+  (targetLinux && name.endsWith('.AppImage'))
+);
 
 if (portable) {
-  console.log(`\nDone. Run:\n  ${path.join(outAbs, portable)}`);
+  console.log(`\nDone. Portable package:\n  ${path.join(outAbs, portable)}`);
 }
+

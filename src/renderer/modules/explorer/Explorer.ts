@@ -1,7 +1,7 @@
 /**
  * Sidebar Explorer — lazy tree, filter, create/rename/delete, toolbar, context menus.
  */
-import type { FileEntry } from '../../../shared/types';
+import type { FileEntry, GitChangedFile, GitStatusResult } from '../../../shared/types';
 import { renderFileIconHtml } from '../../utils/fileIcons';
 import { escapeHtml } from '../../utils/textAnalysis';
 import { basename, joinPath, parentDir } from '../../utils/pathUtils';
@@ -16,6 +16,12 @@ import type { MenuItem } from '../contextmenu/ContextMenu';
 import { bindReliableTextFocus } from '../../utils/textInputFocus';
 
 export type FileOpenHandler = (path: string) => void;
+
+type GitDecoration = {
+  label: string;
+  className: string;
+  title: string;
+};
 
 export class Explorer {
   private mountEl: HTMLElement;
@@ -37,6 +43,8 @@ export class Explorer {
   private timelineView!: TimelineView;
   private storeView!: ConvenienceStoreView;
   private onGoToLine: (line: number) => void;
+  private gitDecorations = new Map<string, GitDecoration>();
+  private gitFolderDecorations = new Map<string, GitDecoration>();
 
   constructor(
     mountId: string,
@@ -84,10 +92,13 @@ export class Explorer {
     this.rootPath = folderPath;
     this.expanded.clear();
     this.childrenCache.clear();
+    this.gitDecorations.clear();
+    this.gitFolderDecorations.clear();
     this.expanded.add(folderPath);
     this.workspaceLabel.textContent = basename(folderPath);
     this.showEmpty(false);
     await this.loadChildren(folderPath);
+    await this.loadGitStatus();
     await this.render();
   }
 
@@ -98,6 +109,12 @@ export class Explorer {
     }
     this.childrenCache.clear();
     await this.loadChildren(this.rootPath);
+    await this.loadGitStatus();
+    await this.render();
+  }
+
+  async refreshGitDecorations(): Promise<void> {
+    await this.loadGitStatus();
     await this.render();
   }
 
@@ -179,6 +196,71 @@ export class Explorer {
     const entries = await window.electronAPI.readDir(dirPath, { showHidden: this.showHidden });
     this.childrenCache.set(dirPath, entries);
     return entries;
+  }
+
+  private normalizePathKey(filePath: string): string {
+    return filePath.replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();
+  }
+
+  private gitPathToAbsolute(filePath: string): string {
+    const renamedPath = filePath.includes(' -> ') ? filePath.split(' -> ').pop() ?? filePath : filePath;
+    return renamedPath.split('/').reduce((acc, part) => joinPath(acc, part), this.rootPath ?? '');
+  }
+
+  private decorationForGitFile(file: GitChangedFile): GitDecoration {
+    const index = file.index.trim();
+    const worktree = file.worktree.trim();
+    const code = `${file.index}${file.worktree}`;
+    if (code === '??') return { label: 'U', className: 'untracked', title: 'Untracked' };
+    if (index === 'A') return { label: 'A', className: 'added', title: 'Added' };
+    if (index === 'D' || worktree === 'D') return { label: 'D', className: 'deleted', title: 'Deleted' };
+    if (index === 'R') return { label: 'R', className: 'renamed', title: 'Renamed' };
+    if (index === 'C') return { label: 'C', className: 'copied', title: 'Copied' };
+    if (index === 'U' || worktree === 'U') return { label: '!', className: 'conflict', title: 'Conflict' };
+    return { label: 'M', className: 'modified', title: 'Modified' };
+  }
+
+  private mergeFolderDecoration(current: GitDecoration | undefined, next: GitDecoration): GitDecoration {
+    const rank: Record<string, number> = {
+      conflict: 5,
+      deleted: 4,
+      modified: 3,
+      added: 2,
+      renamed: 2,
+      copied: 2,
+      untracked: 1,
+    };
+    if (!current) return next;
+    return (rank[next.className] ?? 0) > (rank[current.className] ?? 0) ? next : current;
+  }
+
+  private async loadGitStatus(): Promise<void> {
+    this.gitDecorations.clear();
+    this.gitFolderDecorations.clear();
+    if (!this.rootPath) return;
+
+    let status: GitStatusResult;
+    try {
+      status = await window.electronAPI.gitStatus(this.rootPath);
+    } catch {
+      return;
+    }
+    if (!status.isRepo || status.files.length === 0) return;
+
+    const rootKey = this.normalizePathKey(this.rootPath);
+    for (const file of status.files) {
+      const absolutePath = this.gitPathToAbsolute(file.path);
+      const decoration = this.decorationForGitFile(file);
+      this.gitDecorations.set(this.normalizePathKey(absolutePath), decoration);
+
+      let dir = parentDir(absolutePath);
+      while (dir && this.normalizePathKey(dir).startsWith(rootKey)) {
+        const key = this.normalizePathKey(dir);
+        this.gitFolderDecorations.set(key, this.mergeFolderDecoration(this.gitFolderDecorations.get(key), decoration));
+        if (key === rootKey) break;
+        dir = parentDir(dir);
+      }
+    }
   }
 
   private async ensureChildren(dirPath: string): Promise<FileEntry[]> {
@@ -291,11 +373,20 @@ export class Explorer {
       const label = escapeHtml(entry.name);
       const iconHtml = renderFileIconHtml(entry.name, entry.isDirectory, isExpanded);
       const hasChevron = entry.isDirectory;
+      const gitDecoration = entry.isDirectory
+        ? this.gitFolderDecorations.get(this.normalizePathKey(entry.path))
+        : this.gitDecorations.get(this.normalizePathKey(entry.path));
+      const gitDecorationHtml = gitDecoration
+        ? entry.isDirectory
+          ? `<span class="tree-git-folder-dot tree-git-${gitDecoration.className}" title="${gitDecoration.title}" aria-label="${gitDecoration.title}"></span>`
+          : `<span class="tree-git-status tree-git-${gitDecoration.className}" title="${gitDecoration.title}" aria-label="${gitDecoration.title}">${gitDecoration.label}</span>`
+        : '';
 
       row.innerHTML = `
         <span class="chevron">${hasChevron ? (isExpanded ? '▼' : '▶') : ' '}</span>
         ${iconHtml}
         <span class="tree-label">${label}</span>
+        ${gitDecorationHtml}
       `;
 
       if (entry.path === this.selectedPath) row.classList.add('active');

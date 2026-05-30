@@ -13,16 +13,23 @@ const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
 const outDir = `dist/pack-${stamp}`;
 const outAbs = path.join(root, outDir);
 
-console.log(`Building installer to ${outDir} ...`);
+const targetLinux = process.argv.includes('--linux') || process.platform !== 'win32';
+const platformArg = targetLinux ? '--linux deb' : '--win nsis';
+console.log(`Building installer for ${targetLinux ? 'linux' : process.platform} to ${outDir} ...`);
 
-execSync(`npx electron-builder --win nsis --config.directories.output=${outDir}`, {
+execSync(`npx electron-builder ${platformArg} --config.directories.output=${outDir}`, {
   cwd: root,
   stdio: 'inherit',
   env: { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: process.env.CSC_IDENTITY_AUTO_DISCOVERY || 'false' },
 });
 
-const setup = fs.readdirSync(outAbs).find((name) => name.toLowerCase().includes('setup') && name.endsWith('.exe'));
+const files = fs.readdirSync(outAbs);
+const setup = files.find((name) =>
+  (!targetLinux && name.toLowerCase().includes('setup') && name.endsWith('.exe')) ||
+  (targetLinux && name.endsWith('.deb'))
+);
 
 if (setup) {
-  console.log(`\nDone. Run installer:\n  ${path.join(outAbs, setup)}`);
+  console.log(`\nDone. Output package:\n  ${path.join(outAbs, setup)}`);
 }
+

@@ -24,6 +24,7 @@ import { chatWithOpenRouter } from '../ai/openRouterService';
 import type { AboutInfo, AiChatMessage, AiEditorContext } from '../../shared/types';
 
 const terminals = new TerminalManager();
+let currentWorkspacePath: string | null = null;
 
 /** Kill all integrated terminal shells when the app exits. */
 export function shutdownTerminals(): void {
@@ -153,6 +154,11 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
   });
   ipcMain.on('window:close', () => getWindow()?.close());
   ipcMain.handle('window:isMaximized', () => getWindow()?.isMaximized() ?? false);
+  ipcMain.handle('ai:get-editor-context', async () => null);
+  ipcMain.handle('ai:get-workspace-path', async () => currentWorkspacePath);
+  ipcMain.handle('ai:set-workspace-path', async (_e, workspacePath?: string | null) => {
+    currentWorkspacePath = workspacePath ? path.resolve(workspacePath) : null;
+  });
   ipcMain.on('window:showAbout', () => showAboutWindow(getWindow()));
   ipcMain.on('window:showEasterEgg', () => showEasterEggWindow(getWindow()));
   ipcMain.on('window:closeEasterEgg', () => closeEasterEggWindow());

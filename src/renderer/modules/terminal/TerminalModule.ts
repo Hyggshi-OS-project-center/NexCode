@@ -4,6 +4,11 @@
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { ClipboardAddon } from '@xterm/addon-clipboard';
+import { WebglAddon } from '@xterm/addon-webgl';
+import { LigaturesAddon } from '@xterm/addon-ligatures';
+import { SerializeAddon } from '@xterm/addon-serialize';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
 import type { AppSettings } from '../../../shared/types';
 import { CmdLineInput } from './cmdLineInput';
@@ -26,6 +31,7 @@ interface TerminalSession {
   term: Terminal;
   fit: FitAddon;
   cmdInput?: CmdLineInput;
+  resizeHandler?: () => void;
 }
 
 type TerminalPanelView = 'terminal' | 'problems' | 'output' | 'debug';
@@ -54,6 +60,8 @@ export class TerminalModule {
   private suppressCwdSync = false;
   private activeView: TerminalPanelView = 'terminal';
   private commandController: TerminalCommandInput;
+  private lifecycleVersion = 0;
+  private recreateQueue: Promise<void> = Promise.resolve();
 
   constructor(
     panelId: string,
@@ -145,9 +153,21 @@ export class TerminalModule {
     });
 
     const isTerminal = view === 'terminal';
+    const isDebug = view === 'debug';
     this.commandRowEl.classList.toggle('hidden', !isTerminal);
     this.container.classList.toggle('hidden', !isTerminal);
-    this.placeholder.classList.toggle('hidden', isTerminal);
+
+    const debugConsole = document.getElementById('debug-console-container');
+    if (debugConsole) {
+      debugConsole.classList.toggle('hidden', !isDebug);
+      if (isDebug) {
+        debugConsole.style.display = 'flex';
+      } else {
+        debugConsole.style.display = '';
+      }
+    }
+
+    this.placeholder.classList.toggle('hidden', isTerminal || isDebug);
 
     const controls = this.panel.querySelectorAll(
       '#btn-terminal-paste, #btn-terminal-copy, #btn-terminal-clear, #btn-new-terminal',
@@ -155,11 +175,12 @@ export class TerminalModule {
     controls.forEach((btn) => ((btn as HTMLButtonElement).disabled = !isTerminal));
 
     if (!isTerminal) {
+      if (isDebug) return;
       const titles: Record<TerminalPanelView, string> = {
         terminal: '',
         problems: 'Problems view is coming soon.',
         output: 'Output view is coming soon.',
-        debug: 'Debug console is coming soon.',
+        debug: '',
       };
       this.placeholder.textContent = titles[view];
       return;
@@ -212,14 +233,20 @@ export class TerminalModule {
   }
 
   async recreateForShellChange(): Promise<void> {
-    const ids = [...this.terminals.keys()];
-    for (const id of ids) {
-      window.electronAPI.killTerminal(id);
-      this.terminals.delete(id);
-    }
-    this.activeId = null;
-    this.container.innerHTML = '';
-    if (this.isVisible()) await this.createTerminal();
+    this.recreateQueue = this.recreateQueue
+      .catch(() => {
+        /* keep later restart requests alive after a failed restart */
+      })
+      .then(async () => {
+        this.lifecycleVersion++;
+        this.terminals.forEach((session) => this.destroySession(session, true));
+        this.terminals.clear();
+        this.activeId = null;
+        this.container.replaceChildren();
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        if (this.isVisible()) await this.createTerminal();
+      });
+    return this.recreateQueue;
   }
 
   private applyShellAppearance(): void {
@@ -234,6 +261,7 @@ export class TerminalModule {
       term.options.cursorStyle = shell === 'cmd' ? 'block' : 'bar';
       term.options.cursorBlink = true;
       term.options.letterSpacing = shell === 'cmd' ? 0 : undefined;
+      term.refresh(0, Math.max(0, term.rows - 1));
     });
 
     const header = this.panel.querySelector('#terminal-tab-label');
@@ -242,9 +270,9 @@ export class TerminalModule {
     this.updatePromptLabel(this.terminalCwd ?? this.cwd);
     this.updateCommandPlaceholder();
 
-    const useClassicCmdChrome = shell === 'cmd' && this.settings.theme === 'dark';
-    this.panel.classList.toggle('terminal-shell-cmd', useClassicCmdChrome);
+    this.panel.classList.toggle('terminal-shell-cmd', shell === 'cmd');
     this.panel.classList.toggle('terminal-shell-powershell', shell === 'powershell');
+    this.panel.classList.toggle('terminal-shell-bash', shell === 'bash');
   }
 
   private updateCommandPlaceholder(): void {
@@ -267,8 +295,13 @@ export class TerminalModule {
   }
 
   async createTerminal(): Promise<void> {
+    const version = this.lifecycleVersion;
     const id = await window.electronAPI.createTerminal(this.cwd ?? undefined);
     if (id < 0) return;
+    if (version !== this.lifecycleVersion) {
+      window.electronAPI.killTerminal(id);
+      return;
+    }
 
     const shell = this.settings.terminalShell;
     const term = new Terminal({
@@ -282,8 +315,56 @@ export class TerminalModule {
     });
 
     const fit = new FitAddon();
-    term.loadAddon(fit);
-    term.loadAddon(new WebLinksAddon());
+    try {
+      term.loadAddon(fit);
+    } catch (e) {
+      console.warn('FitAddon failed to load:', e);
+    }
+
+    try {
+      term.loadAddon(new WebLinksAddon());
+    } catch (e) {
+      console.warn('WebLinksAddon failed to load:', e);
+    }
+
+    try {
+      term.loadAddon(new ClipboardAddon());
+    } catch (e) {
+      console.warn('ClipboardAddon failed to load:', e);
+    }
+
+    try {
+      const webgl = new WebglAddon();
+      // Graceful fallback — when the GPU context is lost, dispose the addon
+      // without throwing so the window 'error' event is never fired.
+      webgl.onContextLoss(() => {
+        console.warn('WebGL context lost — falling back to Canvas renderer.');
+        try { webgl.dispose(); } catch { /* already disposed */ }
+      });
+      term.loadAddon(webgl);
+    } catch (e) {
+      console.warn('WebGL addon failed to load, falling back to Canvas renderer:', e);
+    }
+
+    try {
+      term.loadAddon(new LigaturesAddon());
+    } catch (e) {
+      console.warn('Ligatures addon failed to load:', e);
+    }
+
+    try {
+      term.loadAddon(new SerializeAddon());
+    } catch (e) {
+      console.warn('Serialize addon failed to load:', e);
+    }
+
+    try {
+      const unicode11 = new Unicode11Addon();
+      term.loadAddon(unicode11);
+      term.unicode.activeVersion = '11';
+    } catch (e) {
+      console.warn('Unicode11 addon failed to load:', e);
+    }
 
     const wrapper = document.createElement('div');
     wrapper.className = 'terminal-xterm-wrap';
@@ -292,6 +373,12 @@ export class TerminalModule {
     this.container.innerHTML = '';
     this.container.appendChild(wrapper);
     term.open(wrapper);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    if (version !== this.lifecycleVersion) {
+      window.electronAPI.killTerminal(id);
+      term.dispose();
+      return;
+    }
     fit.fit();
 
     const cmdInput = new CmdLineInput(term, (payload) => window.electronAPI.writeTerminal(id, payload));
@@ -330,18 +417,52 @@ export class TerminalModule {
       });
     }
 
-    this.terminals.set(id, { id, term, fit, cmdInput });
-    this.activeId = id;
-
     const resize = () => {
+      if (!this.terminals.has(id)) return;
       fit.fit();
       window.electronAPI.resizeTerminal(id, term.cols, term.rows);
     };
+    this.terminals.set(id, { id, term, fit, cmdInput, resizeHandler: resize });
+    this.activeId = id;
+
     window.addEventListener('resize', resize);
     term.onResize(() => window.electronAPI.resizeTerminal(id, term.cols, term.rows));
     resize();
     this.applyShellAppearance();
     term.focus();
+    requestAnimationFrame(() => fit.fit());
+  }
+
+  private destroySession(session: TerminalSession, killProcess: boolean): void {
+    if (session.resizeHandler) {
+      window.removeEventListener('resize', session.resizeHandler);
+    }
+    if (killProcess) {
+      window.electronAPI.killTerminal(session.id);
+    }
+    try {
+      session.term.dispose();
+    } catch {
+      /* xterm may already be disposed during renderer teardown */
+    }
+  }
+
+  async show(): Promise<void> {
+    const wasHidden = this.panel.classList.contains('hidden');
+    if (wasHidden) {
+      this.panel.classList.remove('hidden');
+    }
+
+    if (this.terminals.size === 0) {
+      await this.createTerminal();
+    } else {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      this.terminals.get(this.activeId!)?.fit.fit();
+      this.getActiveTerminal()?.focus();
+    }
+
+    this.setQuickAccessActive(true);
+    this.syncWelcomeLayout();
   }
 
   private handleTerminalKey(event: KeyboardEvent): boolean {
@@ -433,21 +554,6 @@ export class TerminalModule {
     this.getActiveTerminal()?.clear();
   }
 
-  async show(): Promise<void> {
-    if (this.panel.classList.contains('hidden')) {
-      this.panel.classList.remove('hidden');
-      if (this.terminals.size === 0) await this.createTerminal();
-      else {
-        this.terminals.get(this.activeId!)?.fit.fit();
-        this.getActiveTerminal()?.focus();
-      }
-    } else {
-      this.getActiveTerminal()?.focus();
-    }
-    this.setQuickAccessActive(true);
-    this.syncWelcomeLayout();
-  }
-
   toggle(): void {
     const hidden = this.panel.classList.contains('hidden');
     if (hidden) void this.show();
@@ -480,7 +586,8 @@ export class TerminalModule {
   dispose(): void {
     this.unsubscribeData?.();
     this.unsubscribeCwd?.();
-    this.terminals.forEach((_, id) => window.electronAPI.killTerminal(id));
+    this.lifecycleVersion++;
+    this.terminals.forEach((session) => this.destroySession(session, true));
     this.terminals.clear();
   }
 }

@@ -11,6 +11,8 @@ import type {
   GitStatusResult,
   MarketplaceExtensionResult,
   OpenPathsPayload,
+  UpdateInfo,
+  UpdateProgress,
 } from '../shared/types';
 
 const api: ElectronAPI = {
@@ -67,8 +69,24 @@ const api: ElectronAPI = {
   getHomePath: () => ipcRenderer.invoke('path:home') as Promise<string>,
   searchMarketplaceExtensions: (query, limit) =>
     ipcRenderer.invoke('extensions:search', query, limit) as Promise<MarketplaceExtensionResult[]>,
+  getWorkspacePath: () => ipcRenderer.invoke('ai:get-workspace-path') as Promise<string | null>,
+  setWorkspacePath: (workspacePath) =>
+    ipcRenderer.invoke('ai:set-workspace-path', workspacePath ?? null) as Promise<void>,
   aiChat: (messages, workspacePath, editorContext) =>
     ipcRenderer.invoke('ai:chat', messages, workspacePath ?? null, editorContext ?? null) as Promise<AiChatResult>,
+  openAgent: () => ipcRenderer.send('agent:open'),
+  checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  startUpdate: () => ipcRenderer.invoke('update:start'),
+  onUpdateAvailable: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, info: UpdateInfo) => callback(info);
+    ipcRenderer.on('update:available', handler);
+    return () => ipcRenderer.removeListener('update:available', handler);
+  },
+  onUpdateProgress: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, progress: UpdateProgress) => callback(progress);
+    ipcRenderer.on('update:progress', handler);
+    return () => ipcRenderer.removeListener('update:progress', handler);
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

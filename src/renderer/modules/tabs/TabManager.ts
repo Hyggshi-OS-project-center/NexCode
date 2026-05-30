@@ -1,6 +1,8 @@
 /**
  * Tab bar — manages open file tabs, with drag-and-drop reordering (free towing).
  */
+import { renderFileIconHtml } from '../../utils/fileIcons';
+
 export interface OpenTab {
   path: string;
   name: string;
@@ -88,6 +90,7 @@ export class TabManager {
       el.draggable = true;
       el.dataset.tabIdx = String(idx);
       el.innerHTML = `
+        ${renderFileIconHtml(tab.name, false)}
         <span class="tab-name">${tab.name}</span>
         <button class="tab-close" title="Close">×</button>
       `;

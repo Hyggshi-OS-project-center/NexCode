@@ -4,6 +4,7 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](https://github.com/Hyggshi-OS-project-center/NexCode/releases)
 [![Built with Electron](https://img.shields.io/badge/built%20with-Electron-47848F?logo=electron)](https://www.electronjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript)](https://www.typescriptlang.org/)
+[![GitHub All Releases](https://img.shields.io/github/downloads/Hyggshi-OS-project-center/NexCode/total.svg)](https://github.com/Hyggshi-OS-project-center/NexCode/releases) 
 
 ![Nexcode](https://raw.githubusercontent.com/Hyggshi-OS-project-center/NexCode/refs/heads/main/Resources/Screenshot%202026-05-24%20075820.png)
 

@@ -168,6 +168,7 @@ export type IpcChannel =
   | 'window:closeEasterEgg'
   | 'shell:openExternal'
   | 'about:getInfo'
+  | 'releaseNotes:getLatest'
   | 'about:close'
   | 'terminal:create'
   | 'terminal:write'
@@ -239,7 +240,15 @@ export interface GitHubRelease {
   tag_name: string;
   name?: string;
   html_url?: string;
+  body?: string | null;
   assets: GitHubReleaseAsset[];
+}
+
+export interface ReleaseNotesInfo {
+  version: string;
+  title: string;
+  body: string;
+  url: string | null;
 }
 
 export type UpdateInstallMode = 'installed' | 'portable' | 'zip';
@@ -300,6 +309,7 @@ export interface ElectronAPI {
   closeEasterEggWindow: () => void;
   openExternal: (url: string) => Promise<void>;
   getAboutInfo: () => Promise<AboutInfo>;
+  getLatestReleaseNotes: () => Promise<ReleaseNotesInfo>;
   createTerminal: (cwd?: string) => Promise<number>;
   writeTerminal: (id: number, data: string) => void;
   resizeTerminal: (id: number, cols: number, rows: number) => void;

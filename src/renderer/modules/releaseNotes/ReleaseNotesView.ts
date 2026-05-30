@@ -5,6 +5,8 @@ export const RELEASE_NOTES_STORAGE_KEY = 'nexcode.releaseNotes.lastShownVersion'
 
 interface ReleaseNotesData {
   version: string;
+  title: string;
+  body: string;
   changelogUrl: string;
 }
 
@@ -14,6 +16,7 @@ export class ReleaseNotesView {
   private titleEl: HTMLElement;
   private bodyEl: HTMLElement;
   private currentVersion = '';
+  private currentChangelogUrl = '';
 
   constructor(containerId: string) {
     this.container = document.getElementById(containerId)!;
@@ -39,16 +42,18 @@ export class ReleaseNotesView {
     this.titleEl = panel.querySelector('#release-notes-title') as HTMLElement;
     this.bodyEl = panel.querySelector('#release-notes-body') as HTMLElement;
     panel.querySelector('#btn-release-notes-changelog')?.addEventListener('click', () => {
-      void window.electronAPI.openExternal(this.getChangelogUrl());
+      void window.electronAPI.openExternal(this.currentChangelogUrl || this.getChangelogUrl());
     });
   }
 
   async show(version?: string): Promise<void> {
+    this.panel.classList.remove('hidden');
+    this.bodyEl.innerHTML = '<p class="release-notes-loading">Loading release notes...</p>';
     const data = await this.buildData(version);
     this.currentVersion = data.version;
-    this.titleEl.textContent = `What's New in version ${data.version}`;
-    this.bodyEl.innerHTML = renderMarkdown(buildReleaseMarkdown(data));
-    this.panel.classList.remove('hidden');
+    this.currentChangelogUrl = data.changelogUrl;
+    this.titleEl.textContent = data.title || `What's New in version ${data.version}`;
+    this.bodyEl.innerHTML = renderMarkdown(data.body);
   }
 
   hide(): void {
@@ -68,10 +73,22 @@ export class ReleaseNotesView {
 
   private async buildData(version?: string): Promise<ReleaseNotesData> {
     const resolvedVersion = version ?? (await this.getCurrentVersion());
-    return {
-      version: resolvedVersion,
-      changelogUrl: this.getChangelogUrl(resolvedVersion),
-    };
+    try {
+      const latest = await window.electronAPI.getLatestReleaseNotes();
+      return {
+        version: latest.version || resolvedVersion,
+        title: latest.title || `What's New in version ${latest.version || resolvedVersion}`,
+        body: latest.body || fallbackReleaseMarkdown(resolvedVersion, this.getChangelogUrl(resolvedVersion)),
+        changelogUrl: latest.url ?? this.getChangelogUrl(latest.version || resolvedVersion),
+      };
+    } catch {
+      return {
+        version: resolvedVersion,
+        title: `What's New in version ${resolvedVersion}`,
+        body: fallbackReleaseMarkdown(resolvedVersion, this.getChangelogUrl(resolvedVersion)),
+        changelogUrl: this.getChangelogUrl(resolvedVersion),
+      };
+    }
   }
 
   private getChangelogUrl(version = this.currentVersion): string {
@@ -82,11 +99,15 @@ export class ReleaseNotesView {
   }
 }
 
-function buildReleaseMarkdown(data: ReleaseNotesData): string {
+function fallbackReleaseMarkdown(version: string, changelogUrl: string): string {
   return [
+    `# NexCode IDE v${version}`,
+    '',
+    '> Could not load release notes from GitHub. Check your connection and open the full changelog for the latest notes.',
+    '',
     '## Highlights',
     '',
-    '![Release notes preview](data:image/svg+xml;utf8,' + encodeURIComponent(buildReleaseHeroSvg(data.version)) + ')',
+    '![Release notes preview](data:image/svg+xml;utf8,' + encodeURIComponent(buildReleaseHeroSvg(version)) + ')',
     '',
     '- Automatic What\'s New tab after updating NexCode IDE.',
     '- Version-specific release notes with screenshots or GIF-ready image sections.',
@@ -106,7 +127,7 @@ function buildReleaseMarkdown(data: ReleaseNotesData): string {
     '',
     `## Full Changelog`,
     '',
-    `[View the full changelog on GitHub](${data.changelogUrl})`,
+    `[View the full changelog on GitHub](${changelogUrl})`,
   ].join('\n');
 }
 

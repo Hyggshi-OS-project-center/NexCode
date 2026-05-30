@@ -3,6 +3,7 @@
  */
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import fs from 'fs/promises';
+import https from 'https';
 import os from 'os';
 import path from 'path';
 import type { AppSettings, FileEntry, ReadFileForEditorResult } from '../../shared/types';
@@ -22,9 +23,12 @@ import { closeEasterEggWindow, showEasterEggWindow } from '../easterEgg/easterEg
 import { chatWithGemini } from '../ai/geminiService';
 import { chatWithOpenRouter } from '../ai/openRouterService';
 import type { AboutInfo, AiChatMessage, AiEditorContext } from '../../shared/types';
+import type { GitHubRelease, ReleaseNotesInfo } from '../../shared/types';
 
 const terminals = new TerminalManager();
 let currentWorkspacePath: string | null = null;
+const RELEASE_NOTES_URL = 'https://api.github.com/repos/Hyggshi-OS-project-center/NexCode/releases/latest';
+const GITHUB_USER_AGENT = 'NexCode-IDE';
 
 /** Kill all integrated terminal shells when the app exits. */
 export function shutdownTerminals(): void {
@@ -167,6 +171,15 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
     if (parsed.protocol !== 'https:') throw new Error('Only HTTPS links can be opened externally.');
     await shell.openExternal(parsed.href);
   });
+  ipcMain.handle('releaseNotes:getLatest', async (): Promise<ReleaseNotesInfo> => {
+    const release = await fetchJson<GitHubRelease>(RELEASE_NOTES_URL);
+    return {
+      version: release.tag_name.trim().replace(/^v/i, ''),
+      title: release.name || release.tag_name,
+      body: release.body?.trim() || 'No release notes were published for this version.',
+      url: release.html_url ?? null,
+    };
+  });
   ipcMain.on('about:close', () => closeAboutWindow());
   ipcMain.handle('about:getInfo', async (): Promise<AboutInfo> => {
     let productName = 'NexCode IDE';
@@ -268,4 +281,30 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
       );
     },
   );
+}
+
+function fetchJson<T>(url: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    https
+      .get(url, { headers: { 'User-Agent': GITHUB_USER_AGENT, Accept: 'application/vnd.github+json' } }, (response) => {
+        if (response.statusCode !== 200) {
+          reject(new Error(`GitHub release notes request failed with HTTP ${response.statusCode ?? 'unknown'}.`));
+          response.resume();
+          return;
+        }
+        let body = '';
+        response.setEncoding('utf8');
+        response.on('data', (chunk) => {
+          body += chunk;
+        });
+        response.on('end', () => {
+          try {
+            resolve(JSON.parse(body) as T);
+          } catch (error) {
+            reject(error);
+          }
+        });
+      })
+      .on('error', reject);
+  });
 }

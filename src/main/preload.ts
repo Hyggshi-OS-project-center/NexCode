@@ -12,6 +12,7 @@ import type {
   GitStatusResult,
   MarketplaceExtensionResult,
   OpenPathsPayload,
+  ReleaseNotesInfo,
   UpdateInfo,
   UpdateProgress,
 } from '../shared/types';
@@ -40,6 +41,7 @@ const api: ElectronAPI = {
   closeEasterEggWindow: () => ipcRenderer.send('window:closeEasterEgg'),
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url) as Promise<void>,
   getAboutInfo: () => ipcRenderer.invoke('about:getInfo') as Promise<AboutInfo>,
+  getLatestReleaseNotes: () => ipcRenderer.invoke('releaseNotes:getLatest') as Promise<ReleaseNotesInfo>,
   createTerminal: (cwd) => ipcRenderer.invoke('terminal:create', cwd),
   writeTerminal: (id, data) => ipcRenderer.send('terminal:write', id, data),
   resizeTerminal: (id, cols, rows) => ipcRenderer.send('terminal:resize', id, cols, rows),

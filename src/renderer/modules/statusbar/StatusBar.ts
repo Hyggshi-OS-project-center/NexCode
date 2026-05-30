@@ -61,6 +61,15 @@ export class StatusBar {
     this.elLanguage.title = kindLabel;
   }
 
+  setInternalPage(label: string): void {
+    this.elPosition.textContent = 'â€”';
+    this.elIndent.textContent = 'â€”';
+    this.elPosition.title = 'Not available for internal pages';
+    this.elIndent.title = 'Not available for internal pages';
+    this.elLanguage.textContent = label;
+    this.elLanguage.title = label;
+  }
+
   restoreTextEditor(settings: AppSettings): void {
     this.elPosition.title = '';
     this.elIndent.title = '';

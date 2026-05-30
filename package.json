@@ -1,7 +1,7 @@
 {
   "name": "NexCode-ide",
   "productName": "NexCode IDE",
-  "version": "3.2.0",
+  "version": "3.2.1",
   "description": "NexCode IDE — desktop code editor",
   "main": "dist/main/main.js",
   "author": {

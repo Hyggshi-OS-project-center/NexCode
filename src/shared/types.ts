@@ -166,6 +166,7 @@ export type IpcChannel =
   | 'window:showAbout'
   | 'window:showEasterEgg'
   | 'window:closeEasterEgg'
+  | 'shell:openExternal'
   | 'about:getInfo'
   | 'about:close'
   | 'terminal:create'
@@ -297,6 +298,8 @@ export interface ElectronAPI {
   showAboutWindow: () => void;
   showEasterEggWindow: () => void;
   closeEasterEggWindow: () => void;
+  openExternal: (url: string) => Promise<void>;
+  getAboutInfo: () => Promise<AboutInfo>;
   createTerminal: (cwd?: string) => Promise<number>;
   writeTerminal: (id: number, data: string) => void;
   resizeTerminal: (id: number, cols: number, rows: number) => void;

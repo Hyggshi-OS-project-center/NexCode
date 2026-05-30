@@ -1,7 +1,7 @@
 /**
  * Central IPC handler registration — keeps main process logic modular.
  */
-import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import fs from 'fs/promises';
 import os from 'os';
 import path from 'path';
@@ -162,6 +162,11 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
   ipcMain.on('window:showAbout', () => showAboutWindow(getWindow()));
   ipcMain.on('window:showEasterEgg', () => showEasterEggWindow(getWindow()));
   ipcMain.on('window:closeEasterEgg', () => closeEasterEggWindow());
+  ipcMain.handle('shell:openExternal', async (_e, url: string) => {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') throw new Error('Only HTTPS links can be opened externally.');
+    await shell.openExternal(parsed.href);
+  });
   ipcMain.on('about:close', () => closeAboutWindow());
   ipcMain.handle('about:getInfo', async (): Promise<AboutInfo> => {
     let productName = 'NexCode IDE';

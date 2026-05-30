@@ -37,6 +37,11 @@ import { ChatPanel } from './modules/chat/ChatPanel';
 import { SplashScreen } from './modules/ui/SplashScreen';
 import { NexCodeMoments } from './modules/ui/NexCodeMoments';
 import { UpdateController } from './modules/update/UpdateController';
+import {
+  RELEASE_NOTES_STORAGE_KEY,
+  RELEASE_NOTES_TAB_PATH,
+  ReleaseNotesView,
+} from './modules/releaseNotes/ReleaseNotesView';
 import splashImageRandom1Url from '@icons/loading/my-splash-Random1.png?url';
 import splashImageRandom2Url from '@icons/loading/my-splash-Random2.png?url';
 import splashImageRandom3Url from '@icons/loading/my-splash-Random3.png?url';
@@ -83,6 +88,7 @@ class NexusApp {
   private moments!: NexCodeMoments;
   private updates!: UpdateController;
   private mdPreview!: MarkdownPreview;
+  private releaseNotes!: ReleaseNotesView;
   /** Trimmed terminal output sample for moment detection — capped to reduce memory */
   private terminalOutputSample = '';
   private settingsApplyQueue: Promise<void> = Promise.resolve();
@@ -139,6 +145,7 @@ class NexusApp {
     this.binaryView = new BinaryFileView('editor-container');
     this.editorBanner = new EditorBanner('editor-container');
     this.mdPreview = new MarkdownPreview('editor-container');
+    this.releaseNotes = new ReleaseNotesView('editor-container');
     this.mdPreview.onHide(() => {
       // Restore editor layout after closing preview
       this.editor.show();
@@ -218,6 +225,7 @@ class NexusApp {
     void this.showSidebarPanel('explorer');
     this.updateViewState();
     splash.hide();
+    void this.openReleaseNotesAfterUpdate();
   }
 
   private bindUI(): void {
@@ -408,6 +416,10 @@ class NexusApp {
             label: 'Extension Marketplace',
             action: () => void this.openExtensionMarketplace(),
           },
+          {
+            label: "What's New",
+            action: () => void this.openReleaseNotes(),
+          },
           { separator: true },
           {
             label: 'Open AI IDE Agent',
@@ -546,6 +558,7 @@ class NexusApp {
   private async runActiveFile(): Promise<void> {
     const path = this.tabs.getActivePath();
     if (!path) return;
+    if (this.releaseNotes.isReleaseNotesPath(path)) return;
     if (this.binaryMeta.has(path) && !this.forceTextOpen.has(path)) return;
 
     if (this.dirtyFiles.has(path)) await this.saveFile(path, false);
@@ -727,6 +740,11 @@ class NexusApp {
   }
 
   private async openFile(path: string, forceText = false): Promise<void> {
+    if (this.releaseNotes.isReleaseNotesPath(path)) {
+      await this.openReleaseNotes();
+      return;
+    }
+
     this.tabs.openTab(path);
     this.statusBar.setFile(path);
     this.welcome.hide();
@@ -762,6 +780,7 @@ class NexusApp {
     const meta = this.binaryMeta.get(path);
     if (!meta) return;
 
+    this.releaseNotes.hide();
     this.editor.hide();
     this.editorBanner.hide();
     this.binaryView.show({
@@ -791,13 +810,15 @@ class NexusApp {
     const path = this.tabs.getActivePath();
     const btn = document.getElementById('btn-run') as HTMLButtonElement | null;
     if (!btn) return;
+    const isInternal = this.releaseNotes.isReleaseNotesPath(path);
     const isBinary = Boolean(path && this.binaryMeta.has(path) && !this.forceTextOpen.has(path));
-    btn.disabled = isBinary;
-    btn.classList.toggle('is-disabled', isBinary);
-    btn.title = isBinary ? 'Cannot run binary files' : 'Run file (F5)';
+    btn.disabled = isInternal || isBinary;
+    btn.classList.toggle('is-disabled', isInternal || isBinary);
+    btn.title = isInternal ? 'Cannot run internal pages' : isBinary ? 'Cannot run binary files' : 'Run file (F5)';
   }
 
   private async showTextTab(path: string, content: string, checkUnicode = false): Promise<void> {
+    this.releaseNotes.hide();
     this.binaryView.hide();
     this.statusBar.restoreTextEditor(this.settings);
     this.updateRunButtonForActiveTab();
@@ -831,18 +852,52 @@ class NexusApp {
 
   /** Open the Extension Marketplace (browser-based Open VSX). */
   private async openExtensionMarketplace(): Promise<void> {
-    // Open Open VSX in the system browser if shell.openExternal is available,
-    // otherwise show a friendly notice in the terminal.
     try {
-      await (window.electronAPI as unknown as Record<string, (url: string) => Promise<void>>)['openExternal']?.(
-        'https://open-vsx.org',
-      );
+      await window.electronAPI.openExternal('https://open-vsx.org');
     } catch {
       await this.terminal.show();
       await this.terminal.sendCommand(
         this.formatTerminalMessage('Extension Marketplace: open https://open-vsx.org in your browser'),
         true,
       );
+    }
+  }
+
+  private async openReleaseNotes(markShown = false): Promise<void> {
+    this.tabs.openTab(RELEASE_NOTES_TAB_PATH);
+    this.welcome.hide();
+    this.editor.hide();
+    this.binaryView.hide();
+    this.editorBanner.hide();
+    this.mdPreview.hide();
+    await this.releaseNotes.show();
+    this.statusBar.setFile("What's New");
+    this.statusBar.setInternalPage('Release Notes');
+    const previewBtn = document.getElementById('btn-md-preview') as HTMLButtonElement | null;
+    if (previewBtn) previewBtn.style.display = 'none';
+    this.updateRunButtonForActiveTab();
+    if (markShown) {
+      try {
+        localStorage.setItem(RELEASE_NOTES_STORAGE_KEY, await this.releaseNotes.getCurrentVersion());
+      } catch {
+        /* ignore localStorage failures */
+      }
+    }
+  }
+
+  private async openReleaseNotesAfterUpdate(): Promise<void> {
+    try {
+      const version = await this.releaseNotes.getCurrentVersion();
+      const lastShownVersion = localStorage.getItem(RELEASE_NOTES_STORAGE_KEY);
+      if (lastShownVersion && lastShownVersion !== version) {
+        await this.openReleaseNotes(true);
+        return;
+      }
+      if (!lastShownVersion) {
+        localStorage.setItem(RELEASE_NOTES_STORAGE_KEY, version);
+      }
+    } catch {
+      /* Release notes are optional; startup should continue if version lookup fails. */
     }
   }
 
@@ -893,6 +948,11 @@ class NexusApp {
   }
 
   private async switchToFile(path: string): Promise<void> {
+    if (this.releaseNotes.isReleaseNotesPath(path)) {
+      await this.openReleaseNotes();
+      return;
+    }
+
     if (this.binaryMeta.has(path) && !this.forceTextOpen.has(path)) {
       this.showBinaryTab(path);
       this.statusBar.setFile(path);
@@ -931,6 +991,7 @@ class NexusApp {
 
   private async saveActiveFile(): Promise<void> {
     const path = this.tabs.getActivePath();
+    if (this.releaseNotes.isReleaseNotesPath(path)) return;
     if (!path || (this.binaryMeta.has(path) && !this.forceTextOpen.has(path))) return;
     await this.saveFile(path, true);
   }
@@ -982,6 +1043,7 @@ class NexusApp {
   }
 
   private async checkOpenFileChange(path: string): Promise<void> {
+    if (this.releaseNotes.isReleaseNotesPath(path)) return;
     const previous = this.fileSnapshots.get(path);
     if (!previous) {
       await this.updateFileSnapshot(path);
@@ -1033,6 +1095,7 @@ class NexusApp {
   }
 
   private async updateFileSnapshot(path: string): Promise<void> {
+    if (this.releaseNotes.isReleaseNotesPath(path)) return;
     const stat = await this.safeStat(path);
     if (!stat || stat.isDirectory) return;
     this.fileSnapshots.set(path, { size: stat.size, mtimeMs: stat.mtimeMs });
@@ -1057,7 +1120,14 @@ class NexusApp {
       if (active && this.binaryMeta.has(active) && !this.forceTextOpen.has(active)) {
         this.showBinaryTab(active);
         this.mdPreview.hide();
+      } else if (this.releaseNotes.isReleaseNotesPath(active)) {
+        this.editor.hide();
+        this.binaryView.hide();
+        this.editorBanner.hide();
+        this.mdPreview.hide();
+        void this.releaseNotes.show();
       } else {
+        this.releaseNotes.hide();
         this.binaryView.hide();
         this.editor.show();
         this.updateRunButtonForActiveTab();
@@ -1069,6 +1139,7 @@ class NexusApp {
       this.welcome.show();
       this.editor.hide();
       this.binaryView.hide();
+      this.releaseNotes.hide();
       this.mdPreview.hide();
       const previewBtn = document.getElementById('btn-md-preview') as HTMLButtonElement | null;
       if (previewBtn) previewBtn.style.display = 'none';

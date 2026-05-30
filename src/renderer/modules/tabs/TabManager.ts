@@ -2,6 +2,7 @@
  * Tab bar — manages open file tabs, with drag-and-drop reordering (free towing).
  */
 import { renderFileIconHtml } from '../../utils/fileIcons';
+import { RELEASE_NOTES_TAB_PATH } from '../releaseNotes/ReleaseNotesView';
 
 export interface OpenTab {
   path: string;
@@ -31,7 +32,7 @@ export class TabManager {
   }
 
   openTab(path: string): void {
-    const name = path.split(/[/\\]/).pop() ?? path;
+    const name = path === RELEASE_NOTES_TAB_PATH ? "What's New" : path.split(/[/\\]/).pop() ?? path;
     const existing = this.tabs.find((t) => t.path === path);
     if (!existing) {
       this.tabs.push({ path, name, dirty: false });

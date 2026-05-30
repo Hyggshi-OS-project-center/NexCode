@@ -4,7 +4,6 @@ import fsp from 'fs/promises';
 import https from 'https';
 import os from 'os';
 import path from 'path';
-import { spawn } from 'child_process';
 import type {
   GitHubRelease,
   GitHubReleaseAsset,
@@ -149,13 +148,14 @@ export class UpdateService {
     }
 
     if (process.platform === 'win32') {
-      const child = spawn(downloadPath, [], { detached: true, stdio: 'ignore' });
-      child.unref();
+      const error = await shell.openPath(downloadPath);
+      if (error) throw new Error(`Installation failed: ${error}`);
       this.emitProgress('installing', 'Installing update...', 100);
       return;
     }
 
     await fsp.chmod(downloadPath, 0o755);
+    const { spawn } = await import('child_process');
     const child = spawn(downloadPath, [], { detached: true, stdio: 'ignore' });
     child.unref();
     this.emitProgress('installing', 'Installing update...', 100);

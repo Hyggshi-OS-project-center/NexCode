@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import { resolve } from 'path';
 
 export default defineConfig({
-  root: __dirname,
+  root: resolve(__dirname, 'src/renderer'),
   base: './',
   build: {
     outDir: resolve(__dirname, 'dist/renderer'),
@@ -12,7 +12,6 @@ export default defineConfig({
         main: resolve(__dirname, 'src/renderer/index.html'),
         about: resolve(__dirname, 'src/renderer/about.html'),
         easterEgg: resolve(__dirname, 'src/renderer/easterEgg.html'),
-        agents: resolve(__dirname, 'src/agents/src/renderer/index.html'),
       },
     },
   },

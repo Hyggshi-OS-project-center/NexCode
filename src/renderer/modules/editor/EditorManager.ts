@@ -231,6 +231,7 @@ export class EditorManager {
   private buildOptions(): monaco.editor.IStandaloneEditorConstructionOptions {
     return {
       theme: this.settings.theme === 'dark' ? 'nexus-dark' : 'nexus-light',
+      fontFamily: this.settings.fontFamily,
       fontSize: this.settings.fontSize,
       tabSize: this.settings.tabSize,
       insertSpaces: true,
@@ -258,13 +259,16 @@ export class EditorManager {
 
   applySettings(settings: AppSettings): void {
     this.settings = settings;
-    this.editor?.updateOptions({
+    const options = {
       theme: settings.theme === 'dark' ? 'nexus-dark' : 'nexus-light',
+      fontFamily: settings.fontFamily,
       fontSize: settings.fontSize,
       tabSize: settings.tabSize,
-      wordWrap: settings.wordWrap ? 'on' : 'off',
+      wordWrap: settings.wordWrap ? ('on' as const) : ('off' as const),
       minimap: { enabled: settings.minimap },
-    });
+    };
+    this.editor?.updateOptions(options);
+    this.editorSecondary?.updateOptions(options);
     document.body.dataset.theme = settings.theme;
   }
 
@@ -449,6 +453,39 @@ export class EditorManager {
 
   getActivePath(): string | null {
     return this.activePath;
+  }
+
+  insertFontFamily(fontFamily: string): boolean {
+    const editor = this.getFocusedEditor() ?? this.editor;
+    const path = this.activePath;
+    const model = editor?.getModel();
+    const selection = editor?.getSelection();
+    if (!editor || !model || !selection || !path) return false;
+
+    const selectedText = model.getValueInRange(selection);
+    const fontValue = fontFamily.trim() || 'Arial, Helvetica, sans-serif';
+    const ext = path.split('.').pop()?.toLowerCase() ?? '';
+    const isMarkup = ['html', 'htm', 'md', 'markdown'].includes(ext);
+    const isStylesheet = ['css', 'scss', 'sass', 'less'].includes(ext);
+    let text: string;
+
+    if (isMarkup) {
+      const content = selectedText || 'Text';
+      text = `<span style="font-family: ${fontValue};">${content}</span>`;
+    } else if (isStylesheet) {
+      text = `font-family: ${fontValue};`;
+    } else {
+      text = `font-family: ${fontValue};`;
+    }
+
+    editor.executeEdits('insert-font-family', [{ range: selection, text, forceMoveMarkers: true }]);
+    const end = selection.getStartPosition();
+    editor.setPosition({
+      lineNumber: end.lineNumber,
+      column: end.column + text.length,
+    });
+    editor.focus();
+    return true;
   }
 
   show(): void {

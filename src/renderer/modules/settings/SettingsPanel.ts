@@ -14,6 +14,33 @@ const GEMINI_MODEL_OPTIONS = [
   { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash-Lite' },
 ] as const;
 
+const FONT_FAMILY_OPTIONS = [
+  { value: '"Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif', label: 'Segoe UI' },
+  { value: 'Arial, Helvetica, sans-serif', label: 'Arial' },
+  { value: '"Helvetica Neue", Arial, sans-serif', label: 'Helvetica Neue' },
+  { value: 'Verdana, Geneva, sans-serif', label: 'Verdana' },
+  { value: 'Tahoma, Geneva, sans-serif', label: 'Tahoma' },
+  { value: '"Trebuchet MS", Helvetica, sans-serif', label: 'Trebuchet MS' },
+  { value: 'Georgia, "Times New Roman", serif', label: 'Georgia' },
+  { value: '"Times New Roman", Times, serif', label: 'Times New Roman' },
+  { value: 'Garamond, Georgia, serif', label: 'Garamond' },
+  { value: 'Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif', label: 'Impact' },
+  { value: '"Comic Sans MS", "Comic Sans", cursive', label: 'Comic Sans MS' },
+  { value: 'Inter, "Segoe UI", Arial, sans-serif', label: 'Inter' },
+  { value: 'Roboto, Arial, sans-serif', label: 'Roboto' },
+  { value: '"Open Sans", Arial, sans-serif', label: 'Open Sans' },
+  { value: 'Montserrat, Arial, sans-serif', label: 'Montserrat' },
+  { value: 'Poppins, Arial, sans-serif', label: 'Poppins' },
+  { value: 'Lato, Arial, sans-serif', label: 'Lato' },
+  { value: 'Merriweather, Georgia, serif', label: 'Merriweather' },
+  { value: '"Playfair Display", Georgia, serif', label: 'Playfair Display' },
+  { value: 'Consolas, "Cascadia Code", "Courier New", monospace', label: 'Consolas' },
+  { value: '"Cascadia Code", "Cascadia Mono", Consolas, monospace', label: 'Cascadia Code' },
+  { value: '"Fira Code", Consolas, monospace', label: 'Fira Code' },
+  { value: '"JetBrains Mono", Consolas, monospace', label: 'JetBrains Mono' },
+  { value: '"Courier New", Courier, monospace', label: 'Courier New' },
+] as const;
+
 export class SettingsPanel {
   private container: HTMLElement;
   private onChange: SettingsChangeHandler;
@@ -42,6 +69,25 @@ export class SettingsPanel {
               <option value="dark" ${s.theme === 'dark' ? 'selected' : ''}>Dark</option>
               <option value="light" ${s.theme === 'light' ? 'selected' : ''}>Light</option>
             </select>
+          </div>
+          <div class="setting-row">
+            <label>Font</label>
+            <select id="set-fontFamily">
+              ${this.renderFontFamilyOptions(s.fontFamily, s.customFontFamilies)}
+            </select>
+          </div>
+          <div class="setting-row">
+            <label>Inserted Font</label>
+            <select id="set-insertFontFamily">
+              ${this.renderFontFamilyOptions(s.insertFontFamily, s.customFontFamilies)}
+            </select>
+          </div>
+          <div class="setting-row setting-row-field">
+            <label>Add Custom Font</label>
+            <div class="settings-key-row">
+              <input type="text" id="set-customFontFamily" placeholder="Font name or CSS stack" autocomplete="off" />
+              <button type="button" class="welcome-btn" id="btn-add-custom-font">Add</button>
+            </div>
           </div>
         </div>
         <div class="settings-group">
@@ -144,6 +190,8 @@ export class SettingsPanel {
     `;
 
     this.bind('set-theme', 'change', (el) => this.patch({ theme: (el as HTMLSelectElement).value as 'dark' | 'light' }));
+    this.bind('set-fontFamily', 'change', (el) => this.patch({ fontFamily: (el as HTMLSelectElement).value }));
+    this.bind('set-insertFontFamily', 'change', (el) => this.patch({ insertFontFamily: (el as HTMLSelectElement).value }));
     this.bind('set-fontSize', 'change', (el) => this.patch({ fontSize: Number((el as HTMLInputElement).value) }));
     this.bind('set-tabSize', 'change', (el) => this.patch({ tabSize: Number((el as HTMLInputElement).value) }));
     this.bind('set-wordWrap', 'change', (el) => this.patch({ wordWrap: (el as HTMLInputElement).checked }));
@@ -157,6 +205,15 @@ export class SettingsPanel {
     );
     this.bind('set-aiProvider', 'change', (el) => {
       this.patch({ aiProvider: (el as HTMLSelectElement).value as AppSettings['aiProvider'] });
+      this.render();
+    });
+
+    const customFont = this.container.querySelector('#set-customFontFamily') as HTMLInputElement | null;
+    this.container.querySelector('#btn-add-custom-font')?.addEventListener('click', () => {
+      const font = this.normalizeCustomFont(customFont?.value ?? '');
+      if (!font) return;
+      const customFontFamilies = [...new Set([...(this.current.customFontFamilies ?? []), font])];
+      this.patch({ customFontFamilies, insertFontFamily: font });
       this.render();
     });
 
@@ -224,11 +281,39 @@ export class SettingsPanel {
     );
   }
 
+  private renderFontFamilyOptions(selectedFont: string, customFontFamilies: string[] = []): string {
+    const selected = selectedFont || FONT_FAMILY_OPTIONS[0].value;
+    const options = [
+      ...FONT_FAMILY_OPTIONS,
+      ...customFontFamilies.map((font) => ({ value: font, label: this.fontLabel(font) })),
+    ];
+    const hasSelected = options.some((option) => option.value === selected);
+    const custom = hasSelected
+      ? ''
+      : `<option value="${this.escapeAttr(selected)}" selected>${this.escapeAttr(this.fontLabel(selected))}</option>`;
+
+    return (
+      custom +
+      options.map(
+        (option) =>
+          `<option value="${this.escapeAttr(option.value)}" ${option.value === selected ? 'selected' : ''}>${this.escapeAttr(option.label)}</option>`,
+      ).join('')
+    );
+  }
+
+  private normalizeCustomFont(value: string): string {
+    return value.trim().replace(/\s+/g, ' ');
+  }
+
+  private fontLabel(font: string): string {
+    return font.split(',')[0].trim().replace(/^"|"$/g, '') || font;
+  }
+
   private escapeAttr(value: string): string {
     return value
-      .replace(/&/g, '&')
-      .replace(/"/g, '"')
-      .replace(/</g, '<')
-      .replace(/>/g, '>');
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
   }
 }

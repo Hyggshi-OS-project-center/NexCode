@@ -124,6 +124,7 @@ class NexusApp {
     splash.setStatus('Loading settings…');
     this.settings = await window.electronAPI.getSettings();
     document.body.dataset.theme = this.settings.theme;
+    this.applyGlobalFont();
 
     splash.setStatus('Preparing editor…');
     EditorManager.registerSnippets();
@@ -346,6 +347,8 @@ class NexusApp {
           { label: 'Cut', shortcut: 'Ctrl+X', action: () => ed('editor.action.clipboardCutAction')() },
           { label: 'Copy', shortcut: 'Ctrl+C', action: () => ed('editor.action.clipboardCopyAction')() },
           { label: 'Paste', shortcut: 'Ctrl+V', action: () => ed('editor.action.clipboardPasteAction')() },
+          { separator: true },
+          { label: 'Insert Font', action: () => this.insertConfiguredFont() },
           { separator: true },
           { label: 'Find', shortcut: 'Ctrl+F', action: () => this.search.show(false) },
           { label: 'Replace', shortcut: 'Ctrl+H', action: () => this.search.show(true) },
@@ -575,6 +578,8 @@ class NexusApp {
         { label: 'Copy', shortcut: 'Ctrl+C', action: () => document.execCommand('copy') },
         { label: 'Paste', shortcut: 'Ctrl+V', action: () => document.execCommand('paste') },
         { separator: true },
+        { label: 'Insert Font', action: () => this.insertConfiguredFont() },
+        { separator: true },
         { label: 'Find', shortcut: 'Ctrl+F', action: () => this.search.show(false) },
         { label: 'Replace', shortcut: 'Ctrl+H', action: () => this.search.show(true) },
         { separator: true },
@@ -603,6 +608,13 @@ class NexusApp {
 
   }
 
+  private insertConfiguredFont(): void {
+    const inserted = this.editor.insertFontFamily(this.settings.insertFontFamily);
+    if (inserted) {
+      document.getElementById('status-file')!.textContent = 'Inserted font';
+    }
+  }
+
   /** Shell-safe user message (Write-Host breaks in CMD). */
   private formatTerminalMessage(message: string): string {
     const text = message.replace(/"/g, '""');
@@ -616,6 +628,7 @@ class NexusApp {
     const apply = async () => {
       this.settings = await window.electronAPI.setSettings(partial);
       document.body.dataset.theme = this.settings.theme;
+      this.applyGlobalFont();
       this.editor.applySettings(this.settings);
       this.terminal.applySettings(this.settings);
       this.chatPanel.updateSettings();
@@ -627,6 +640,11 @@ class NexusApp {
 
     this.settingsApplyQueue = this.settingsApplyQueue.then(apply, apply);
     return this.settingsApplyQueue;
+  }
+
+  private applyGlobalFont(): void {
+    document.documentElement.style.setProperty('--font-ui', this.settings.fontFamily);
+    document.body.style.fontFamily = this.settings.fontFamily;
   }
 
   private async openFolder(): Promise<void> {

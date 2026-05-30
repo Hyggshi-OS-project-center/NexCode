@@ -1,7 +1,7 @@
 {
   "name": "NexCode-ide",
   "productName": "NexCode IDE",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "NexCode IDE — desktop code editor",
   "main": "dist/main/main.js",
   "author": {
@@ -9,6 +9,11 @@
     "email": "hyggshidev@gmail.com"
   },
   "license": "MIT",
+  "bin": {
+    "nexcode": "./cli/bin/nexcode.js",
+    "nex": "./cli/bin/nexcode.js",
+    ".clipse": "./cli/bin/nexcode.js"
+  },
   "scripts": {
     "dev": "npm run build:main && concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
     "dev:renderer": "vite build --watch --mode development",
@@ -16,7 +21,8 @@
     "icons": "node scripts/generate-icons.mjs && node scripts/ensure-default-win32-icon.mjs && node scripts/normalize-win32-icons.mjs && node scripts/copy-win32-icons.mjs",
     "build": "npm run icons && npm run build:main && npm run build:renderer",
     "build:main": "tsc -p tsconfig.main.json",
-    "build:renderer": "vite build",
+    "build:renderer": "vite build && npm run build:agent-renderer",
+    "build:agent-renderer": "node scripts/copy-agent-renderer.mjs",
     "prepack:clean": "node scripts/prepack-clean.mjs",
     "pack": "npm run build && node scripts/pack-installer.mjs",
     "pack:portable": "npm run build && node scripts/pack-portable.mjs",
@@ -64,10 +70,15 @@
       {
         "from": "build/icon.ico",
         "to": "icon.ico"
+      },
+      {
+        "from": "cli/bin",
+        "to": "cli/bin"
       }
     ],
     "files": [
       "dist/main/**/*",
+      "dist/agents/**/*",
       "dist/renderer/**/*",
       "dist/shared/**/*",
       "package.json"

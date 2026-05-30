@@ -488,6 +488,7 @@
   border-radius: var(--radius-sm);
   background: var(--bg-input);
   color: var(--text-primary);
+  font-family: inherit;
 }
 
 .settings-expanded .setting-row input[type="number"],

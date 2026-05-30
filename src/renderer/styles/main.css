@@ -12,7 +12,7 @@ html,
 body {
   height: 100%;
   overflow: hidden;
-  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-ui, "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif);
   font-size: 13px;
   color: var(--text-primary);
   background: var(--bg-app);

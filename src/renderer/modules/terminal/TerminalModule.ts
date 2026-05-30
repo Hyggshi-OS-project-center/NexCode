@@ -252,7 +252,7 @@ export class TerminalModule {
   private applyShellAppearance(): void {
     const shell = this.settings.terminalShell;
     const theme = getTerminalTheme(shell, this.settings.theme);
-    const fontFamily = getTerminalFontFamily(shell);
+    const fontFamily = this.settings.fontFamily || getTerminalFontFamily(shell);
 
     this.terminals.forEach(({ term }) => {
       term.options.theme = theme;
@@ -306,7 +306,7 @@ export class TerminalModule {
     const shell = this.settings.terminalShell;
     const term = new Terminal({
       fontSize: this.settings.terminalFontSize,
-      fontFamily: getTerminalFontFamily(shell),
+      fontFamily: this.settings.fontFamily || getTerminalFontFamily(shell),
       theme: getTerminalTheme(shell, this.settings.theme),
       cursorBlink: true,
       cursorStyle: shell === 'cmd' ? 'block' : 'bar',

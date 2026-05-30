@@ -40,6 +40,9 @@ export interface ShellAdapter {
 
 export interface AppSettings {
   theme: 'dark' | 'light';
+  fontFamily: string;
+  insertFontFamily: string;
+  customFontFamilies: string[];
   fontSize: number;
   tabSize: number;
   wordWrap: boolean;
@@ -122,6 +125,9 @@ export interface AboutInfo {
 
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'dark',
+  fontFamily: '"Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif',
+  insertFontFamily: 'Arial, Helvetica, sans-serif',
+  customFontFamilies: [],
   fontSize: 14,
   tabSize: 2,
   wordWrap: true,

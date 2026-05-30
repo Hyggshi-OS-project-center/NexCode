@@ -16,6 +16,7 @@ import type { MenuItem } from '../contextmenu/ContextMenu';
 import { bindReliableTextFocus } from '../../utils/textInputFocus';
 
 export type FileOpenHandler = (path: string) => void;
+export type FileRenameHandler = (oldPath: string, newPath: string, isDirectory: boolean) => void;
 
 type GitDecoration = {
   label: string;
@@ -33,6 +34,7 @@ export class Explorer {
   private onOpenFile: FileOpenHandler;
   private contextMenu: ContextMenu;
   private onOpenFolder: () => void;
+  private onRename: FileRenameHandler;
 
   private expanded = new Set<string>();
   private childrenCache = new Map<string, FileEntry[]>();
@@ -52,12 +54,14 @@ export class Explorer {
     contextMenu: ContextMenu,
     onOpenFolder: () => void,
     onGoToLine: (line: number) => void,
+    onRename: FileRenameHandler,
   ) {
     this.mountEl = document.getElementById(mountId)!;
     this.onOpenFile = onOpenFile;
     this.contextMenu = contextMenu;
     this.onOpenFolder = onOpenFolder;
     this.onGoToLine = onGoToLine;
+    this.onRename = onRename;
     this.buildUi();
   }
 
@@ -322,8 +326,23 @@ export class Explorer {
     const name = window.prompt('Rename to:', entry.name);
     if (!name?.trim() || name === entry.name) return;
     const dest = joinPath(parentDir(entry.path), name.trim());
-    await window.electronAPI.rename(entry.path, dest);
+    if (await window.electronAPI.exists(dest)) {
+      window.alert(`"${name.trim()}" already exists in this folder.`);
+      return;
+    }
+    try {
+      await window.electronAPI.rename(entry.path, dest);
+    } catch {
+      window.alert(`Could not rename "${entry.name}". The item may be in use or you may not have permission.`);
+      return;
+    }
+    if (this.selectedPath === entry.path) this.selectedPath = dest;
+    if (entry.isDirectory) {
+      if (this.expanded.delete(entry.path)) this.expanded.add(dest);
+      this.childrenCache.delete(entry.path);
+    }
     this.childrenCache.delete(parentDir(entry.path));
+    this.onRename(entry.path, dest, entry.isDirectory);
     await this.refresh();
   }
 

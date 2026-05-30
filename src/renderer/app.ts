@@ -22,7 +22,7 @@ import { TabManager } from './modules/tabs/TabManager';
 import { TerminalModule } from './modules/terminal/TerminalModule';
 import { SearchReplace } from './modules/search/SearchReplace';
 import { SettingsPanel } from './modules/settings/SettingsPanel';
-import { WelcomeScreen } from './modules/welcome/WelcomeScreen';
+import { WELCOME_TAB_PATH, WelcomeScreen } from './modules/welcome/WelcomeScreen';
 import { StatusBar } from './modules/statusbar/StatusBar';
 import { ContextMenu, type MenuItem } from './modules/contextmenu/ContextMenu';
 import { PluginHost } from './modules/plugin/PluginHost';
@@ -158,6 +158,7 @@ class NexusApp {
       this.contextMenu,
       () => void this.openFolder(),
       (line) => this.editor.revealLine(line),
+      (oldPath, newPath, isDirectory) => this.handleRenamedPath(oldPath, newPath, isDirectory),
     );
     this.tabs = new TabManager('tab-bar');
     this.shortcuts = new KeyboardShortcuts(this.createShortcutActions());
@@ -255,7 +256,6 @@ class NexusApp {
     });
     document.getElementById('btn-extensions')?.addEventListener('click', () => void this.openExtensionMarketplace());
     document.getElementById('titlebar-btn-agent')?.addEventListener('click', () => window.electronAPI.openAgent());
-    document.getElementById('activity-bar-agent')?.addEventListener('click', () => window.electronAPI.openAgent());
 
     document.querySelectorAll('.activity-item').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -406,10 +406,7 @@ class NexusApp {
         return [
           {
             label: 'Welcome',
-            action: () => {
-              if (!this.tabs.hasTabs()) this.welcome.show();
-              else void this.showSidebarPanel('explorer');
-            },
+            action: () => this.openWelcome(),
           },
           { separator: true },
           {

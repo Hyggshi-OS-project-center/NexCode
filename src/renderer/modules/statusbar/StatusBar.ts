@@ -1,5 +1,5 @@
 /**
- * Bottom status bar — cursor position, language, theme, and active file info.
+ * Bottom status bar - cursor position, language, theme, and active file info.
  */
 import type { AppSettings } from '../../../shared/types';
 import { getDisplayLanguage } from '../../utils/language';
@@ -15,11 +15,11 @@ export class StatusBar {
 
   setBranch(branch: string | null, isRepo = false): void {
     if (!isRepo || !branch) {
-      this.elBranch.textContent = '—';
+      this.elBranch.textContent = '-';
       this.elBranch.title = 'Open Source Control';
       return;
     }
-    this.elBranch.textContent = `⎇ ${branch}`;
+    this.elBranch.textContent = `Git: ${branch}`;
     this.elBranch.title = `Git branch: ${branch}`;
   }
 
@@ -53,8 +53,8 @@ export class StatusBar {
 
   /** Status bar when a non-text (binary / media) file is active. */
   setBinaryPreview(kindLabel: string): void {
-    this.elPosition.textContent = '—';
-    this.elIndent.textContent = '—';
+    this.elPosition.textContent = '-';
+    this.elIndent.textContent = '-';
     this.elPosition.title = 'Not available for binary files';
     this.elIndent.title = 'Not available for binary files';
     this.elLanguage.textContent = kindLabel;
@@ -62,8 +62,8 @@ export class StatusBar {
   }
 
   setInternalPage(label: string): void {
-    this.elPosition.textContent = 'â€”';
-    this.elIndent.textContent = 'â€”';
+    this.elPosition.textContent = '-';
+    this.elIndent.textContent = '-';
     this.elPosition.title = 'Not available for internal pages';
     this.elIndent.title = 'Not available for internal pages';
     this.elLanguage.textContent = label;

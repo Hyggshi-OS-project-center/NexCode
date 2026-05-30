@@ -1,6 +1,8 @@
 /**
- * Welcome screen shown when no folder is open and no editor tabs are active.
+ * Welcome screen shown as an internal editor tab.
  */
+export const WELCOME_TAB_PATH = 'nexcode://welcome';
+
 export class WelcomeScreen {
   private container: HTMLElement;
   private onOpenFolder: () => void;

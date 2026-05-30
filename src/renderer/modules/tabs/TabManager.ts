@@ -3,6 +3,7 @@
  */
 import { renderFileIconHtml } from '../../utils/fileIcons';
 import { RELEASE_NOTES_TAB_PATH } from '../releaseNotes/ReleaseNotesView';
+import { WELCOME_TAB_PATH } from '../welcome/WelcomeScreen';
 
 export interface OpenTab {
   path: string;
@@ -32,7 +33,12 @@ export class TabManager {
   }
 
   openTab(path: string): void {
-    const name = path === RELEASE_NOTES_TAB_PATH ? "What's New" : path.split(/[/\\]/).pop() ?? path;
+    const name =
+      path === RELEASE_NOTES_TAB_PATH
+        ? "What's New"
+        : path === WELCOME_TAB_PATH
+          ? 'Welcome'
+          : path.split(/[/\\]/).pop() ?? path;
     const existing = this.tabs.find((t) => t.path === path);
     if (!existing) {
       this.tabs.push({ path, name, dirty: false });
@@ -63,6 +69,15 @@ export class TabManager {
       tab.dirty = dirty;
       this.render();
     }
+  }
+
+  renameTab(oldPath: string, newPath: string): void {
+    const tab = this.tabs.find((t) => t.path === oldPath);
+    if (!tab) return;
+    tab.path = newPath;
+    tab.name = newPath.split(/[/\\]/).pop() ?? newPath;
+    if (this.activePath === oldPath) this.activePath = newPath;
+    this.render();
   }
 
   getActivePath(): string | null {

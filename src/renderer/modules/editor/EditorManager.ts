@@ -447,6 +447,23 @@ export class EditorManager {
     this.syncBreakpointDecorations();
   }
 
+  renamePath(oldPath: string, newPath: string): void {
+    const instance = this.models.get(oldPath);
+    if (!instance) return;
+    this.models.delete(oldPath);
+    instance.path = newPath;
+    this.models.set(newPath, instance);
+
+    const breakpoints = this.breakpoints.get(oldPath);
+    if (breakpoints) {
+      this.breakpoints.delete(oldPath);
+      this.breakpoints.set(newPath, breakpoints);
+    }
+
+    if (this.activePath === oldPath) this.activePath = newPath;
+    this.syncBreakpointDecorations();
+  }
+
   getActiveEditor(): monaco.editor.IStandaloneCodeEditor | null {
     return this.getFocusedEditor() ?? this.editor;
   }

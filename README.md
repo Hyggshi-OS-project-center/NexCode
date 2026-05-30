@@ -77,7 +77,7 @@ NexCode is part of the broader **Hyggshi OS** ecosystem:
 
 - [Hyggshi OS](https://github.com/Hyggshi-OS-project-center) — the main Roblox OS simulator
 - [HOSC/HOSC++](https://github.com/Hyggshi-OS-project-center/HOSC-Language) — Hyggshi OS's custom programming language and VM
-- [Hyggshi OS Web Edition](https://github.com/Hyggshi-OS-project-center) — PWA version on Cloudflare Pages
+- [Hyggshi OS Web Edition](https://hyggshi-os-website.pages.dev/OSmain) — PWA version on Cloudflare Pages
 
 ## Feedback
 

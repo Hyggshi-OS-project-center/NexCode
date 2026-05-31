@@ -47,13 +47,13 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload AppImage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: NexCode-IDE-Linux-AppImage
           path: dist/pack-out/*.AppImage
           retention-days: 7
       - name: Upload .deb artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: NexCode-IDE-Linux-deb
           path: dist/pack-out/*.deb

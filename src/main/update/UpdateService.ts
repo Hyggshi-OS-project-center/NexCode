@@ -72,7 +72,8 @@ export class UpdateService {
         return { available: false };
       }
 
-      const asset = selectUpdateAsset(release.assets, detectInstallMode());
+      const currentArch = detectCurrentArch();
+      const asset = selectUpdateAsset(release.assets, detectInstallMode(), currentArch);
       if (!asset) {
         return {
           available: false,
@@ -88,6 +89,7 @@ export class UpdateService {
         assetName: asset.name,
         assetUrl: asset.browser_download_url,
         installMode: getAssetInstallMode(asset),
+        arch: currentArch,
       };
       this.latestInfo = info;
       if (notify) this.getWindow()?.webContents.send('update:available', info);
@@ -222,13 +224,46 @@ function detectInstallMode(): UpdateInstallMode {
   return 'installed';
 }
 
-function selectUpdateAsset(assets: GitHubReleaseAsset[], preferred: UpdateInstallMode): GitHubReleaseAsset | null {
+function detectCurrentArch(): string {
+  const arch = process.arch;
+  if (arch === 'x64') return 'x64';
+  if (arch === 'arm64') return 'arm64';
+  if (arch === 'ia32') return 'ia32';
+  return arch;
+}
+
+function selectUpdateAsset(
+  assets: GitHubReleaseAsset[],
+  preferred: UpdateInstallMode,
+  currentArch: string,
+): GitHubReleaseAsset | null {
   const lower = (asset: GitHubReleaseAsset) => asset.name.toLowerCase();
-  const setup = assets.find((asset) => lower(asset).endsWith('.exe') && lower(asset).includes('setup'));
-  const portable = assets.find((asset) => lower(asset).endsWith('.exe') && lower(asset).includes('portable'));
-  const zip = assets.find((asset) => lower(asset) === 'update.zip' || lower(asset).endsWith('update.zip'));
-  if (preferred === 'portable') return portable ?? setup ?? zip ?? null;
-  return setup ?? portable ?? zip ?? null;
+
+  if (preferred === 'portable') {
+    // Try arch-specific portable first, then any portable, then setup, then zip
+    const archPortable = assets.find(
+      (a) => lower(a).endsWith('.exe') && lower(a).includes('portable') && lower(a).includes(currentArch),
+    );
+    const portable = assets.find((a) => lower(a).endsWith('.exe') && lower(a).includes('portable'));
+    const archSetup = assets.find(
+      (a) => lower(a).endsWith('.exe') && lower(a).includes('setup') && lower(a).includes(currentArch),
+    );
+    const setup = assets.find((a) => lower(a).endsWith('.exe') && lower(a).includes('setup'));
+    const zip = assets.find((a) => lower(a) === 'update.zip' || lower(a).endsWith('update.zip'));
+    return archPortable ?? portable ?? archSetup ?? setup ?? zip ?? null;
+  }
+
+  // Installed mode: prefer arch-specific setup, then any setup, then arch portable, then any portable, then zip
+  const archSetup = assets.find(
+    (a) => lower(a).endsWith('.exe') && lower(a).includes('setup') && lower(a).includes(currentArch),
+  );
+  const setup = assets.find((a) => lower(a).endsWith('.exe') && lower(a).includes('setup'));
+  const archPortable = assets.find(
+    (a) => lower(a).endsWith('.exe') && lower(a).includes('portable') && lower(a).includes(currentArch),
+  );
+  const portable = assets.find((a) => lower(a).endsWith('.exe') && lower(a).includes('portable'));
+  const zip = assets.find((a) => lower(a) === 'update.zip' || lower(a).endsWith('update.zip'));
+  return archSetup ?? setup ?? archPortable ?? portable ?? zip ?? null;
 }
 
 function getAssetInstallMode(asset: GitHubReleaseAsset): UpdateInstallMode {

@@ -14,7 +14,7 @@ if %errorlevel% neq 0 (
 )
 
 echo [build-app-ia32] Packaging application (ia32)...
-call npx electron-builder --win --ia32 --config.nsis.artifactName="NexCode.IDE-${version}-Setup-${arch}.${ext}"
+call npx electron-builder --win --ia32 --config.nsis.include="scripts/installer-ia32.nsh" --config.nsis.artifactName="NexCode.IDE-${version}-Setup-${arch}.${ext}"
 if %errorlevel% neq 0 (
   echo [build-app-ia32] Pack FAILED
   exit /b %errorlevel%

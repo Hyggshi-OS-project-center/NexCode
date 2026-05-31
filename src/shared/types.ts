@@ -266,6 +266,8 @@ export interface UpdateInfo {
   assetName: string;
   assetUrl: string;
   installMode: UpdateInstallMode;
+  /** Target architecture of the update asset (e.g. "x64", "arm64", "ia32") */
+  arch: string;
 }
 
 export type UpdateProgressStage =

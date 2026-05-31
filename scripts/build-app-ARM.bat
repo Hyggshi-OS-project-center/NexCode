@@ -14,7 +14,7 @@ if %errorlevel% neq 0 (
 )
 
 echo [build-app-ARM] Packaging application (arm64)...
-call npx electron-builder --win --arm64 --config.nsis.artifactName="NexCode.IDE-${version}-Setup-${arch}.${ext}"
+call npx electron-builder --win --arm64 --config.nsis.include="scripts/installer-arm64.nsh" --config.nsis.artifactName="NexCode.IDE-${version}-Setup-${arch}.${ext}"
 if %errorlevel% neq 0 (
   echo [build-app-ARM] Pack FAILED
   exit /b %errorlevel%

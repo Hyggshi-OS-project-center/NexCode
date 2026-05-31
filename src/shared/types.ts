@@ -193,7 +193,8 @@ export type IpcChannel =
   | 'update:check'
   | 'update:start'
   | 'update:available'
-  | 'update:progress';
+  | 'update:progress'
+  | 'update:setChannel'
 
 /** Paths to open from OS file association or second-instance launch */
 export interface OpenPathsPayload {
@@ -246,6 +247,7 @@ export interface GitHubRelease {
   name?: string;
   html_url?: string;
   body?: string | null;
+  prerelease: boolean;
   assets: GitHubReleaseAsset[];
 }
 
@@ -291,6 +293,8 @@ export interface UpdateCheckResult {
   info?: UpdateInfo;
   error?: string;
 }
+
+export type UpdateChannel = 'stable' | 'insider';
 
 export interface ElectronAPI {
   openFolder: () => Promise<string | null>;
@@ -341,6 +345,7 @@ export interface ElectronAPI {
   startUpdate: () => Promise<void>;
   onUpdateAvailable: (callback: (info: UpdateInfo) => void) => () => void;
   onUpdateProgress: (callback: (progress: UpdateProgress) => void) => () => void;
+  setUpdateChannel: (channel: UpdateChannel) => Promise<void>;
 }
 
 declare global {

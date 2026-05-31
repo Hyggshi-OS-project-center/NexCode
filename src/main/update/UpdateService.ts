@@ -13,22 +13,34 @@ import type {
   UpdateProgress,
 } from '../../shared/types';
 
-const RELEASE_URL =
+export type UpdateChannel = 'stable' | 'insider';
+
+const RELEASE_URL_STABLE =
   'https://api.github.com/repos/Hyggshi-OS-project-center/NexCode/releases/latest';
+const RELEASE_URL_INSIDER =
+  'https://api.github.com/repos/Hyggshi-OS-project-center/NexCode/releases';
 const USER_AGENT = 'NexCode-IDE-Updater';
 
 export class UpdateService {
   private latestInfo: UpdateInfo | null = null;
   private checking: Promise<UpdateCheckResult> | null = null;
+  private channel: UpdateChannel = 'stable';
 
   constructor(private readonly getWindow: () => BrowserWindow | null) {}
 
+  setChannel(channel: UpdateChannel): void {
+    this.channel = channel;
+    this.latestInfo = null;
+  }
+
+  getChannel(): UpdateChannel {
+    return this.channel;
+  }
+
   async checkForUpdates(notify = false): Promise<UpdateCheckResult> {
-    // Portable builds do not support automatic updates
     if (process.env.PORTABLE_EXECUTABLE_DIR !== undefined) {
       return { available: false };
     }
-
     if (this.checking) return this.checking;
     this.checking = this.doCheckForUpdates(notify).finally(() => {
       this.checking = null;
@@ -65,7 +77,17 @@ export class UpdateService {
   private async doCheckForUpdates(notify: boolean): Promise<UpdateCheckResult> {
     this.emitProgress('checking', 'Checking release...');
     try {
-      const release = await this.fetchJson<GitHubRelease>(RELEASE_URL);
+      let release: GitHubRelease;
+
+      if (this.channel === 'insider') {
+        const releases = await this.fetchJson<GitHubRelease[]>(RELEASE_URL_INSIDER);
+        const insider = releases.find((r) => r.prerelease);
+        const stable = releases.find((r) => !r.prerelease);
+        release = insider ?? stable ?? releases[0];
+      } else {
+        release = await this.fetchJson<GitHubRelease>(RELEASE_URL_STABLE);
+      }
+
       const currentVersion = app.getVersion();
       const latestVersion = normalizeVersion(release.tag_name);
       if (!latestVersion || !isVersionGreater(latestVersion, currentVersion)) {
@@ -116,7 +138,12 @@ export class UpdateService {
         url,
         { headers: { 'User-Agent': USER_AGENT, Accept: 'application/octet-stream' } },
         (response) => {
-          if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+          if (
+            response.statusCode &&
+            response.statusCode >= 300 &&
+            response.statusCode < 400 &&
+            response.headers.location
+          ) {
             file.close();
             void this.downloadFile(response.headers.location, targetPath).then(resolve, reject);
             return;
@@ -132,7 +159,11 @@ export class UpdateService {
           response.on('data', (chunk: Buffer) => {
             received += chunk.length;
             if (total > 0) {
-              this.emitProgress('downloading', 'Downloading update...', Math.round((received / total) * 100));
+              this.emitProgress(
+                'downloading',
+                'Downloading update...',
+                Math.round((received / total) * 100),
+              );
             }
           });
           response.pipe(file);
@@ -155,7 +186,9 @@ export class UpdateService {
   private async launchUpdater(downloadPath: string, mode: UpdateInstallMode): Promise<void> {
     if (mode === 'zip') {
       await shell.openPath(path.dirname(downloadPath));
-      throw new Error('Downloaded update.zip. Please extract it and replace the current NexCode IDE files.');
+      throw new Error(
+        'Downloaded update.zip. Please extract it and replace the current NexCode IDE files.',
+      );
     }
 
     if (process.platform === 'win32') {
@@ -173,31 +206,42 @@ export class UpdateService {
   }
 
   private emitProgress(stage: UpdateProgress['stage'], message: string, percent?: number): void {
-    this.getWindow()?.webContents.send('update:progress', { stage, message, percent } satisfies UpdateProgress);
+    this.getWindow()?.webContents.send(
+      'update:progress',
+      { stage, message, percent } satisfies UpdateProgress,
+    );
   }
 }
 
 function requestText(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
     https
-      .get(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/vnd.github+json' } }, (response) => {
-        if (response.statusCode === 403 || response.statusCode === 429) {
-          reject(new Error('GitHub API rate limit reached. Please try again later.'));
-          response.resume();
-          return;
-        }
-        if (response.statusCode !== 200) {
-          reject(new Error(`GitHub update check failed with HTTP ${response.statusCode ?? 'unknown'}.`));
-          response.resume();
-          return;
-        }
-        let body = '';
-        response.setEncoding('utf8');
-        response.on('data', (chunk) => {
-          body += chunk;
-        });
-        response.on('end', () => resolve(body));
-      })
+      .get(
+        url,
+        { headers: { 'User-Agent': USER_AGENT, Accept: 'application/vnd.github+json' } },
+        (response) => {
+          if (response.statusCode === 403 || response.statusCode === 429) {
+            reject(new Error('GitHub API rate limit reached. Please try again later.'));
+            response.resume();
+            return;
+          }
+          if (response.statusCode !== 200) {
+            reject(
+              new Error(
+                `GitHub update check failed with HTTP ${response.statusCode ?? 'unknown'}.`,
+              ),
+            );
+            response.resume();
+            return;
+          }
+          let body = '';
+          response.setEncoding('utf8');
+          response.on('data', (chunk) => {
+            body += chunk;
+          });
+          response.on('end', () => resolve(body));
+        },
+      )
       .on('error', reject);
   });
 }
@@ -207,8 +251,12 @@ function normalizeVersion(version: string): string {
 }
 
 function isVersionGreater(latest: string, current: string): boolean {
-  const latestParts = normalizeVersion(latest).split('.').map((part) => Number.parseInt(part, 10) || 0);
-  const currentParts = normalizeVersion(current).split('.').map((part) => Number.parseInt(part, 10) || 0);
+  const latestParts = normalizeVersion(latest)
+    .split('.')
+    .map((part) => Number.parseInt(part, 10) || 0);
+  const currentParts = normalizeVersion(current)
+    .split('.')
+    .map((part) => Number.parseInt(part, 10) || 0);
   for (let i = 0; i < Math.max(latestParts.length, currentParts.length); i++) {
     const a = latestParts[i] ?? 0;
     const b = currentParts[i] ?? 0;
@@ -240,7 +288,6 @@ function selectUpdateAsset(
   const lower = (asset: GitHubReleaseAsset) => asset.name.toLowerCase();
 
   if (preferred === 'portable') {
-    // Try arch-specific portable first, then any portable, then setup, then zip
     const archPortable = assets.find(
       (a) => lower(a).endsWith('.exe') && lower(a).includes('portable') && lower(a).includes(currentArch),
     );
@@ -253,7 +300,6 @@ function selectUpdateAsset(
     return archPortable ?? portable ?? archSetup ?? setup ?? zip ?? null;
   }
 
-  // Installed mode: prefer arch-specific setup, then any setup, then arch portable, then any portable, then zip
   const archSetup = assets.find(
     (a) => lower(a).endsWith('.exe') && lower(a).includes('setup') && lower(a).includes(currentArch),
   );
@@ -281,6 +327,7 @@ function friendlyUpdateError(error: unknown): string {
   }
   if (/EACCES|EPERM|permission/i.test(message)) return 'Permission denied while preparing the update.';
   if (/empty|corrupt/i.test(message)) return 'The downloaded update package appears to be corrupted.';
-  if (/compatible installer asset/i.test(message)) return 'No compatible update package was found in the release.';
+  if (/compatible installer asset/i.test(message))
+    return 'No compatible update package was found in the release.';
   return message || 'NexCode could not check for updates.';
 }

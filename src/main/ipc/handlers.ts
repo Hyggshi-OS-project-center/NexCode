@@ -7,6 +7,7 @@ import https from 'https';
 import os from 'os';
 import path from 'path';
 import type { AppSettings, FileEntry, ReadFileForEditorResult } from '../../shared/types';
+import type { UpdateChannel } from '../../shared/types';
 import { TerminalManager } from '../terminal/TerminalManager';
 import { getSettings, setSettings } from '../settings/store';
 import { pathToFileURL } from 'url';
@@ -24,18 +25,17 @@ import { chatWithGemini } from '../ai/geminiService';
 import { chatWithOpenRouter } from '../ai/openRouterService';
 import type { AboutInfo, AiChatMessage, AiEditorContext } from '../../shared/types';
 import type { GitHubRelease, ReleaseNotesInfo } from '../../shared/types';
+import { UpdateService } from '../update/UpdateService';
 
 const terminals = new TerminalManager();
 let currentWorkspacePath: string | null = null;
 const RELEASE_NOTES_URL = 'https://api.github.com/repos/Hyggshi-OS-project-center/NexCode/releases/latest';
 const GITHUB_USER_AGENT = 'NexCode-IDE';
 
-/** Kill all integrated terminal shells when the app exits. */
 export function shutdownTerminals(): void {
   terminals.killAll();
 }
 
-/** Read one directory level (lazy tree expansion). */
 async function readDirShallow(dirPath: string, showHidden = false): Promise<FileEntry[]> {
   const entries = await fs.readdir(dirPath, { withFileTypes: true });
   const result: FileEntry[] = [];
@@ -57,7 +57,10 @@ async function readDirShallow(dirPath: string, showHidden = false): Promise<File
   return result;
 }
 
-export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void {
+export function registerIpcHandlers(
+  getWindow: () => BrowserWindow | null,
+  updateService: UpdateService,
+): void {
   ipcMain.handle('dialog:openFolder', async () => {
     const win = getWindow();
     const result = await dialog.showOpenDialog(win!, {
@@ -238,6 +241,11 @@ export function registerIpcHandlers(getWindow: () => BrowserWindow | null): void
       installType: app.isPackaged ? 'User setup' : 'Development',
       iconUrl,
     };
+  });
+
+  // Update channel handler
+  ipcMain.handle('update:setChannel', (_e, channel: UpdateChannel) => {
+    updateService.setChannel(channel);
   });
 
   ipcMain.handle('terminal:create', async (_e, cwd?: string) => {

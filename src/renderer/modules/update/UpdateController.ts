@@ -1,3 +1,4 @@
+import type { UpdateChannel } from '../../../shared/types';
 import type { UpdateInfo, UpdateProgress } from '../../../shared/types';
 
 const STAGES: UpdateProgress['stage'][] = [
@@ -16,6 +17,7 @@ export class UpdateController {
   private dialog: HTMLElement | null = null;
   private toast: HTMLElement | null = null;
   private info: UpdateInfo | null = null;
+  private currentChannel: UpdateChannel = 'stable';
   private disposers: Array<() => void> = [];
 
   init(): void {
@@ -44,7 +46,11 @@ export class UpdateController {
   private setUpdateAvailable(info: UpdateInfo): void {
     this.info = info;
     this.button?.classList.remove('hidden');
-    this.showToast('Update Available', `NexCode IDE ${info.latestVersion} is ready to download.`, 'info');
+    this.showToast(
+      'Update Available',
+      `NexCode IDE ${info.latestVersion} is ready to download.`,
+      'info',
+    );
   }
 
   private showPopup(): void {
@@ -60,8 +66,35 @@ export class UpdateController {
         <p><span>Latest Version:</span> ${escapeHtml(this.info.latestVersion)}</p>
         <p>Click Update to download and install.</p>
       </div>
+      <div class="update-popup-channel">
+        <span class="update-channel-label">Update Channel</span>
+        <div class="update-channel-options">
+          <label class="update-channel-option">
+            <input type="radio" name="update-channel" value="stable" ${this.currentChannel === 'stable' ? 'checked' : ''}>
+            <span>Stable</span>
+          </label>
+          <label class="update-channel-option">
+            <input type="radio" name="update-channel" value="insider" ${this.currentChannel === 'insider' ? 'checked' : ''}>
+            <span>Insider</span>
+          </label>
+        </div>
+      </div>
     `;
     document.body.appendChild(popup);
+
+    popup.querySelectorAll<HTMLInputElement>('input[name="update-channel"]').forEach((radio) => {
+      radio.addEventListener('change', (e) => {
+        const channel = (e.target as HTMLInputElement).value as UpdateChannel;
+        this.currentChannel = channel;
+        void window.electronAPI.setUpdateChannel(channel).then(() => {
+          // Re-check updates với channel mới
+          void window.electronAPI.checkForUpdates().then((result) => {
+            if (result.available && result.info) this.setUpdateAvailable(result.info);
+          });
+        });
+      });
+    });
+
     const rect = this.button.getBoundingClientRect();
     popup.style.top = `${rect.bottom + 8}px`;
     popup.style.right = `${Math.max(12, window.innerWidth - rect.right)}px`;
@@ -91,13 +124,16 @@ export class UpdateController {
 
   private openDialog(): void {
     this.dialog?.remove();
+    const channelBadge = this.currentChannel === 'insider'
+      ? '<span class="update-channel-badge insider">Insider</span>'
+      : '<span class="update-channel-badge stable">Stable</span>';
     const dialog = document.createElement('div');
     dialog.className = 'update-dialog-backdrop';
     dialog.innerHTML = `
       <section class="update-dialog" role="dialog" aria-modal="true" aria-labelledby="update-dialog-title">
         <header class="update-dialog-header">
           <div>
-            <h2 id="update-dialog-title">Updating NexCode IDE</h2>
+            <h2 id="update-dialog-title">Updating NexCode IDE ${channelBadge}</h2>
             <p id="update-dialog-subtitle">Preparing update...</p>
           </div>
           <button type="button" class="update-dialog-close" aria-label="Close update dialog">×</button>
@@ -153,48 +189,40 @@ export class UpdateController {
 
 function stageLabel(stage: UpdateProgress['stage']): string {
   switch (stage) {
-    case 'checking':
-      return 'Checking release...';
-    case 'downloading':
-      return 'Downloading update...';
-    case 'verifying':
-      return 'Verifying package...';
-    case 'preparing':
-      return 'Preparing installation...';
-    case 'restarting':
-      return 'Restarting NexCode...';
-    case 'installing':
-      return 'Installing update...';
-    case 'completed':
-      return 'Launch completed.';
-    case 'error':
-      return 'Update failed.';
+    case 'checking': return 'Checking release...';
+    case 'downloading': return 'Downloading update...';
+    case 'verifying': return 'Verifying package...';
+    case 'preparing': return 'Preparing installation...';
+    case 'restarting': return 'Restarting NexCode...';
+    case 'installing': return 'Installing update...';
+    case 'completed': return 'Launch completed.';
+    case 'error': return 'Update failed.';
   }
 }
 
 function friendlyRendererError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  if (/internet|network|ENOTFOUND|ETIMEDOUT/i.test(message)) return 'No internet connection. Check your network and try again.';
-  if (/rate limit|403|429/i.test(message)) return 'GitHub API rate limit reached. Please try again later.';
-  if (/corrupt|empty/i.test(message)) return 'The downloaded update package appears to be corrupted.';
-  if (/asset|installer/i.test(message)) return 'No compatible update package was found in the release.';
-  if (/permission|EACCES|EPERM/i.test(message)) return 'Permission denied while installing the update.';
+  if (/internet|network|ENOTFOUND|ETIMEDOUT/i.test(message))
+    return 'No internet connection. Check your network and try again.';
+  if (/rate limit|403|429/i.test(message))
+    return 'GitHub API rate limit reached. Please try again later.';
+  if (/corrupt|empty/i.test(message))
+    return 'The downloaded update package appears to be corrupted.';
+  if (/asset|installer/i.test(message))
+    return 'No compatible update package was found in the release.';
+  if (/permission|EACCES|EPERM/i.test(message))
+    return 'Permission denied while installing the update.';
   return message || 'Installation failed. Please try again.';
 }
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (char) => {
     switch (char) {
-      case '&':
-        return '&amp;';
-      case '<':
-        return '&lt;';
-      case '>':
-        return '&gt;';
-      case '"':
-        return '&quot;';
-      default:
-        return '&#39;';
+      case '&': return '&amp;';
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '"': return '&quot;';
+      default: return '&#39;';
     }
   });
 }

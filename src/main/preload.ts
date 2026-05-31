@@ -15,6 +15,7 @@ import type {
   ReleaseNotesInfo,
   UpdateInfo,
   UpdateProgress,
+  UpdateChannel,
 } from '../shared/types';
 
 const api: ElectronAPI = {
@@ -92,6 +93,8 @@ const api: ElectronAPI = {
     ipcRenderer.on('update:progress', handler);
     return () => ipcRenderer.removeListener('update:progress', handler);
   },
+  setUpdateChannel: (channel: UpdateChannel) =>
+  ipcRenderer.invoke('update:setChannel', channel),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

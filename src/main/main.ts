@@ -17,14 +17,9 @@ import { UpdateService } from './update/UpdateService';
 
 const APP_NAME = 'NexCode IDE';
 
-// Reduce Chromium renderer memory — limit old-space size so the V8 heap stays lean.
-// Note: we intentionally keep GPU acceleration enabled because Monaco Editor,
-// the minimap, markdown preview, image viewer, and canvas rendering all benefit
-// from GPU compositing without a significant memory penalty.
 app.commandLine.appendSwitch('max_old_space_size', '512');
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512 --optimize-for-size');
 
-// Windows Task Manager uses process title / exe metadata — avoid generic "Electron" label
 process.title = APP_NAME;
 app.setName(APP_NAME);
 if (process.platform === 'win32') {
@@ -88,8 +83,6 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      // Use a single renderer process for all windows to save memory
-      // (Electron 34+ may spawn a separate process per BrowserWindow otherwise)
       backgroundThrottling: true,
     },
   });
@@ -113,7 +106,6 @@ function createWindow(): void {
     return { action: 'deny' };
   });
 
-  // Intercept Mod+shortcuts before xterm/Monaco — fixes terminal (CMD) focus on Windows
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return;
     const action = shortcutFromInput(input);
@@ -218,8 +210,10 @@ setupOpenFileHandlers(() => mainWindow);
 app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return;
 
-  registerIpcHandlers(() => mainWindow);
+  // Khởi tạo updateService TRƯỚC registerIpcHandlers
   updateService = new UpdateService(() => mainWindow);
+  registerIpcHandlers(() => mainWindow, updateService);
+
   ipcMain.handle('update:check', () => updateService?.checkForUpdates(false));
   ipcMain.handle('update:start', () => updateService?.downloadAndInstall());
   ipcMain.on('agent:open', () => createOrFocusAgentWindow());

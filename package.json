@@ -1,7 +1,7 @@
 {
   "name": "NexCode-ide",
   "productName": "NexCode IDE",
-  "version": "3.3.4",
+  "version": "3.4.5",
   "description": "NexCode IDE — desktop code editor",
   "main": "dist/main/main.js",
   "author": {
@@ -92,13 +92,17 @@
         {
           "target": "portable",
           "arch": [
-            "x64"
+            "x64",
+            "arm64",
+            "ia32"
           ]
         },
         {
           "target": "nsis",
           "arch": [
-            "x64"
+            "x64",
+            "arm64",
+            "ia32"
           ]
         }
       ]
@@ -114,7 +118,9 @@
       "shortcutName": "NexCode IDE",
       "installerIcon": "icon.ico",
       "uninstallerIcon": "icon.ico",
-      "installerHeaderIcon": "icon.ico"
+      "installerHeaderIcon": "icon.ico",
+      "license": "LICENSE",
+      "include": "scripts/installer.nsh"
     },
     "linux": {
       "icon": "build/icon.png",
@@ -126,13 +132,15 @@
         {
           "target": "AppImage",
           "arch": [
-            "x64"
+            "x64",
+            "arm64"
           ]
         },
         {
           "target": "deb",
           "arch": [
-            "x64"
+            "x64",
+            "arm64"
           ]
         }
       ]

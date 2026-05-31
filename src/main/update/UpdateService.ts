@@ -24,6 +24,11 @@ export class UpdateService {
   constructor(private readonly getWindow: () => BrowserWindow | null) {}
 
   async checkForUpdates(notify = false): Promise<UpdateCheckResult> {
+    // Portable builds do not support automatic updates
+    if (process.env.PORTABLE_EXECUTABLE_DIR !== undefined) {
+      return { available: false };
+    }
+
     if (this.checking) return this.checking;
     this.checking = this.doCheckForUpdates(notify).finally(() => {
       this.checking = null;
@@ -32,6 +37,10 @@ export class UpdateService {
   }
 
   async downloadAndInstall(): Promise<void> {
+    if (process.env.PORTABLE_EXECUTABLE_DIR !== undefined) {
+      throw new Error('Automatic updates are not supported for portable installations.');
+    }
+
     const info = this.latestInfo ?? (await this.checkForUpdates(false)).info;
     if (!info) throw new Error('No newer NexCode IDE version is available.');
 

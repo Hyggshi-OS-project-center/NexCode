@@ -66,19 +66,6 @@ export class UpdateController {
         <p><span>Latest Version:</span> ${escapeHtml(this.info.latestVersion)}</p>
         <p>Click Update to download and install.</p>
       </div>
-      <div class="update-popup-channel">
-        <span class="update-channel-label">Update Channel</span>
-        <div class="update-channel-options">
-          <label class="update-channel-option">
-            <input type="radio" name="update-channel" value="stable" ${this.currentChannel === 'stable' ? 'checked' : ''}>
-            <span>Stable</span>
-          </label>
-          <label class="update-channel-option">
-            <input type="radio" name="update-channel" value="insider" ${this.currentChannel === 'insider' ? 'checked' : ''}>
-            <span>Insider</span>
-          </label>
-        </div>
-      </div>
     `;
     document.body.appendChild(popup);
 

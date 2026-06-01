@@ -52,6 +52,8 @@ export interface AppSettings {
   terminalFontSize: number;
   /** Integrated terminal shell — default PowerShell on Windows */
   terminalShell: TerminalShell;
+  /** Update channel — 'stable' or 'insider' */
+  updateChannel: UpdateChannel;
   /** Google Gemini API key for the autonomous AI agent */
   geminiApiKey: string;
   /** Gemini API model id, e.g. gemini-2.5-flash */
@@ -141,6 +143,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoSaveDelayMs: 1000,
   terminalFontSize: 16,
   terminalShell: 'powershell',
+  updateChannel: 'stable' as UpdateChannel,
   geminiApiKey: '',
   geminiModel: 'gemini-2.5-flash',
   aiProvider: 'gemini',

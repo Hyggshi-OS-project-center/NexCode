@@ -18,9 +18,13 @@ export class TabManager {
   private tabs: OpenTab[] = [];
   private activePath: string | null = null;
   private listeners = new Map<TabEvent, Set<(path: string) => void>>();
+  private onTabContextMenu: ((path: string, x: number, y: number) => void) | null;
+  private onTabRename: ((path: string, newName: string) => void) | null;
 
-  constructor(barId: string) {
+  constructor(barId: string, onTabContextMenu?: (path: string, x: number, y: number) => void, onTabRename?: (path: string, newName: string) => void) {
     this.bar = document.getElementById(barId)!;
+    this.onTabContextMenu = onTabContextMenu ?? null;
+    this.onTabRename = onTabRename ?? null;
   }
 
   on(event: TabEvent, handler: (path: string) => void): void {
@@ -92,6 +96,73 @@ export class TabManager {
     return [...this.tabs];
   }
 
+    /** Start inline rename on a specific tab by path. Replaces the name span with an input field. */
+    startInlineRename(path: string): void {
+      const tab = this.tabs.find((t) => t.path === path);
+      if (!tab) return;
+
+      const el = this.bar.querySelector(`.editor-tab[data-path="${CSS.escape(path)}"]`) as HTMLElement | null;
+      if (!el) return;
+
+      const nameSpan = el.querySelector('.tab-name') as HTMLElement | null;
+      if (!nameSpan) return;
+
+      const oldName = tab.name;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'tab-rename-input';
+      input.value = oldName;
+      input.spellcheck = false;
+
+      // Replace span with input
+      nameSpan.replaceWith(input);
+      input.focus();
+      input.select();
+
+      const finishRename = (confirmed: boolean) => {
+        // Restore span
+        input.replaceWith(nameSpan);
+
+        if (!confirmed) {
+          nameSpan.textContent = tab.name;
+          return;
+        }
+
+        const newName = input.value.trim();
+        if (!newName || newName === oldName) return;
+
+        // Update preview with new name while waiting for async rename
+        nameSpan.textContent = newName;
+
+        // Notify the app to perform the actual rename on disk
+        this.onTabRename?.(path, newName);
+      };
+
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finishRename(true);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          finishRename(false);
+        }
+      });
+
+      // Prevent premature blur when the input first gains focus
+      let ignoreBlur = false;
+      const onBlur = () => {
+        if (ignoreBlur) return;
+        ignoreBlur = false;
+        finishRename(true);
+      };
+      input.addEventListener('blur', onBlur);
+      ignoreBlur = true;
+      setTimeout(() => {
+        ignoreBlur = false;
+      }, 50);
+    }
+
   private render(): void {
     this.bar.innerHTML = '';
     let dragSourceIdx: number | null = null;
@@ -105,11 +176,19 @@ export class TabManager {
       el.className = `editor-tab${tab.path === this.activePath ? ' active' : ''}${tab.dirty ? ' dirty' : ''}`;
       el.draggable = true;
       el.dataset.tabIdx = String(idx);
+      el.dataset.path = tab.path;
       el.innerHTML = `
         ${renderFileIconHtml(tab.name, false)}
         <span class="tab-name">${tab.name}</span>
         <button class="tab-close" title="Close">×</button>
       `;
+
+       // Right-click context menu
+       el.addEventListener('contextmenu', (e) => {
+         e.preventDefault();
+         e.stopPropagation();
+         this.onTabContextMenu?.(tab.path, e.clientX, e.clientY);
+       });
 
       // Click to select / close
       el.addEventListener('click', (e) => {

@@ -284,6 +284,28 @@
   font-size: 10px;
 }
 
+/* Tab inline rename input */
+.tab-rename-input {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  padding: 0 4px;
+  margin: 0;
+  border: 1px solid var(--focus-border);
+  border-radius: 3px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  box-shadow: 0 0 0 1px var(--focus-border);
+}
+
+.tab-rename-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
 /* Welcome screen */
 .welcome-screen {
   position: absolute;

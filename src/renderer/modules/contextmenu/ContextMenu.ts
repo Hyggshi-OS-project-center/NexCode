@@ -18,6 +18,8 @@ export class ContextMenu {
 
   private onDocumentPointerDown(e: MouseEvent): void {
     if (this.menu.classList.contains('hidden')) return;
+    // Ignore right-clicks (button === 2) — the contextmenu event already handled it
+    if (e.button === 2) return;
     const target = e.target as HTMLElement;
     if (target.closest('.context-menu')) return;
     this.hide();

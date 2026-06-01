@@ -25,6 +25,7 @@ import { SettingsPanel } from './modules/settings/SettingsPanel';
 import { WELCOME_TAB_PATH, WelcomeScreen } from './modules/welcome/WelcomeScreen';
 import { StatusBar } from './modules/statusbar/StatusBar';
 import { ContextMenu, type MenuItem } from './modules/contextmenu/ContextMenu';
+import { RenameService } from './modules/Rename/Rename';
 import { PluginHost } from './modules/plugin/PluginHost';
 import { VsixExtensionStore } from './modules/plugin/VsixExtensionStore';
 import { KeyboardShortcuts } from './modules/keyboard/KeyboardShortcuts';
@@ -131,6 +132,8 @@ class NexusApp {
     this.settings = await window.electronAPI.getSettings();
     document.body.dataset.theme = this.settings.theme;
     this.applyGlobalFont();
+    // Sync the saved update channel to main process on startup
+    void window.electronAPI.setUpdateChannel(this.settings.updateChannel ?? 'stable');
 
     splash.setStatus('Preparing editor…');
     EditorManager.registerSnippets();
@@ -152,6 +155,21 @@ class NexusApp {
       requestAnimationFrame(() => this.editor.layout());
     });
     this.contextMenu = new ContextMenu('context-menu');
+    this.renameService = new RenameService({
+      isSpecialTab: (path) => this.releaseNotes.isReleaseNotesPath(path) || path === WELCOME_TAB_PATH,
+      getParentPath: (path) => {
+        const lastSlash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+        return lastSlash >= 0 ? path.substring(0, lastSlash) : '';
+      },
+      pathExists: (path) => window.electronAPI.exists(path),
+      renamePath: (oldPath, newPath) => window.electronAPI.rename(oldPath, newPath),
+      showAlert: (message) => window.alert(message),
+      refreshExplorer: () => this.explorer.refresh(),
+      getWorkspacePath: () => this.workspacePath,
+      closeTab: (path) => this.tabs.closeTab(path),
+    });
+    // Wire up the rename service to call the tab manager's inline rename
+    this.renameService.setStartInlineRenameCallback((path) => this.tabs.startInlineRename(path));
     this.explorer = new Explorer(
       'panel-explorer',
       (path) => void this.openFile(path),
@@ -160,7 +178,11 @@ class NexusApp {
       (line) => this.editor.revealLine(line),
       (oldPath, newPath, isDirectory) => this.handleRenamedPath(oldPath, newPath, isDirectory),
     );
-    this.tabs = new TabManager('tab-bar');
+    this.tabs = new TabManager(
+      'tab-bar',
+      (path, x, y) => this.onTabContextMenu(path, x, y),
+      (path, newName) => void this.onTabRename(path, newName),
+    );
     this.shortcuts = new KeyboardShortcuts(this.createShortcutActions());
     this.shortcuts.bind();
     window.electronAPI.onShortcut((action) => this.executeShortcut(action));
@@ -378,10 +400,12 @@ class NexusApp {
           { label: 'Settings', action: () => void this.showSidebarPanel('settings') },
           { separator: true },
           { label: 'Terminal', shortcut: 'Ctrl+`', action: () => this.terminal.toggle() },
-          { label: 'Toggle Primary Side Bar', action: () => {
-            document.querySelector('.app-shell')?.classList.toggle('sidebar-collapsed');
-            requestAnimationFrame(() => this.editor.layout());
-          } },
+          {
+            label: 'Toggle Primary Side Bar', action: () => {
+              document.querySelector('.app-shell')?.classList.toggle('sidebar-collapsed');
+              requestAnimationFrame(() => this.editor.layout());
+            }
+          },
           { separator: true },
           { label: 'Zoom In', action: () => ed('editor.action.fontZoomIn')() },
           { label: 'Zoom Out', action: () => ed('editor.action.fontZoomOut')() },
@@ -894,6 +918,19 @@ class NexusApp {
     this.statusBar.setInternalPage('Welcome');
     this.updateRunButtonForActiveTab();
   }
+
+   private onTabContextMenu(path: string, x: number, y: number): void {
+     const menuItems = this.renameService.getTabContextMenuItems(path, x, y);
+     this.contextMenu.show(x, y, menuItems);
+   }
+
+   /** Called by TabManager when inline rename is confirmed with a new name */
+   private async onTabRename(path: string, newName: string): Promise<void> {
+     const result = await this.renameService.handleTabRenameConfirmed(path, newName);
+     if (result) {
+       this.handleRenamedPath(result.oldPath, result.newPath, false);
+     }
+   }
 
   private handleRenamedPath(oldPath: string, newPath: string, isDirectory: boolean): void {
     const normalize = (path: string) => path.replace(/\//g, '\\');

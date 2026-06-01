@@ -1,7 +1,7 @@
 /**
  * Settings panel in the sidebar: theme, editor, AI, terminal, and autosave options.
  */
-import type { AppSettings } from '../../../shared/types';
+import type { AppSettings, UpdateChannel } from '../../../shared/types';
 import { bindReliableTextFocus } from '../../utils/textInputFocus';
 
 export type SettingsChangeHandler = (settings: Partial<AppSettings>) => void;
@@ -182,6 +182,18 @@ export class SettingsPanel {
           <p class="settings-hint">When ON: stronger security isolation (each renderer runs in a restricted sandbox). When OFF (default): preload scripts have full Node.js access enabling file ops, terminal, and native features. Requires restart.</p>
         </div>
         <div class="settings-group">
+          <h3>Updates</h3>
+          <p class="settings-hint">Choose which update channel to receive releases from.</p>
+          <div class="setting-row">
+            <label>Update Channel</label>
+            <select id="set-updateChannel">
+              <option value="stable" ${s.updateChannel === 'stable' ? 'selected' : ''}>Stable</option>
+              <option value="insider" ${s.updateChannel === 'insider' ? 'selected' : ''}>Insider</option>
+            </select>
+          </div>
+          <p class="settings-hint">Stable: well-tested releases for daily use. Insider: preview builds with the latest features (may be less stable).</p>
+        </div>
+        <div class="settings-group">
           <h3>About</h3>
           <p class="settings-hint">Product information is shown in the About window (Help -> About NexCode IDE).</p>
           <button type="button" class="welcome-btn" id="btn-settings-about">About NexCode IDE...</button>
@@ -203,6 +215,11 @@ export class SettingsPanel {
     this.bind('set-terminalShell', 'change', (el) =>
       this.patch({ terminalShell: (el as HTMLSelectElement).value as AppSettings['terminalShell'] }),
     );
+    this.bind('set-updateChannel', 'change', (el) => {
+      const channel = (el as HTMLSelectElement).value as UpdateChannel;
+      this.patch({ updateChannel: channel });
+      void window.electronAPI.setUpdateChannel(channel);
+    });
     this.bind('set-aiProvider', 'change', (el) => {
       this.patch({ aiProvider: (el as HTMLSelectElement).value as AppSettings['aiProvider'] });
       this.render();

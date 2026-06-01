@@ -1,6 +1,6 @@
 /**
  * Electron main process — window lifecycle, IPC routing, and native integrations.
- * Optimized for reduced RAM usage (< 200 MB).
+ * Optimized for reduced RAM usage (< 300 MB).
  */
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell, type NativeImage } from 'electron';
 import fs from 'fs';
@@ -210,7 +210,7 @@ setupOpenFileHandlers(() => mainWindow);
 app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return;
 
-  // Khởi tạo updateService TRƯỚC registerIpcHandlers
+  // run updateService and registerIpcHandlers
   updateService = new UpdateService(() => mainWindow);
   registerIpcHandlers(() => mainWindow, updateService);
 

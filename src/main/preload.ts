@@ -25,7 +25,10 @@ const api: ElectronAPI = {
   readDir: (dirPath, options) => ipcRenderer.invoke('fs:readDir', dirPath, options),
   readFile: (filePath) => ipcRenderer.invoke('fs:readFile', filePath),
   readFileForEditor: (filePath) => ipcRenderer.invoke('fs:readFileForEditor', filePath),
-  writeFile: (filePath, content) => ipcRenderer.invoke('fs:writeFile', filePath, content),
+  writeFile: (filePath, content) => {
+    console.trace('[IPC WRITE FILE]', filePath);
+    return ipcRenderer.invoke('fs:writeFile', filePath, content);
+  },
   exists: (filePath) => ipcRenderer.invoke('fs:exists', filePath),
   stat: (filePath) => ipcRenderer.invoke('fs:stat', filePath),
   mkdir: (dirPath) => ipcRenderer.invoke('fs:mkdir', dirPath),

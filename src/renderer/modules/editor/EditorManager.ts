@@ -32,6 +32,12 @@ export class EditorManager {
   private onAutoSave?: EditorAutoSaveHandler;
   private onCursorChange?: CursorChangeHandler;
   private autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Set by cancelAutoSave() to block scheduleAutoSave from creating a new timer
+   * even if onDidChangeContent fires while the "unsaved changes" dialog is open.
+   * Cleared by resumeAutoSave() once the dialog is dismissed and saving is safe again.
+   */
+  private autoSavePaused = false;
   private suppressChangeFor = new Set<string>();
   private breakpoints = new Map<string, Set<number>>();
   private primaryBreakpointDecorations: monaco.editor.IEditorDecorationsCollection | null = null;
@@ -175,7 +181,7 @@ export class EditorManager {
         e.preventDefault();
         const delta = e.deltaY > 0 ? -1 : 1;
         const size = editor.getOption(monaco.editor.EditorOption.fontSize) + delta;
-        editor.updateOptions({ fontSize: Math.min(32, Math.max(10, size)) });
+        editor.updateOptions({ fontSize: Math.min(32, Math.max(10, size)), colorDecorators: true, colorDecoratorsActivatedOn: 'clickAndHover' });
       }
     }, { passive: false });
   }
@@ -254,6 +260,8 @@ export class EditorManager {
       lineNumbers: 'on',
       renderLineHighlight: 'all',
       find: { addExtraSpaceOnTop: false },
+      colorDecorators: true,
+      colorDecoratorsActivatedOn: 'clickAndHover',
     };
   }
 
@@ -407,13 +415,55 @@ export class EditorManager {
     this.refreshBreakpointDecorations(this.activePath);
   }
 
+  /**
+   * Schedule a deferred auto-save for `path`.
+   *
+   * FIX: Guards on `autoSavePaused` so that keyboard input reaching Monaco
+   * while the "unsaved changes" dialog is open cannot start a new timer
+   * (which would fire after "Don't Save" is clicked and save the file).
+   * The timer reference is also nulled inside the callback so that a
+   * subsequent cancelAutoSave() call doesn't attempt to clear a stale ID.
+   */
   private scheduleAutoSave(path: string): void {
-    if (!this.settings.autoSave) return;
+    if (!this.settings.autoSave || this.autoSavePaused) return;
     if (this.autoSaveTimer) clearTimeout(this.autoSaveTimer);
     this.autoSaveTimer = setTimeout(() => {
+      this.autoSaveTimer = null; // Clear reference once fired
+      if (this.autoSavePaused) return; // Safety guard for the tiny cancel window
       const value = this.models.get(path)?.model.getValue() ?? '';
       this.onAutoSave?.(path, value);
     }, this.settings.autoSaveDelayMs);
+  }
+
+  /**
+   * Cancel any pending auto-save and block new ones from being scheduled.
+   *
+   * FIX: Setting `autoSavePaused = true` ensures that even if Monaco fires
+   * onDidChangeContent while the "unsaved changes" dialog is visible (the
+   * overlay does not trap all keyboard events), scheduleAutoSave is a no-op
+   * until resumeAutoSave() is explicitly called.
+   *
+   * Called by the renderer when the unsaved-changes dialog is about to open.
+   */
+  cancelAutoSave(): void {
+    if (this.autoSaveTimer) {
+      clearTimeout(this.autoSaveTimer);
+      this.autoSaveTimer = null;
+    }
+    this.autoSavePaused = true;
+  }
+
+  /**
+   * Re-enable auto-save scheduling after it was suspended by cancelAutoSave().
+   *
+   * The renderer must call this:
+   *   • When "Cancel" or backdrop-click dismisses the dialog (tab stays open).
+   *   • Inside onTabClose() for every tab close (covers both "Save" and
+   *     "Don't Save", since the tab is gone and auto-save should resume for
+   *     remaining files).
+   */
+  resumeAutoSave(): void {
+    this.autoSavePaused = false;
   }
 
   getContent(path: string): string {
@@ -441,7 +491,9 @@ export class EditorManager {
     }
 
     for (const item of viewStates) {
-      if (item.editor && item.state && item.editor.getModel() === model) item.editor.restoreViewState(item.state);
+      if (item.editor && item.state && item.editor.getModel() === model) {
+        try { item.editor.restoreViewState(item.state); } catch { /* model may be disposed */ }
+      }
     }
     this.notifyCursor();
     this.syncBreakpointDecorations();

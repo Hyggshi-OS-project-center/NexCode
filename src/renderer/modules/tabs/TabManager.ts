@@ -20,11 +20,18 @@ export class TabManager {
   private listeners = new Map<TabEvent, Set<(path: string) => void>>();
   private onTabContextMenu: ((path: string, x: number, y: number) => void) | null;
   private onTabRename: ((path: string, newName: string) => void) | null;
+  private onBeforeTabClose: ((path: string) => boolean | Promise<boolean>) | null;
 
-  constructor(barId: string, onTabContextMenu?: (path: string, x: number, y: number) => void, onTabRename?: (path: string, newName: string) => void) {
+  constructor(
+    barId: string,
+    onTabContextMenu?: (path: string, x: number, y: number) => void,
+    onTabRename?: (path: string, newName: string) => void,
+    onBeforeTabClose?: (path: string) => boolean | Promise<boolean>,
+  ) {
     this.bar = document.getElementById(barId)!;
     this.onTabContextMenu = onTabContextMenu ?? null;
     this.onTabRename = onTabRename ?? null;
+    this.onBeforeTabClose = onBeforeTabClose ?? null;
   }
 
   on(event: TabEvent, handler: (path: string) => void): void {
@@ -51,7 +58,12 @@ export class TabManager {
     this.render();
   }
 
-  closeTab(path: string): void {
+  async closeTab(path: string): Promise<void> {
+    // Consult the before-close hook — allows showing a "save changes?" dialog
+    if (this.onBeforeTabClose) {
+      const canClose = await this.onBeforeTabClose(path);
+      if (!canClose) return;
+    }
     this.tabs = this.tabs.filter((t) => t.path !== path);
     if (this.activePath === path) {
       this.activePath = this.tabs.length ? this.tabs[this.tabs.length - 1].path : null;
@@ -194,7 +206,7 @@ export class TabManager {
       el.addEventListener('click', (e) => {
         if ((e.target as HTMLElement).classList.contains('tab-close')) {
           e.stopPropagation();
-          this.closeTab(tab.path);
+          void this.closeTab(tab.path);
         } else {
           this.setActive(tab.path);
         }
@@ -204,7 +216,7 @@ export class TabManager {
       el.addEventListener('auxclick', (e) => {
         if ((e as MouseEvent).button === 1) {
           e.preventDefault();
-          this.closeTab(tab.path);
+          void this.closeTab(tab.path);
         }
       });
 

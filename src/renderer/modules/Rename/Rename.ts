@@ -19,7 +19,7 @@ export interface RenameServiceDependencies {
   /** Get the current workspace path */
   getWorkspacePath: () => string | null;
   /** Close a tab */
-  closeTab: (path: string) => void;
+  closeTab: (path: string) => void | Promise<void>;
 }
 
 export class RenameService {

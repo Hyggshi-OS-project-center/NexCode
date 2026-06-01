@@ -70,6 +70,10 @@ class NexusApp {
   private fileWatchTimer: number | null = null;
   private checkingFileChanges = false;
   private unicodeHighlightDisabled = false;
+  /** Temporarily prevents auto-save while the unsaved changes dialog is showing */
+  private autoSaveSuspended = false;
+  /** Original file content at last save — used to restore when user clicks "Don't Save" */
+  private originalContent = new Map<string, string>();
 
   private editor!: EditorManager;
   private binaryView!: BinaryFileView;
@@ -90,6 +94,7 @@ class NexusApp {
   private updates!: UpdateController;
   private mdPreview!: MarkdownPreview;
   private releaseNotes!: ReleaseNotesView;
+  private renameService!: RenameService;
   /** Trimmed terminal output sample for moment detection — capped to reduce memory */
   private terminalOutputSample = '';
   private settingsApplyQueue: Promise<void> = Promise.resolve();
@@ -182,6 +187,7 @@ class NexusApp {
       'tab-bar',
       (path, x, y) => this.onTabContextMenu(path, x, y),
       (path, newName) => void this.onTabRename(path, newName),
+      (path) => this.onBeforeTabClose(path),
     );
     this.shortcuts = new KeyboardShortcuts(this.createShortcutActions());
     this.shortcuts.bind();
@@ -756,6 +762,7 @@ class NexusApp {
       i++;
       path = `${base}\\untitled-${i}.txt`;
     }
+    console.trace('[WRITE FILE - newUntitledFile]', path);
     await window.electronAPI.writeFile(path, '');
     await this.openFile(path);
   }
@@ -788,6 +795,10 @@ class NexusApp {
     }
 
     await this.updateFileSnapshot(path);
+    // Store original content so we can restore it if user clicks "Don't Save"
+    if (!this.originalContent.has(path)) {
+      this.originalContent.set(path, this.editor.getContent(path));
+    }
     this.explorer.getTimeline().push(path, 'Opened');
     void this.refreshOutline();
     this.pluginHost.emit('fileOpened', path);
@@ -919,18 +930,117 @@ class NexusApp {
     this.updateRunButtonForActiveTab();
   }
 
-   private onTabContextMenu(path: string, x: number, y: number): void {
-     const menuItems = this.renameService.getTabContextMenuItems(path, x, y);
-     this.contextMenu.show(x, y, menuItems);
-   }
+  /**
+   * Called before a tab is closed. If the file has unsaved changes, shows a
+   * confirmation dialog with Save / Discard / Cancel options.
+   * @returns true if the tab should close, false to cancel.
+   */
+  private async onBeforeTabClose(path: string): Promise<boolean> {
+    // Special tabs (release notes, welcome) and non-dirty files can close immediately
+    if (this.releaseNotes.isReleaseNotesPath(path) || path === WELCOME_TAB_PATH) return true;
+    if (!this.dirtyFiles.has(path)) return true;
 
-   /** Called by TabManager when inline rename is confirmed with a new name */
-   private async onTabRename(path: string, newName: string): Promise<void> {
-     const result = await this.renameService.handleTabRenameConfirmed(path, newName);
-     if (result) {
-       this.handleRenamedPath(result.oldPath, result.newPath, false);
-     }
-   }
+    // Cancel any pending auto-save and suspend further auto-saves while dialog is open
+    this.editor.cancelAutoSave();
+    this.autoSaveSuspended = true;
+
+    // Show a custom modal dialog asking what to do
+    return new Promise<boolean>((resolve) => {
+      const filename = path.split(/[/\\]/).pop() ?? path;
+      const existing = document.getElementById('unsaved-changes-dialog');
+      if (existing) existing.remove();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'unsaved-changes-dialog';
+      overlay.className = 'unsaved-changes-overlay';
+      overlay.innerHTML = `
+        <div class="unsaved-changes-dialog">
+          <div class="unsaved-changes-header">
+            <span>Unsaved Changes</span>
+          </div>
+          <div class="unsaved-changes-body">
+            <p>Do you want to save the changes you made to <strong>${filename}</strong>?</p>
+            <p class="unsaved-changes-hint">Your changes will be lost if you don't save them.</p>
+          </div>
+          <div class="unsaved-changes-actions">
+            <button class="btn btn-save" data-action="save">Save</button>
+            <button class="btn btn-discard" data-action="discard">Don't Save</button>
+            <button class="btn btn-cancel" data-action="cancel">Cancel</button>
+          </div>
+        </div>
+      `;
+
+      // FIX: reset autoSaveSuspended in cleanup so all dismiss paths unblock
+      // auto-save and manual saves. Previously resetAutoSave() was defined
+      // but never called, leaving autoSaveSuspended = true permanently and
+      // causing saveFile() to silently no-op for the rest of the session.
+      const cleanup = () => {
+        overlay.remove();
+        this.autoSaveSuspended = false;
+      };
+
+      overlay.querySelector('[data-action="save"]')?.addEventListener('click', async () => {
+        cleanup();
+        await this.saveFile(path, false);
+        resolve(true);
+      });
+
+      overlay.querySelector('[data-action="discard"]')?.addEventListener('click', () => {
+        console.log('[DISCARD]', path);
+
+        // Restore file to its last-saved content (undo auto-save)
+        const saved = this.originalContent.get(path);
+        if (saved !== undefined) {
+          // Write back original content to disk
+          void window.electronAPI.writeFile(path, saved).then(() => {
+            console.log('[RESTORE FILE]', path);
+          });
+          // Restore editor model content so the tab shows original
+          this.editor.updateFileContent(path, saved);
+          // Update snapshot to match restored content
+          void this.updateFileSnapshot(path);
+        }
+
+        this.dirtyFiles.delete(path);
+        this.tabs.setDirty(path, false);
+        this.originalContent.delete(path);
+
+        cleanup();
+        resolve(true);
+      });
+
+      overlay.querySelector('[data-action="cancel"]')?.addEventListener('click', () => {
+        cleanup();
+        resolve(false);
+      });
+
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          cleanup();
+          resolve(false);
+        }
+      });
+
+      document.body.appendChild(overlay);
+    });
+  }
+
+  private onTabContextMenu(path: string, x: number, y: number): void {
+    const menuItems = this.renameService.getTabContextMenuItems(path, x, y);
+    this.contextMenu.show(x, y, menuItems);
+  }
+
+  /** Called by TabManager when inline rename is confirmed with a new name */
+  private async onTabRename(path: string, newName: string): Promise<void> {
+    if (this.dirtyFiles.has(path)) {
+      window.alert('Please save the file before renaming.');
+      return;
+    }
+    const result = await this.renameService.handleTabRenameConfirmed(path, newName);
+    if (result) {
+      this.handleRenamedPath(result.oldPath, result.newPath, false);
+    }
+  }
 
   private handleRenamedPath(oldPath: string, newPath: string, isDirectory: boolean): void {
     const normalize = (path: string) => path.replace(/\//g, '\\');
@@ -1138,7 +1248,7 @@ class NexusApp {
 
   private onAutoSave(path: string, _value: string): void {
     if (this.binaryMeta.has(path) && !this.forceTextOpen.has(path)) return;
-    if (this.settings.autoSave) void this.saveFile(path, false);
+    if (this.settings.autoSave && !this.autoSaveSuspended) void this.saveFile(path, false);
   }
 
   private async saveActiveFile(): Promise<void> {
@@ -1149,9 +1259,18 @@ class NexusApp {
   }
 
   private async saveFile(path: string, showFeedback: boolean): Promise<void> {
+    // Respect autoSave suspension — don't save if user has been asked about unsaved changes
+    if (this.autoSaveSuspended) return;
+    if (!this.dirtyFiles.has(path)) return;
     const content = this.editor.getContent(path);
+    console.trace('[WRITE FILE - saveFile]', path);
     await window.electronAPI.writeFile(path, content);
     await this.updateFileSnapshot(path);
+    // Update original content baseline ONLY on manual saves (showFeedback=true)
+    // so "Don't Save" after auto-save restores to the pre-edit state.
+    if (showFeedback) {
+      this.originalContent.set(path, content);
+    }
     this.dirtyFiles.delete(path);
     this.tabs.setDirty(path, false);
     if (showFeedback) {
@@ -1160,12 +1279,21 @@ class NexusApp {
     this.explorer.getTimeline().push(path, 'Saved');
     void this.explorer.refreshGitDecorations();
     this.pluginHost.emit('fileSaved', path);
+    console.log('[SAVE FILE]', path);
+
+    if (this.autoSaveSuspended) {
+      console.log('[BLOCKED] autoSaveSuspended');
+      return;
+    }
   }
 
   private onTabClose(path: string): void {
     this.binaryMeta.delete(path);
     this.forceTextOpen.delete(path);
     this.fileSnapshots.delete(path);
+    // FIX: clear stale dirty state so re-opening this file later does not
+    // trigger a phantom "unsaved changes" dialog.
+    this.dirtyFiles.delete(path);
     if (!this.tabs.hasTabs()) {
       this.editor.hide();
       this.binaryView.hide();

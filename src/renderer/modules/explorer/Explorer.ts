@@ -312,7 +312,7 @@ export class Explorer {
     }
 
     if (result.type === 'folder') await window.electronAPI.mkdir(target);
-    else await window.electronAPI.writeFile(target, '');
+    else { console.trace('[WRITE FILE - Explorer]', target); await window.electronAPI.writeFile(target, ''); }
 
     this.expanded.add(base);
     this.childrenCache.delete(base);
@@ -323,11 +323,12 @@ export class Explorer {
   }
 
   private async renameEntry(entry: FileEntry): Promise<void> {
-    const name = window.prompt('Rename to:', entry.name);
-    if (!name?.trim() || name === entry.name) return;
-    const dest = joinPath(parentDir(entry.path), name.trim());
+    // Use inline rename input instead of window.prompt (blocked in Electron context-isolation)
+    const newName = await this.showInlineRenameDialog(entry.name);
+    if (!newName || newName === entry.name) return;
+    const dest = joinPath(parentDir(entry.path), newName.trim());
     if (await window.electronAPI.exists(dest)) {
-      window.alert(`"${name.trim()}" already exists in this folder.`);
+      window.alert(`"${newName.trim()}" already exists in this folder.`);
       return;
     }
     try {
@@ -344,6 +345,83 @@ export class Explorer {
     this.childrenCache.delete(parentDir(entry.path));
     this.onRename(entry.path, dest, entry.isDirectory);
     await this.refresh();
+  }
+
+  /**
+   * Show an inline rename dialog using a custom modal (replaces window.prompt).
+   * Resolves with the new name or null if cancelled.
+   */
+  private showInlineRenameDialog(currentName: string): Promise<string | null> {
+    return new Promise<string | null>((resolve) => {
+      const existing = document.getElementById('explorer-rename-dialog');
+      if (existing) existing.remove();
+
+      const overlay = document.createElement('div');
+      overlay.id = 'explorer-rename-dialog';
+      overlay.className = 'unsaved-changes-overlay';
+      overlay.innerHTML = `
+        <div class="unsaved-changes-dialog">
+          <div class="unsaved-changes-header">
+            <span>Rename</span>
+          </div>
+          <div class="unsaved-changes-body">
+            <p>Enter new name:</p>
+            <input type="text" id="explorer-rename-input" class="tab-rename-input" value="${currentName}" spellcheck="false" style="width:100%;margin-top:8px;padding:4px 6px;font-size:13px;" />
+          </div>
+          <div class="unsaved-changes-actions">
+            <button class="btn btn-save" data-action="confirm">OK</button>
+            <button class="btn btn-cancel" data-action="cancel">Cancel</button>
+          </div>
+        </div>
+      `;
+
+      const cleanup = () => overlay.remove();
+
+      const input = overlay.querySelector('#explorer-rename-input') as HTMLInputElement;
+      // Select filename only (not extension)
+      const dotIndex = currentName.lastIndexOf('.');
+      if (dotIndex > 0) {
+        input.setSelectionRange(0, dotIndex);
+      } else {
+        input.select();
+      }
+
+      overlay.querySelector('[data-action="confirm"]')?.addEventListener('click', () => {
+        const val = input.value.trim();
+        cleanup();
+        resolve(val || null);
+      });
+
+      overlay.querySelector('[data-action="cancel"]')?.addEventListener('click', () => {
+        cleanup();
+        resolve(null);
+      });
+
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          const val = input.value.trim();
+          cleanup();
+          resolve(val || null);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          cleanup();
+          resolve(null);
+        }
+      });
+
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          cleanup();
+          resolve(null);
+        }
+      });
+
+      document.body.appendChild(overlay);
+      // Focus after append so the input is interactive
+      requestAnimationFrame(() => input.focus());
+    });
   }
 
   private async deleteEntry(entry: FileEntry): Promise<void> {

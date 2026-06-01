@@ -9,6 +9,14 @@ import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker';
 import jsonWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
 import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker';
 
+// Register CSS language for color decorators (color picker on hex/rgb values)
+import 'monaco-editor/esm/vs/language/css/monaco.contribution';
+// Register HTML language for embedded CSS color support
+import 'monaco-editor/esm/vs/language/html/monaco.contribution';
+// Register TypeScript and JSON languages for syntax support
+import 'monaco-editor/esm/vs/language/typescript/monaco.contribution';
+import 'monaco-editor/esm/vs/language/json/monaco.contribution';
+
 /** NexCode uses #editor-toolbar for find/replace - unbind Monaco's floating find widget. */
 const unbindFindKeybindings: Array<{ key: number; command: string }> = [
   { key: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, command: 'actions.find' },

@@ -5,7 +5,7 @@ import https from 'https';
 import fs from 'fs';
 import path from 'path';
 import type { AiAgentAction, AiChatMessage, AiChatResult, AiEditorContext } from '../../shared/types';
-import { runCommandCapture, validateWrittenFile } from './agentWorkflow';
+import { runCommandCapture } from './agentWorkflow';
 
 const OPENROUTER_HOST = 'openrouter.ai';
 const OPENROUTER_PATH = '/api/v1/chat/completions';
@@ -152,7 +152,6 @@ export async function chatWithOpenRouter(
     };
   }
 
-  const cwd = workspacePath ?? process.cwd();
   const workspaceHint = workspacePath
     ? `Current workspace folder: ${workspacePath}. Resolve relative paths against this folder.`
     : 'No workspace folder is open. Ask the user to open a folder, or use absolute paths.';
@@ -183,7 +182,6 @@ export async function chatWithOpenRouter(
   const actions: AiAgentAction[] = [];
   let iteration = 0;
   const maxIterations = 10;
-  let validationFailed = false;
 
   while (iteration < maxIterations) {
     iteration++;
@@ -224,13 +222,12 @@ export async function chatWithOpenRouter(
       });
 
       for (const toolCall of message.tool_calls) {
-        const { result, error, validationFailed: toolValidationFailed } = await runToolCall(
+        const { result, error } = await runToolCall(
           toolCall,
           workspacePath,
-          cwd,
+          workspacePath ?? process.cwd(),
           actions,
         );
-        if (toolValidationFailed !== undefined) validationFailed = toolValidationFailed;
         openRouterMessages.push({
           role: 'tool',
           tool_call_id: toolCall.id,
@@ -242,14 +239,6 @@ export async function chatWithOpenRouter(
     }
 
     if (typeof message.content === 'string' && message.content.trim()) {
-      if (validationFailed) {
-        openRouterMessages.push({
-          role: 'user',
-          content:
-            'The latest code validation is still failing. Do not finish yet. Read the validation output, fix the code with write_file, and continue until the check passes.',
-        });
-        continue;
-      }
       return { text: message.content.trim(), actions: actions.length > 0 ? actions : undefined };
     }
 
@@ -324,9 +313,9 @@ function formatEditorContext(context: AiEditorContext | null): string {
 async function runToolCall(
   toolCall: OpenRouterToolCall,
   workspacePath: string | null,
-  cwd: string,
+  _cwd: string,
   actions: AiAgentAction[],
-): Promise<{ result?: unknown; error?: string; validationFailed?: boolean }> {
+): Promise<{ result?: unknown; error?: string }> {
   let args: Record<string, string>;
   try {
     args = JSON.parse(toolCall.function.arguments || '{}') as Record<string, string>;
@@ -337,26 +326,19 @@ async function runToolCall(
   try {
     if (toolCall.function.name === 'write_file') {
       const resolved = resolveInWorkspace(args.filePath, workspacePath);
-      await fs.promises.mkdir(path.dirname(resolved), { recursive: true });
-      await fs.promises.writeFile(resolved, args.content ?? '', 'utf-8');
+      let originalContent = '';
+      try {
+        originalContent = await fs.promises.readFile(resolved, 'utf-8');
+      } catch { /* file does not exist yet — originalContent stays '' */ }
+      const newContent = args.content ?? '';
       actions.push({
         type: 'write_file',
         path: resolved,
+        content: newContent,
+        originalContent,
         label: `Wrote file \`${displayPath(args.filePath, workspacePath)}\``,
       });
-      const validation = await validateWrittenFile(resolved, workspacePath, cwd, actions);
-      return {
-        result: validation
-          ? {
-              write: `Successfully wrote ${resolved}`,
-              validation,
-              nextStep: validation.ok
-                ? 'Validation passed. You may now summarize the change.'
-                : 'Validation failed. Fix the reported errors with another write_file before giving a final answer.',
-            }
-          : `Successfully wrote ${resolved}. No automatic validation command was available for this file type.`,
-        validationFailed: validation?.ok === false,
-      };
+      return { result: `Prepared ${resolved} for diff review.` };
     }
 
     if (toolCall.function.name === 'read_file') {
@@ -371,6 +353,7 @@ async function runToolCall(
     }
 
     if (toolCall.function.name === 'run_command') {
+      const cwd = workspacePath ?? process.cwd();
       const result = await runCommandCapture(args.command, cwd);
       actions.push({
         type: 'run_command',

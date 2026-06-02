@@ -2,6 +2,10 @@
  * Document outline — symbols / headings for the active editor file.
  */
 import * as monaco from 'monaco-editor';
+import {
+  getTypeScriptWorker,
+  getJavaScriptWorker,
+} from 'monaco-editor/esm/vs/language/typescript/monaco.contribution';
 
 export interface OutlineItem {
   name: string;
@@ -71,13 +75,16 @@ async function extractOutline(model: monaco.editor.ITextModel): Promise<OutlineI
   const lang = model.getLanguageId();
   if (lang === 'typescript' || lang === 'javascript') {
     try {
+      // monaco-editor 0.55+ deprecated monaco.languages.typescript namespace;
+      // import worker helpers directly from the contribution module instead.
       const getWorker =
-        lang === 'typescript'
-          ? monaco.languages.typescript.getTypeScriptWorker
-          : monaco.languages.typescript.getJavaScriptWorker;
+        lang === 'typescript' ? getTypeScriptWorker : getJavaScriptWorker;
       const workerFactory = await getWorker();
       const worker = await workerFactory(model.uri);
-      const tree = await worker.getNavigationTree(model.uri.toString());
+      const tree = (await worker.getNavigationTree(model.uri.toString())) as
+        | NavTree
+        | undefined;
+      if (!tree) return parseOutlineHeuristic(model.getValue(), lang);
       const items = navigationTreeToOutline(tree);
       if (items.length) return items;
     } catch {

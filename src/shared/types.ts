@@ -26,6 +26,13 @@ export interface FileStatResult {
   mtimeMs: number;
 }
 
+export interface CodeValidationResult {
+  command: string;
+  ok: boolean;
+  code: number;
+  output: string;
+}
+
 export type TerminalShell = 'cmd' | 'powershell' | 'bash';
 export type AiProvider = 'gemini' | 'openrouter';
 
@@ -107,6 +114,10 @@ export interface AiAgentAction {
   path?: string;
   command?: string;
   label: string;
+  /** New file content (for write_file actions — used by the diff editor) */
+  content?: string;
+  /** Original file content before the AI modified it (for write_file actions) */
+  originalContent?: string;
 }
 
 export interface AiChatResult {
@@ -127,6 +138,7 @@ export interface AboutInfo {
   v8?: string;
   os?: string;
   installType?: string;
+  HyggshiOSEngine?: string;
   iconUrl: string | null;
 }
 
@@ -343,6 +355,7 @@ export interface ElectronAPI {
     workspacePath?: string | null,
     editorContext?: AiEditorContext | null,
   ) => Promise<AiChatResult>;
+  aiValidate: (filePath: string, workspacePath: string | null) => Promise<CodeValidationResult | null>;
   openAgent: () => void;
   checkForUpdates: () => Promise<UpdateCheckResult>;
   startUpdate: () => Promise<void>;

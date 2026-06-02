@@ -5,7 +5,7 @@ import https from 'https';
 import fs from 'fs';
 import path from 'path';
 import type { AiAgentAction, AiChatMessage, AiChatResult, AiEditorContext } from '../../shared/types';
-import { runCommandCapture, validateWrittenFile } from './agentWorkflow';
+import { runCommandCapture } from './agentWorkflow';
 
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 const GEMINI_HOST = 'generativelanguage.googleapis.com';
@@ -149,7 +149,6 @@ export async function chatWithGemini(
   }
 
   const selectedModel = normalizeGeminiModel(model);
-  const cwd = workspacePath ?? process.cwd();
   const contents: GeminiContent[] = messages.map((m) => ({
     role: m.role,
     parts: toGeminiParts(m),
@@ -189,7 +188,6 @@ Be concise and proactive.`,
   const actions: AiAgentAction[] = [];
   let iteration = 0;
   const maxIterations = 10;
-  let validationFailed = false;
 
   while (iteration < maxIterations) {
     iteration++;
@@ -237,24 +235,19 @@ Be concise and proactive.`,
       try {
         if (call.name === 'write_file') {
           const resolved = resolveInWorkspace(call.args.filePath, workspacePath);
-          await fs.promises.mkdir(path.dirname(resolved), { recursive: true });
-          await fs.promises.writeFile(resolved, call.args.content ?? '', 'utf-8');
+          let originalContent = '';
+          try {
+            originalContent = await fs.promises.readFile(resolved, 'utf-8');
+          } catch { /* file does not exist yet — originalContent stays '' */ }
+          const newContent = call.args.content ?? '';
           actions.push({
             type: 'write_file',
             path: resolved,
+            content: newContent,
+            originalContent,
             label: `Wrote file \`${displayPath(call.args.filePath, workspacePath)}\``,
           });
-          const validation = await validateWrittenFile(resolved, workspacePath, cwd, actions);
-          validationFailed = validation?.ok === false;
-          functionResult = validation
-            ? {
-                write: `Successfully wrote ${resolved}`,
-                validation,
-                nextStep: validation.ok
-                  ? 'Validation passed. You may now summarize the change.'
-                  : 'Validation failed. Fix the reported errors with another write_file before giving a final answer.',
-              }
-            : `Successfully wrote ${resolved}. No automatic validation command was available for this file type.`;
+          functionResult = `Prepared ${resolved} for diff review.`;
         } else if (call.name === 'read_file') {
           const resolved = resolveInWorkspace(call.args.filePath, workspacePath);
           functionResult = await fs.promises.readFile(resolved, 'utf-8');
@@ -264,6 +257,7 @@ Be concise and proactive.`,
             label: `📖 Read file \`${displayPath(call.args.filePath, workspacePath)}\``,
           });
         } else if (call.name === 'run_command') {
+          const cwd = workspacePath ?? process.cwd();
           const result = await runCommandCapture(call.args.command, cwd);
           functionResult = {
             code: result.code,
@@ -294,18 +288,6 @@ Be concise and proactive.`,
         ],
       });
     } else if (part.text) {
-      if (validationFailed) {
-        contents.push({
-          role: 'user',
-          parts: [
-            {
-              text:
-                'The latest code validation is still failing. Do not finish yet. Read the validation output, fix the code with write_file, and continue until the check passes.',
-            },
-          ],
-        });
-        continue;
-      }
       return { text: part.text.trim(), actions: actions.length > 0 ? actions : undefined };
     } else {
       return { error: 'Received an empty or unsupported response from Gemini.', actions };

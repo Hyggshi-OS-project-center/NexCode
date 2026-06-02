@@ -30,6 +30,8 @@ async function init(): Promise<void> {
     info.node ? `Node.js ${info.node}` : '',
     info.v8 ? `V8 ${info.v8}` : '',
     info.os ? `OS: ${info.os}` : '',
+    info.installType ? `Install type: ${info.installType}` : '',
+    info.HyggshiOSEngine ? `Hyggshi OS Engine ${info.HyggshiOSEngine}` : '',
   ].filter(Boolean);
   meta.textContent = lines.join('\n');
 

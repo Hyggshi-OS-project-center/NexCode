@@ -23,6 +23,7 @@ import { closeAboutWindow, showAboutWindow } from '../about/aboutWindow';
 import { closeEasterEggWindow, showEasterEggWindow } from '../easterEgg/easterEggWindow';
 import { chatWithGemini } from '../ai/geminiService';
 import { chatWithOpenRouter } from '../ai/openRouterService';
+import { validateWrittenFile } from '../ai/agentWorkflow';
 import type { AboutInfo, AiChatMessage, AiEditorContext } from '../../shared/types';
 import type { GitHubRelease, ReleaseNotesInfo } from '../../shared/types';
 import { UpdateService } from '../update/UpdateService';
@@ -267,33 +268,39 @@ export function registerIpcHandlers(
     searchMarketplaceExtensions(query, limit),
   );
 
-  ipcMain.handle(
-    'ai:chat',
-    async (
-      _e,
-      messages: AiChatMessage[],
-      workspacePath?: string | null,
-      editorContext?: AiEditorContext | null,
-    ) => {
-      const settings = getSettings();
-      if (settings.aiProvider === 'openrouter') {
-        return chatWithOpenRouter(
-          settings.openRouterApiKey,
-          settings.openRouterModel,
-          messages,
-          workspacePath ?? null,
-          editorContext ?? null,
-        );
-      }
-      return chatWithGemini(
-        settings.geminiApiKey,
-        settings.geminiModel,
-        messages,
-        workspacePath ?? null,
-        editorContext ?? null,
-      );
-    },
-  );
+ipcMain.handle(
+     'ai:chat',
+     async (
+       _e,
+       messages: AiChatMessage[],
+       workspacePath?: string | null,
+       editorContext?: AiEditorContext | null,
+     ) => {
+       const settings = getSettings();
+       if (settings.aiProvider === 'openrouter') {
+         return chatWithOpenRouter(
+           settings.openRouterApiKey,
+           settings.openRouterModel,
+           messages,
+           workspacePath ?? null,
+           editorContext ?? null,
+         );
+       }
+       return chatWithGemini(
+         settings.geminiApiKey,
+         settings.geminiModel,
+         messages,
+         workspacePath ?? null,
+         editorContext ?? null,
+       );
+     },
+   );
+
+   // Validate a file after user approves AI changes
+   ipcMain.handle('ai:validate', async (_e, filePath: string, workspacePath: string | null) => {
+     const cwd = workspacePath ?? process.cwd();
+     return validateWrittenFile(filePath, workspacePath ?? null, cwd, []);
+   });
 }
 
 function fetchJson<T>(url: string): Promise<T> {

@@ -1,0 +1,196 @@
+/* Diff Editor — overlay toolbar and container for AI change review */
+
+.diff-editor-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 50;
+  display: flex !important;
+  flex-direction: column;
+  background: var(--bg-editor);
+  animation: diff-editor-fade-in 0.15s ease;
+  pointer-events: auto;
+}
+.diff-editor-overlay.hidden { display: none !important; }
+
+
+@keyframes diff-editor-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ─── Toolbar ─────────────────────────────────────────────────────── */
+
+.diff-editor-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 36px;
+  padding: 0 12px;
+  background: var(--bg-titlebar);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.diff-editor-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.diff-editor-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.diff-editor-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  letter-spacing: 0.02em;
+}
+
+.diff-editor-counter {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.diff-editor-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.diff-editor-filepath {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+  text-align: right;
+}
+
+/* ─── Buttons ─────────────────────────────────────────────────────── */
+
+.diff-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+  white-space: nowrap;
+  line-height: 1;
+  height: 26px;
+}
+
+.diff-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.diff-btn svg {
+  flex-shrink: 0;
+}
+
+.diff-btn-approve {
+  background: rgba(137, 209, 133, 0.15);
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.diff-btn-approve:hover {
+  background: rgba(137, 209, 133, 0.25);
+}
+
+.diff-btn-reject {
+  background: rgba(241, 76, 76, 0.1);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.diff-btn-reject:hover {
+  background: rgba(241, 76, 76, 0.2);
+}
+
+.diff-btn-accept-all {
+  background: rgba(137, 209, 133, 0.08);
+  border-color: var(--success);
+  color: var(--success);
+  font-weight: 500;
+}
+
+.diff-btn-accept-all:hover {
+  background: rgba(137, 209, 133, 0.18);
+}
+
+.diff-btn-dismiss {
+  padding: 3px 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.diff-btn-dismiss:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+/* ─── Container ───────────────────────────────────────────────────── */
+
+.diff-editor-container {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* ─── Light theme overrides ───────────────────────────────────────── */
+
+[data-theme="light"] .diff-btn-approve {
+  background: rgba(30, 120, 50, 0.08);
+  border-color: #2ea043;
+  color: #1a7f37;
+}
+
+[data-theme="light"] .diff-btn-approve:hover {
+  background: rgba(30, 120, 50, 0.15);
+}
+
+[data-theme="light"] .diff-btn-reject {
+  background: rgba(218, 54, 51, 0.06);
+  border-color: #cf222e;
+  color: #cf222e;
+}
+
+[data-theme="light"] .diff-btn-reject:hover {
+  background: rgba(218, 54, 51, 0.12);
+}
+
+[data-theme="light"] .diff-btn-accept-all {
+  background: rgba(30, 120, 50, 0.05);
+  border-color: #2ea043;
+  color: #1a7f37;
+}
+
+[data-theme="light"] .diff-btn-accept-all:hover {
+  background: rgba(30, 120, 50, 0.12);
+}

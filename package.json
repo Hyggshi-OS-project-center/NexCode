@@ -1,7 +1,7 @@
 {
   "name": "NexCode-ide",
   "productName": "NexCode IDE",
-  "version": "3.5.7-Insider.2",
+  "version": "3.5.7-Insider.3",
   "description": "NexCode IDE — desktop code editor",
   "main": "dist/main/main.js",
   "author": {
@@ -15,6 +15,7 @@
     ".clipse": "./cli/bin/nexcode.js"
   },
   "scripts": {
+    "buildfast": "npm vite build && npm run build:main",
     "debug": "concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
     "Devtools": "concurrently \"npm run dev:renderer\" \"npm run dev:electron-devtools\"",
     "dev": "npm run build:main && concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
@@ -31,6 +32,7 @@
     "pack:linux": "npm run build && node scripts/pack-linux.mjs",
     "pack:portable:linux": "npm run build && node scripts/pack-portable.mjs --linux",
     "start": "electron .",
+    "check": "npm run typecheck && npm run build:main && npm run build:renderer",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit"
   },
   "dependencies": {
@@ -49,7 +51,7 @@
     "@types/node": "^22.13.10",
     "concurrently": "^9.1.2",
     "decode-ico": "^0.4.1",
-    "electron": "37.0.0",
+    "electron": "37.2.0",
     "electron-builder": "^25.1.8",
     "rcedit": "^5.0.2",
     "sharp": "^0.33.5",

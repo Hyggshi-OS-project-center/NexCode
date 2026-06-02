@@ -4,7 +4,12 @@
 import './monaco-setup';
 import type {
   AiAgentAction,
+  AiChatAttachment,
+  AiChatMessage,
+  AiChatResult,
+  AiEditorContext,
   AppSettings,
+  CodeValidationResult,
   FileStatResult,
   MediaKind,
   OpenPathsPayload,
@@ -35,6 +40,8 @@ import { parentDir, pathsEqual } from './utils/pathUtils';
 import { startMemoryMonitor } from './utils/memoryMonitor';
 import { GitPanel } from './modules/git/GitPanel';
 import { ChatPanel } from './modules/chat/ChatPanel';
+import { DiffEditor } from './modules/editor/DiffEditor';
+import type { DiffEditorPendingWrite } from './modules/editor/DiffEditor';
 import { SplashScreen } from './modules/ui/SplashScreen';
 import { NexCodeMoments } from './modules/ui/NexCodeMoments';
 import { UpdateController } from './modules/update/UpdateController';
@@ -95,6 +102,9 @@ class NexusApp {
   private mdPreview!: MarkdownPreview;
   private releaseNotes!: ReleaseNotesView;
   private renameService!: RenameService;
+  private diffEditor!: DiffEditor;
+  /** Set while the diff editor is reviewing AI changes — suppresses file watcher reloads */
+  private diffEditorActive = false;
   /** Trimmed terminal output sample for moment detection — capped to reduce memory */
   private terminalOutputSample = '';
   private settingsApplyQueue: Promise<void> = Promise.resolve();
@@ -152,6 +162,7 @@ class NexusApp {
     this.idleEasterEgg = new EditorIdleEasterEgg('editor-container');
     this.binaryView = new BinaryFileView('editor-container');
     this.editorBanner = new EditorBanner('editor-container');
+    this.diffEditor = new DiffEditor('editor-container');
     this.mdPreview = new MarkdownPreview('editor-container');
     this.releaseNotes = new ReleaseNotesView('editor-container');
     this.mdPreview.onHide(() => {
@@ -514,18 +525,78 @@ class NexusApp {
     }
   }
 
-  /** Apply agent tool results — open written files in the editor, run commands in terminal. */
+  /** Apply agent tool results — show diff review for writes, open reads, run commands. */
   private async handleAgentActions(actions: AiAgentAction[]): Promise<void> {
     const hour = new Date().getHours();
     if ((hour === 3 || hour === 15) && actions.some((action) => action.type === 'write_file' || action.type === 'run_command')) {
       this.moments.showBugHunter();
     }
 
+    // Collect write_file actions - these need diff review before writing
+    const writeActions = actions.filter((action) => action.type === 'write_file' && action.path);
+
+    // Build pending diffs
+    const pendingWrites: DiffEditorPendingWrite[] = [];
+    for (const action of writeActions) {
+      const path = action.path!;
+      const originalContent = action.originalContent ?? '';
+      const modifiedContent = action.content ?? '';
+
+      // Skip if there's actually no diff
+      if (originalContent === modifiedContent) continue;
+
+      pendingWrites.push({
+        path,
+        originalContent,
+        modifiedContent,
+        label: action.label,
+      });
+    }
+
+    // Suppress the file watcher while the diff editor is reviewing changes,
+    // so it doesn't try to reload files from disk mid-review and trigger
+    // Monaco "Canceled: Canceled" errors on updateFileContent.
+    this.diffEditorActive = true;
+    const cleanup = () => { this.diffEditorActive = false; };
+
+    // Show diff editor review if there are pending writes
+    if (pendingWrites.length > 0) {
+      console.log('[DiffEditor] Showing diff for', pendingWrites.length, 'file(s)');
+
+      this.diffEditor.show(pendingWrites, {
+        onApprove: async (path: string, content: string) => {
+          // Write approved content to disk
+          await window.electronAPI.writeFile(path, content);
+          // Run validation after approval
+          const validation = await window.electronAPI.aiValidate(path, this.workspacePath);
+          if (validation && !validation.ok) {
+            document.getElementById('status-file')!.textContent = `Validation failed for ${path.split(/[/\\]/).pop()}`;
+          } else if (validation) {
+            document.getElementById('status-file')!.textContent = `Validated ${path.split(/[/\\]/).pop()}`;
+          }
+          // Open the file in the editor to show the approved result
+          await this.openFile(path);
+          if (this.workspacePath) await this.explorer.refresh();
+          await this.updateFileSnapshot(path);
+        },
+        onReject: async (_path: string, _originalContent: string) => {
+          // File was never written to disk, so no action needed on reject
+        },
+        onAcceptAll: () => {
+          // All writes approved via onApprove
+        },
+        onDismiss: () => {
+          // Remaining writes were not written to disk, no action needed
+        },
+        onHide: cleanup,
+      });
+    } else {
+      cleanup();
+    }
+
+    // Handle non-write actions (reads, commands)
     for (const action of actions) {
-      if (action.type === 'write_file' && action.path) {
-        await this.openFile(action.path);
-        if (this.workspacePath) await this.explorer.refresh();
-      } else if (action.type === 'read_file' && action.path) {
+      if (action.type === 'read_file' && action.path) {
         await this.openFile(action.path);
       } else if (action.type === 'run_command' && action.command) {
         await this.terminal.show();
@@ -533,6 +604,7 @@ class NexusApp {
       }
     }
   }
+
 
   private createShortcutActions() {
     return {
@@ -1324,6 +1396,8 @@ class NexusApp {
 
   private async checkOpenFileChange(path: string): Promise<void> {
     if (this.releaseNotes.isReleaseNotesPath(path)) return;
+    // Don't reload files while the diff editor is actively reviewing AI changes
+    if (this.diffEditorActive) return;
     const previous = this.fileSnapshots.get(path);
     if (!previous) {
       await this.updateFileSnapshot(path);
@@ -1344,34 +1418,41 @@ class NexusApp {
   }
 
   private async reloadOpenFileFromDisk(path: string, stat?: FileStatResult): Promise<void> {
-    if (this.forceTextOpen.has(path)) {
-      const content = await window.electronAPI.readFile(path);
-      this.editor.updateFileContent(path, content);
-      this.tabs.setDirty(path, false);
-    } else {
-      const result = await window.electronAPI.readFileForEditor(path);
-      if (result.isBinary) {
-        this.binaryMeta.set(path, result);
-        if (this.tabs.getActivePath() === path) this.showBinaryTab(path);
-      } else {
-        this.binaryMeta.delete(path);
-        this.editor.updateFileContent(path, result.content ?? '');
+    try {
+      if (this.forceTextOpen.has(path)) {
+        const content = await window.electronAPI.readFile(path);
+        this.editor.updateFileContent(path, content);
         this.tabs.setDirty(path, false);
-        if (this.tabs.getActivePath() === path) {
-          this.editor.show();
-          this.binaryView.hide();
-          void this.refreshOutline();
+      } else {
+        const result = await window.electronAPI.readFileForEditor(path);
+        if (result.isBinary) {
+          this.binaryMeta.set(path, result);
+          if (this.tabs.getActivePath() === path) this.showBinaryTab(path);
+        } else {
+          this.binaryMeta.delete(path);
+          this.editor.updateFileContent(path, result.content ?? '');
+          this.tabs.setDirty(path, false);
+          if (this.tabs.getActivePath() === path) {
+            this.editor.show();
+            this.binaryView.hide();
+            void this.refreshOutline();
+          }
         }
       }
-    }
 
-    this.dirtyFiles.delete(path);
-    const latest = stat ?? (await this.safeStat(path));
-    if (latest && !latest.isDirectory) {
-      this.fileSnapshots.set(path, { size: latest.size, mtimeMs: latest.mtimeMs });
+      this.dirtyFiles.delete(path);
+      const latest = stat ?? (await this.safeStat(path));
+      if (latest && !latest.isDirectory) {
+        this.fileSnapshots.set(path, { size: latest.size, mtimeMs: latest.mtimeMs });
+      }
+      document.getElementById('status-file')!.textContent = `Updated ${path.split(/[/\\]/).pop()} from disk`;
+      this.explorer.getTimeline().push(path, 'Updated');
+    } catch {
+      // Monaco can throw "Canceled: Canceled" if updateFileContent conflicts
+      // with an in-progress view state restore or suggestion widget operation.
+      // This is non-fatal — the editor will pick up the file content on the
+      // next poll cycle or when the user focuses the tab.
     }
-    document.getElementById('status-file')!.textContent = `Updated ${path.split(/[/\\]/).pop()} from disk`;
-    this.explorer.getTimeline().push(path, 'Updated');
   }
 
   private async updateFileSnapshot(path: string): Promise<void> {

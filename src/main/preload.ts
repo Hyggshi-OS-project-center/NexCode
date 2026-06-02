@@ -6,6 +6,7 @@ import type {
   AiChatMessage,
   AiChatResult,
   AppSettings,
+  CodeValidationResult,
   AboutInfo,
   ElectronAPI,
   GitExecResult,
@@ -81,9 +82,11 @@ const api: ElectronAPI = {
   getWorkspacePath: () => ipcRenderer.invoke('ai:get-workspace-path') as Promise<string | null>,
   setWorkspacePath: (workspacePath) =>
     ipcRenderer.invoke('ai:set-workspace-path', workspacePath ?? null) as Promise<void>,
-  aiChat: (messages, workspacePath, editorContext) =>
-    ipcRenderer.invoke('ai:chat', messages, workspacePath ?? null, editorContext ?? null) as Promise<AiChatResult>,
-  openAgent: () => ipcRenderer.send('agent:open'),
+aiChat: (messages, workspacePath, editorContext) =>
+     ipcRenderer.invoke('ai:chat', messages, workspacePath ?? null, editorContext ?? null) as Promise<AiChatResult>,
+   aiValidate: (filePath, workspacePath) =>
+     ipcRenderer.invoke('ai:validate', filePath, workspacePath ?? null) as Promise<CodeValidationResult | null>,
+   openAgent: () => ipcRenderer.send('agent:open'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   startUpdate: () => ipcRenderer.invoke('update:start'),
   onUpdateAvailable: (callback) => {

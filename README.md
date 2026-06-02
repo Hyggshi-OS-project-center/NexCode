@@ -1,7 +1,7 @@
 # NexCode IDE
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](https://github.com/Hyggshi-OS-project-center/NexCode/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/Hyggshi-OS-project-center/NexCode/releases)
 [![current release](https://img.shields.io/github/release/Hyggshi-OS-project-center/NexCode.svg)](https://github.com/Hyggshi-OS-project-center/NexCode/releases)
 [![Pre-release](https://img.shields.io/github/v/release/Hyggshi-OS-project-center/NexCode?include_prereleases)](https://github.com/Hyggshi-OS-project-center/NexCode/releases)
 [![Built with Electron](https://img.shields.io/badge/built%20with-Electron-47848F?logo=electron)](https://www.electronjs.org/)

@@ -4,7 +4,7 @@
     <br />
     <img src="./build/icon.svg" alt="NexCode IDE Logo" width="200"/>
     <h1>NexCode</h1>
-    <h3>Free/Libre Open Source Software Binaries of Visual Studio Code</h3>
+    <h3>Free/Libre Open Source Software</h3>
 </div>
 
 <div id="badges" align="center">

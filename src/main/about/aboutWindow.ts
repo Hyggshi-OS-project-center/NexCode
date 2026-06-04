@@ -7,13 +7,28 @@ import path from 'path';
 
 let aboutWindow: BrowserWindow | null = null;
 
+const isDev = !app.isPackaged;
+
+/** Returns true when running as an Insider / Development build. */
+function isInsiderBuild(): boolean {
+  if (isDev) return true;
+  return app.getVersion().toLowerCase().includes('insider');
+}
+
 function resolveAppIconPath(): string | undefined {
+  const insider = isInsiderBuild();
+
   const candidates = app.isPackaged
     ? [
+        path.join(process.resourcesPath, insider ? 'insider-icon.ico' : 'icon.ico'),
+        path.join(path.dirname(process.execPath), 'resources', insider ? 'insider-icon.ico' : 'icon.ico'),
+        // Fallback to regular icon if the insider icon is missing
         path.join(process.resourcesPath, 'icon.ico'),
         path.join(path.dirname(process.execPath), 'resources', 'icon.ico'),
       ]
     : [
+        // In development, the insider icon lives in src/renderer/public/
+        path.join(__dirname, '../../../src/renderer/public/insider-icon.ico'),
         path.join(__dirname, '../../../build/icon.ico'),
         path.join(__dirname, '../../../build/icon.png'),
       ];

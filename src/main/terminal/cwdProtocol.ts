@@ -19,6 +19,8 @@ export const POWERSHELL_PROMPT_HOOK =
 export const POWERSHELL_CWD_PROMPT_INIT = `${POWERSHELL_PIPED_PROMPT_HOOK}\r\n`;
 
 /** Bash prompt hook (non-Windows shells) */
+export const BASH_CWD_PS1 = '\\[\\033]65432;Cwd=$(pwd)\\033\\\\\\]\\u@\\h:\\w\\$ ';
+
 export const BASH_CWD_PROMPT_INIT =
   "export PS1='\\[\\033]65432;Cwd='\"\\$(pwd)\"'\\033\\\\\\]\\u@\\h:\\w\\$ '\r\n";
 

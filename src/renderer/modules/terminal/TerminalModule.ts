@@ -1,7 +1,7 @@
 /**
  * Integrated terminal — xterm.js shell, PowerShell-style navigation, command row.
  */
-import { Terminal } from '@xterm/xterm';
+import { Terminal, type ITerminalAddon } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import { ClipboardAddon } from '@xterm/addon-clipboard';
@@ -30,6 +30,7 @@ interface TerminalSession {
   id: number;
   term: Terminal;
   fit: FitAddon;
+  host: HTMLElement;
   cmdInput?: CmdLineInput;
   resizeHandler?: () => void;
 }
@@ -260,8 +261,14 @@ export class TerminalModule {
       term.options.fontSize = this.settings.terminalFontSize;
       term.options.cursorStyle = shell === 'cmd' ? 'block' : 'bar';
       term.options.cursorBlink = true;
-      term.options.letterSpacing = shell === 'cmd' ? 0 : undefined;
-      term.refresh(0, Math.max(0, term.rows - 1));
+      term.options.letterSpacing = 0;
+      if (term.element && this.isElementSized(term.element)) {
+        try {
+          term.refresh(0, Math.max(0, term.rows - 1));
+        } catch (e) {
+          console.warn('Terminal refresh skipped:', e);
+        }
+      }
     });
 
     const header = this.panel.querySelector('#terminal-tab-label');
@@ -305,6 +312,7 @@ export class TerminalModule {
 
     const shell = this.settings.terminalShell;
     const term = new Terminal({
+      allowProposedApi: true,
       fontSize: this.settings.terminalFontSize,
       fontFamily: this.settings.fontFamily || getTerminalFontFamily(shell),
       theme: getTerminalTheme(shell, this.settings.theme),
@@ -315,22 +323,39 @@ export class TerminalModule {
     });
 
     const fit = new FitAddon();
+    this.loadAddon(term, fit, 'FitAddon');
+
+    this.loadAddon(term, new WebLinksAddon(), 'WebLinksAddon');
+
+    this.loadAddon(term, new ClipboardAddon(), 'ClipboardAddon');
+
+    this.loadAddon(term, new SerializeAddon(), 'SerializeAddon');
+
     try {
-      term.loadAddon(fit);
+      const unicode11 = new Unicode11Addon();
+      term.loadAddon(unicode11);
+      term.unicode.activeVersion = '11';
     } catch (e) {
-      console.warn('FitAddon failed to load:', e);
+      console.warn('Unicode11 addon failed to load:', e);
+    }
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'terminal-xterm-wrap';
+    wrapper.style.height = '100%';
+    wrapper.style.width = '100%';
+    this.container.replaceChildren(wrapper);
+    term.open(wrapper);
+    await this.waitForElementSize(wrapper);
+    if (version !== this.lifecycleVersion) {
+      window.electronAPI.killTerminal(id);
+      term.dispose();
+      return;
     }
 
     try {
-      term.loadAddon(new WebLinksAddon());
+      term.loadAddon(new LigaturesAddon());
     } catch (e) {
-      console.warn('WebLinksAddon failed to load:', e);
-    }
-
-    try {
-      term.loadAddon(new ClipboardAddon());
-    } catch (e) {
-      console.warn('ClipboardAddon failed to load:', e);
+      console.warn('Ligatures addon failed to load:', e);
     }
 
     try {
@@ -346,40 +371,7 @@ export class TerminalModule {
       console.warn('WebGL addon failed to load, falling back to Canvas renderer:', e);
     }
 
-    try {
-      term.loadAddon(new LigaturesAddon());
-    } catch (e) {
-      console.warn('Ligatures addon failed to load:', e);
-    }
-
-    try {
-      term.loadAddon(new SerializeAddon());
-    } catch (e) {
-      console.warn('Serialize addon failed to load:', e);
-    }
-
-    try {
-      const unicode11 = new Unicode11Addon();
-      term.loadAddon(unicode11);
-      term.unicode.activeVersion = '11';
-    } catch (e) {
-      console.warn('Unicode11 addon failed to load:', e);
-    }
-
-    const wrapper = document.createElement('div');
-    wrapper.className = 'terminal-xterm-wrap';
-    wrapper.style.height = '100%';
-    wrapper.style.width = '100%';
-    this.container.innerHTML = '';
-    this.container.appendChild(wrapper);
-    term.open(wrapper);
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    if (version !== this.lifecycleVersion) {
-      window.electronAPI.killTerminal(id);
-      term.dispose();
-      return;
-    }
-    fit.fit();
+    this.fitOpenedTerminal(fit, wrapper);
 
     const cmdInput = new CmdLineInput(term, (payload) => window.electronAPI.writeTerminal(id, payload));
     term.onData((data) => {
@@ -419,10 +411,10 @@ export class TerminalModule {
 
     const resize = () => {
       if (!this.terminals.has(id)) return;
-      fit.fit();
+      if (!this.fitOpenedTerminal(fit, wrapper)) return;
       window.electronAPI.resizeTerminal(id, term.cols, term.rows);
     };
-    this.terminals.set(id, { id, term, fit, cmdInput, resizeHandler: resize });
+    this.terminals.set(id, { id, term, fit, host: wrapper, cmdInput, resizeHandler: resize });
     this.activeId = id;
 
     window.addEventListener('resize', resize);
@@ -430,7 +422,41 @@ export class TerminalModule {
     resize();
     this.applyShellAppearance();
     term.focus();
-    requestAnimationFrame(() => fit.fit());
+    requestAnimationFrame(() => this.fitOpenedTerminal(fit, wrapper));
+  }
+
+  private loadAddon(term: Terminal, addon: ITerminalAddon, label: string): void {
+    try {
+      term.loadAddon(addon);
+    } catch (e) {
+      console.warn(`${label} failed to load:`, e);
+    }
+  }
+
+  private async waitForElementSize(element: HTMLElement): Promise<boolean> {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      if (this.isElementSized(element)) return true;
+    }
+    return false;
+  }
+
+  private isElementSized(element: HTMLElement): boolean {
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  private fitOpenedTerminal(fit: FitAddon, host: HTMLElement): boolean {
+    if (!this.isVisible() || this.activeView !== 'terminal' || !this.isElementSized(host)) {
+      return false;
+    }
+    try {
+      fit.fit();
+      return true;
+    } catch (e) {
+      console.warn('Terminal fit skipped:', e);
+      return false;
+    }
   }
 
   private destroySession(session: TerminalSession, killProcess: boolean): void {
@@ -457,7 +483,8 @@ export class TerminalModule {
       await this.createTerminal();
     } else {
       await new Promise((resolve) => requestAnimationFrame(resolve));
-      this.terminals.get(this.activeId!)?.fit.fit();
+      const session = this.terminals.get(this.activeId!);
+      if (session) this.fitOpenedTerminal(session.fit, session.host);
       this.getActiveTerminal()?.focus();
     }
 

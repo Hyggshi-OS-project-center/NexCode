@@ -1,7 +1,7 @@
 {
   "name": "NexCode-ide",
   "productName": "NexCode IDE",
-  "version": "3.5.7-Insider.3",
+  "version": "3.5.7-Insider.4",
   "description": "NexCode IDE — desktop code editor",
   "main": "dist/main/main.js",
   "author": {
@@ -15,7 +15,7 @@
     ".clipse": "./cli/bin/nexcode.js"
   },
   "scripts": {
-    "buildfast": "npm vite build && npm run build:main",
+    "buildfast": "vite build && npm run build:main",
     "debug": "concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
     "Devtools": "concurrently \"npm run dev:renderer\" \"npm run dev:electron-devtools\"",
     "dev": "npm run build:main && concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
@@ -74,6 +74,10 @@
       {
         "from": "build/icon.ico",
         "to": "icon.ico"
+      },
+      {
+        "from": "src/renderer/public/insider-icon.ico",
+        "to": "insider-icon.ico"
       },
       {
         "from": "cli/bin",
@@ -147,27 +151,27 @@
             "arm64"
           ]
         },
-          {
-            "target": "rpm",
-            "arch": [
-              "x64",
-              "arm64"
-            ]
-          },
-          {
-            "target": "tar.gz",
-            "arch": [
-              "x64",
-              "arm64"
-            ]
-          },
-          {
-            "target": "zip",
-            "arch": [
-              "x64",
-              "arm64"
-            ]
-          }
+        {
+          "target": "rpm",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
       ]
     },
     "deb": {

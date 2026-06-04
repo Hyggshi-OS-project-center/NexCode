@@ -51,6 +51,7 @@ const FOLDER_BY_NAME: Record<string, { closed: string; open?: string }> = {
   'log': { closed: 'folder_type_log', open: 'folder_type_log_opened' },
   'windows': { closed: 'folder_type_windows' },
   'release': { closed: 'folder_type_package' },
+  'cargo': { closed: 'folder_type_cargo', open: 'folder_type_cargo_opened' },
 };
 
 /** Extensions with dedicated SVG assets (media, binaries, etc.) */
@@ -85,6 +86,7 @@ const SVG_FILE_BY_EXT: Record<string, string> = {
   blend: 'file-blender',
   swf: 'file-swf',
   license: 'file-license',
+  cargo: 'file_type_cargo',
 };
 
 function resolveFolderIcon(name: string, isExpanded: boolean): string {

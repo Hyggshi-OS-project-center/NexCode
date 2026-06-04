@@ -45,6 +45,7 @@ export class TerminalManager {
         PYTHONIOENCODING: 'utf-8',
         LANG: 'en_US.UTF-8',
         LC_ALL: 'en_US.UTF-8',
+        ...profile.env,
       },
       windowsHide: true,
     });
@@ -53,16 +54,21 @@ export class TerminalManager {
     this.sessions.set(id, { id, process: proc, shell, decoder });
 
     const emitCwd = (cwdPath: string) => {
-      if (window.isDestroyed() || !cwdPath) return;
-      if (!isExistingDirectory(cwdPath)) return;
-      if (this.lastCwd.get(id) === cwdPath) return;
-      this.lastCwd.set(id, cwdPath);
-      window.webContents.send('terminal:cwd', { id, cwd: cwdPath });
+      const hostCwd = normalizeShellCwdForHost(cwdPath);
+      if (window.isDestroyed() || !hostCwd) return;
+      if (!isExistingDirectory(hostCwd)) return;
+      if (this.lastCwd.get(id) === hostCwd) return;
+      this.lastCwd.set(id, hostCwd);
+      window.webContents.send('terminal:cwd', { id, cwd: hostCwd });
     };
 
     const sendOutput = (chunk: string) => {
       if (window.isDestroyed()) return;
-      const { output, cwd } = stripCwdOsc(chunk);
+      const stripped = stripCwdOsc(chunk);
+      const cwd = stripped.cwd;
+      const output = profile.kind === 'bash'
+        ? stripBashNonPtyStartupNoise(stripped.output)
+        : stripped.output;
       if (cwd) emitCwd(cwd);
 
       let promptCwd: string | null = null;
@@ -154,4 +160,28 @@ function isExistingDirectory(filePath: string): boolean {
   } catch {
     return false;
   }
+}
+
+function normalizeShellCwdForHost(cwdPath: string): string {
+  const trimmed = cwdPath.trim();
+  if (process.platform !== 'win32') return trimmed;
+
+  const msys = trimmed.match(/^\/([a-zA-Z])(?:\/(.*))?$/);
+  if (msys) return toWindowsDrivePath(msys[1]!, msys[2] ?? '');
+
+  const wsl = trimmed.match(/^\/mnt\/([a-zA-Z])(?:\/(.*))?$/);
+  if (wsl) return toWindowsDrivePath(wsl[1]!, wsl[2] ?? '');
+
+  return trimmed;
+}
+
+function toWindowsDrivePath(drive: string, rest: string): string {
+  const suffix = rest.replace(/\//g, '\\');
+  return suffix ? `${drive.toUpperCase()}:\\${suffix}` : `${drive.toUpperCase()}:\\`;
+}
+
+function stripBashNonPtyStartupNoise(output: string): string {
+  return output
+    .replace(/^bash: cannot set terminal process group[^\r\n]*(?:\r?\n)?/g, '')
+    .replace(/^bash: no job control in this shell(?:\r?\n)?/g, '');
 }

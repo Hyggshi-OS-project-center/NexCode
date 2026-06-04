@@ -1,10 +1,23 @@
 # NexCode IDE
 
+<div id="NexCode-logo" align="center">
+    <br />
+    <img src="./build/icon.svg" alt="NexCode IDE Logo" width="200"/>
+    <h1>NexCode</h1>
+    <h3>Free/Libre Open Source Software</h3>
+</div>
+
+<div id="badges" align="center">
+
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](https://github.com/Hyggshi-OS-project-center/NexCode/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/Hyggshi-OS-project-center/NexCode/releases)
+[![current release](https://img.shields.io/github/release/Hyggshi-OS-project-center/NexCode.svg)](https://github.com/Hyggshi-OS-project-center/NexCode/releases)
+[![Pre-release](https://img.shields.io/github/v/release/Hyggshi-OS-project-center/NexCode?include_prereleases)](https://github.com/Hyggshi-OS-project-center/NexCode/releases)
 [![Built with Electron](https://img.shields.io/badge/built%20with-Electron-47848F?logo=electron)](https://www.electronjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript)](https://www.typescriptlang.org/)
 [![GitHub All Releases](https://img.shields.io/github/downloads/Hyggshi-OS-project-center/NexCode/total.svg)](https://github.com/Hyggshi-OS-project-center/NexCode/releases) 
+
+</div>
 
 ![Nexcode](https://raw.githubusercontent.com/Hyggshi-OS-project-center/NexCode/refs/heads/main/Resources/Screenshot%202026-05-24%20075820.png)
 

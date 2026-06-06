@@ -77,6 +77,10 @@ export class Explorer {
     this.storeView.render(extensions);
   }
 
+  setExtensionHost(host: import('../plugin/PluginHost').PluginHost): void {
+    this.storeView.setHost(host);
+  }
+
   getRootPath(): string | null {
     return this.rootPath;
   }
@@ -197,9 +201,15 @@ export class Explorer {
   }
 
   private async loadChildren(dirPath: string): Promise<FileEntry[]> {
-    const entries = await window.electronAPI.readDir(dirPath, { showHidden: this.showHidden });
-    this.childrenCache.set(dirPath, entries);
-    return entries;
+    try {
+      const entries = await window.electronAPI.readDir(dirPath, { showHidden: this.showHidden });
+      this.childrenCache.set(dirPath, entries);
+      return entries;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      window.alert(`Could not read folder:\n\n${message}`);
+      return [];
+    }
   }
 
   private normalizePathKey(filePath: string): string {

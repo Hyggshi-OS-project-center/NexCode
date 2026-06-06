@@ -1,0 +1,106 @@
+/* Release Notes */
+
+.release-notes-panel {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-editor);
+  color: var(--text-primary);
+  overflow: hidden;
+}
+
+.release-notes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px max(40px, calc(50% - 430px)) 18px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+}
+
+.release-notes-kicker {
+  margin: 0 0 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.release-notes-header h1 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.release-notes-changelog-btn {
+  flex: 0 0 auto;
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.release-notes-changelog-btn:hover {
+  background: var(--bg-hover);
+}
+
+.release-notes-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px max(40px, calc(50% - 430px)) 64px;
+  font-size: 14px;
+  line-height: 1.75;
+  user-select: text;
+}
+
+.release-notes-body h2 {
+  margin: 24px 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.release-notes-body p {
+  margin: 10px 0;
+  color: var(--text-secondary);
+}
+
+.release-notes-body ul {
+  margin: 8px 0 16px;
+  padding-left: 22px;
+}
+
+.release-notes-body li {
+  margin: 6px 0;
+}
+
+.release-notes-body a {
+  color: var(--text-accent, #4fc3f7);
+  text-decoration: none;
+}
+
+.release-notes-body a:hover {
+  text-decoration: underline;
+}
+
+.release-notes-body img {
+  display: block;
+  width: 100%;
+  max-width: 860px;
+  margin: 4px 0 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}

@@ -178,7 +178,8 @@ export class DiffEditor {
     const mountEl = document.getElementById('diff-editor-mount');
     if (!mountEl) return;
 
-    const theme = document.body.dataset.theme === 'light' ? 'vs' : 'vs-dark';
+    const lightThemes = new Set(['light', 'cute', 'rose']);
+    const theme = lightThemes.has(document.body.dataset.theme ?? '') ? 'vs' : 'vs-dark';
 
     this.diffEditor = monaco.editor.createDiffEditor(mountEl, {
       automaticLayout: true,

@@ -1,0 +1,321 @@
+/* Binary / image preview */
+
+.binary-view {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-editor);
+  z-index: 2;
+  overflow: auto;
+}
+
+.binary-view.binary-view--image {
+  align-items: stretch;
+  justify-content: stretch;
+}
+
+.binary-view-content {
+  text-align: center;
+  max-width: 520px;
+  padding: 24px 32px 32px;
+}
+
+.binary-view-content-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.binary-view-content-image {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  padding: 0;
+  text-align: left;
+}
+
+.binary-view-content-image .image-viewer-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.binary-view-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+}
+
+.binary-view-footer .binary-meta {
+  margin: 0;
+}
+
+.binary-view-footer .welcome-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+/* Image viewer */
+.image-viewer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-editor);
+}
+
+.image-viewer-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+}
+
+.image-viewer-btn {
+  height: 26px;
+  min-width: 28px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+
+.image-viewer-btn:hover {
+  background: var(--bg-hover);
+}
+
+.image-viewer-zoom-range {
+  width: 120px;
+  accent-color: var(--text-secondary);
+}
+
+.image-viewer-zoom-label {
+  min-width: 44px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.image-viewer-sep {
+  width: 1px;
+  height: 18px;
+  margin: 0 4px;
+  background: var(--border);
+}
+
+.image-viewer-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-editor);
+  cursor: grab;
+}
+
+.image-viewer-pan.is-dragging,
+.image-viewer-stage:has(.image-viewer-pan.is-dragging) {
+  cursor: grabbing;
+}
+
+.image-viewer-pan {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center center;
+}
+
+.image-viewer-pan img {
+  display: block;
+  max-width: none;
+  max-height: none;
+  transform-origin: center center;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* SVG images may lack intrinsic dimensions — ensure a minimum visible size */
+.image-viewer-pan img[src*="svg"],
+.image-viewer-pan img[src^="data:image/svg"] {
+  min-width: 64px;
+  min-height: 64px;
+}
+
+.image-viewer-loader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-editor);
+  z-index: 2;
+}
+
+.image-viewer-loader::after {
+  content: "";
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--border);
+  border-top-color: var(--text-secondary);
+  border-radius: 50%;
+  animation: app-splash-spin 0.75s linear infinite;
+}
+
+.image-viewer-loader.hidden {
+  display: none;
+}
+
+/* Media preview (image, video, audio) */
+.media-preview {
+  width: 100%;
+  max-width: 900px;
+}
+
+.media-preview-frame {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.media-preview-image img {
+  max-width: min(90vw, 800px);
+  max-height: min(65vh, 520px);
+  object-fit: contain;
+  display: block;
+}
+
+.media-preview-video video {
+  width: 100%;
+  max-width: min(90vw, 880px);
+  max-height: min(65vh, 520px);
+  background: #000;
+  border-radius: var(--radius-md);
+}
+
+.media-preview-audio {
+  flex-direction: column;
+  gap: 16px;
+  padding: 32px 40px;
+  min-width: 320px;
+}
+
+.media-preview-audio .audio-visual {
+  font-size: 56px;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+.media-preview-audio audio {
+  width: 100%;
+  min-width: 280px;
+  max-width: 480px;
+}
+
+.binary-icon {
+  font-size: 48px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+  opacity: 0.8;
+}
+
+.binary-icon-file {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  font-size: 0;
+}
+
+.binary-icon-file .tree-icon {
+  width: 72px;
+  height: 72px;
+}
+
+.binary-icon-file .tree-icon svg {
+  width: 72px;
+  height: 72px;
+}
+
+.binary-filename {
+  font-size: 22px;
+  font-weight: 400;
+  margin-bottom: 12px;
+  word-break: break-all;
+  color: var(--text-primary);
+  max-width: 100%;
+}
+
+.binary-view-content h2 {
+  font-size: 18px;
+  font-weight: 500;
+  margin-bottom: 12px;
+  word-break: break-all;
+}
+
+.binary-open-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 120px;
+  padding: 8px 20px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+
+.binary-open-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--focus-border);
+}
+
+.binary-open-btn:focus-visible {
+  outline: 1px solid var(--focus-border);
+  outline-offset: 2px;
+}
+
+.binary-message {
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.binary-meta {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-bottom: 20px;
+}
+
+.binary-view-image .binary-meta {
+  margin-top: 12px;
+}

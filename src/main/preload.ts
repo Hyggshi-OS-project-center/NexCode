@@ -25,6 +25,7 @@ const api: ElectronAPI = {
   saveFile: (defaultPath?: string) => ipcRenderer.invoke('dialog:saveFile', defaultPath),
   readDir: (dirPath, options) => ipcRenderer.invoke('fs:readDir', dirPath, options),
   readFile: (filePath) => ipcRenderer.invoke('fs:readFile', filePath),
+  readFileBinary: (filePath) => ipcRenderer.invoke('fs:readFileBinary', filePath),
   readFileForEditor: (filePath) => ipcRenderer.invoke('fs:readFileForEditor', filePath),
   writeFile: (filePath, content) => {
     console.trace('[IPC WRITE FILE]', filePath);
@@ -82,11 +83,11 @@ const api: ElectronAPI = {
   getWorkspacePath: () => ipcRenderer.invoke('ai:get-workspace-path') as Promise<string | null>,
   setWorkspacePath: (workspacePath) =>
     ipcRenderer.invoke('ai:set-workspace-path', workspacePath ?? null) as Promise<void>,
-aiChat: (messages, workspacePath, editorContext) =>
-     ipcRenderer.invoke('ai:chat', messages, workspacePath ?? null, editorContext ?? null) as Promise<AiChatResult>,
-   aiValidate: (filePath, workspacePath) =>
-     ipcRenderer.invoke('ai:validate', filePath, workspacePath ?? null) as Promise<CodeValidationResult | null>,
-   openAgent: () => ipcRenderer.send('agent:open'),
+  aiChat: (messages, workspacePath, editorContext) =>
+    ipcRenderer.invoke('ai:chat', messages, workspacePath ?? null, editorContext ?? null) as Promise<AiChatResult>,
+  aiValidate: (filePath, workspacePath) =>
+    ipcRenderer.invoke('ai:validate', filePath, workspacePath ?? null) as Promise<CodeValidationResult | null>,
+  openAgent: () => ipcRenderer.send('agent:open'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   startUpdate: () => ipcRenderer.invoke('update:start'),
   onUpdateAvailable: (callback) => {
@@ -100,7 +101,12 @@ aiChat: (messages, workspacePath, editorContext) =>
     return () => ipcRenderer.removeListener('update:progress', handler);
   },
   setUpdateChannel: (channel: UpdateChannel) =>
-  ipcRenderer.invoke('update:setChannel', channel),
+    ipcRenderer.invoke('update:setChannel', channel),
+  openPdf: () => ipcRenderer.invoke('pdf:open') as Promise<boolean>,
+  getRecentFiles: () => ipcRenderer.invoke('recentFiles:get') as Promise<string[]>,
+  pushRecentFile: (filePath) => ipcRenderer.invoke('recentFiles:push', filePath) as Promise<string[]>,
+  removeRecentFile: (filePath) => ipcRenderer.invoke('recentFiles:remove', filePath) as Promise<string[]>,
+  clearRecentFiles: () => ipcRenderer.invoke('recentFiles:clear') as Promise<string[]>,
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

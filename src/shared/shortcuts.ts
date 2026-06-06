@@ -1,6 +1,7 @@
 /** Shortcut action ids sent from main process (before-input-event) to renderer */
 export type ShortcutAction =
   | 'save'
+  | 'saveAs'
   | 'find'
   | 'replace'
   | 'toggleTerminal'
@@ -22,6 +23,7 @@ export function shortcutFromInput(input: {
 
   if (!mod) return null;
 
+  if (key === 's' && input.shift) return 'saveAs';
   if (key === 's') return 'save';
   if (key === 'f') return 'find';
   if (key === 'h') return 'replace';

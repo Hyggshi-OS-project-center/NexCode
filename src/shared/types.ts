@@ -7,8 +7,8 @@ export interface FileEntry {
   children?: FileEntry[];
 }
 
-/** Previewable media category (image, video, audio) */
-export type MediaKind = 'image' | 'video' | 'audio' | null;
+/** Previewable media category (image, video, audio, pdf) */
+export type MediaKind = 'image' | 'video' | 'audio' | 'pdf' | null;
 
 /** Result of reading a file for the editor — detects binary/media before display */
 export interface ReadFileForEditorResult {
@@ -18,6 +18,8 @@ export interface ReadFileForEditorResult {
   content?: string;
   /** Local file URL for media preview (images, video, audio) */
   mediaUrl?: string;
+  /** Raw binary data (for media types like PDF that need it) encoded as base64 */
+  dataBase64?: string;
 }
 
 export interface FileStatResult {
@@ -35,6 +37,7 @@ export interface CodeValidationResult {
 
 export type TerminalShell = 'cmd' | 'powershell' | 'bash';
 export type AiProvider = 'gemini' | 'openrouter';
+export type AppTheme = 'dark' | 'light' | 'cute' | 'midnight' | 'forest' | 'rose' | 'high-contrast-dark';
 
 export interface ShellAdapter {
   SHELL: TerminalShell;
@@ -46,7 +49,7 @@ export interface ShellAdapter {
 }
 
 export interface AppSettings {
-  theme: 'dark' | 'light';
+  theme: AppTheme;
   fontFamily: string;
   insertFontFamily: string;
   customFontFamilies: string[];
@@ -210,6 +213,13 @@ export type IpcChannel =
   | 'update:available'
   | 'update:progress'
   | 'update:setChannel'
+  | 'pdf:open'
+  | 'fs:readFileBuffer'
+  | 'recentFiles:get'
+  | 'recentFiles:clear'
+  | 'recentFiles:push'
+  | 'recentFiles:remove'
+  | 'fs:readFileBinary'
 
 /** Paths to open from OS file association or second-instance launch */
 export interface OpenPathsPayload {
@@ -317,6 +327,7 @@ export interface ElectronAPI {
   saveFile: (defaultPath?: string) => Promise<string | null>;
   readDir: (dirPath: string, options?: { showHidden?: boolean }) => Promise<FileEntry[]>;
   readFile: (filePath: string) => Promise<string>;
+  readFileBinary: (filePath: string) => Promise<Uint8Array>;
   readFileForEditor: (filePath: string) => Promise<ReadFileForEditorResult>;
   writeFile: (filePath: string, content: string) => Promise<void>;
   exists: (filePath: string) => Promise<boolean>;
@@ -362,6 +373,15 @@ export interface ElectronAPI {
   onUpdateAvailable: (callback: (info: UpdateInfo) => void) => () => void;
   onUpdateProgress: (callback: (progress: UpdateProgress) => void) => () => void;
   setUpdateChannel: (channel: UpdateChannel) => Promise<void>;
+  openPdf: () => Promise<boolean>;
+  /** List recently opened/saved file paths (most recent first). */
+  getRecentFiles: () => Promise<string[]>;
+  /** Append a path to the recent-files list. Returns the updated list. */
+  pushRecentFile: (filePath: string) => Promise<string[]>;
+  /** Remove a path from the recent-files list (e.g. after a delete). */
+  removeRecentFile: (filePath: string) => Promise<string[]>;
+  /** Wipe the entire recent-files list. */
+  clearRecentFiles: () => Promise<string[]>;
 }
 
 declare global {

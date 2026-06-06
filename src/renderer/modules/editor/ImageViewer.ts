@@ -117,7 +117,13 @@ export class ImageViewer {
     this.loader.classList.remove('hidden');
     this.img.addEventListener('load', () => {
       this.loader.classList.add('hidden');
-      this.fitToWindow();
+      // For SVGs that may not report intrinsic dimensions, parse the SVG
+      // markup to extract width/height/viewBox and set them on the img.
+      if (this.img.naturalWidth === 0 && this.img.naturalHeight === 0 && this.isSvgUrl(url)) {
+        this.applySvgDimensions(url).then(() => this.fitToWindow());
+      } else {
+        this.fitToWindow();
+      }
     });
     this.img.addEventListener('error', () => {
       this.loader.classList.add('hidden');
@@ -130,6 +136,68 @@ export class ImageViewer {
     window.addEventListener('pointermove', this.onPointerMoveBound);
     window.addEventListener('pointerup', this.onPointerUpBound);
     window.addEventListener('pointercancel', this.onPointerUpBound);
+  }
+
+  /** Check whether a URL points to an SVG (by data-URL mime or extension). */
+  private isSvgUrl(url: string): boolean {
+    if (url.startsWith('data:image/svg')) return true;
+    try {
+      const pathname = new URL(url).pathname.toLowerCase();
+      return pathname.endsWith('.svg');
+    } catch {
+      return url.toLowerCase().includes('.svg');
+    }
+  }
+
+  /**
+   * For SVGs that don't report intrinsic dimensions via naturalWidth/height,
+   * fetch the SVG markup and extract width/height or viewBox to set explicit
+   * dimensions on the <img> element so fitToWindow() can compute a scale.
+   */
+  private applySvgDimensions(url: string): Promise<void> {
+    const setFromSvgText = (text: string) => {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(text, 'image/svg+xml');
+      const svg = doc.querySelector('svg');
+      if (!svg) return;
+
+      const wAttr = svg.getAttribute('width');
+      const hAttr = svg.getAttribute('height');
+      const vb = svg.getAttribute('viewBox');
+
+      let w = wAttr ? parseFloat(wAttr) : 0;
+      let h = hAttr ? parseFloat(hAttr) : 0;
+
+      if ((!w || !h) && vb) {
+        const parts = vb.split(/[\s,]+/).map(Number);
+        if (parts.length === 4) {
+          w = w || parts[2];
+          h = h || parts[3];
+        }
+      }
+
+      // Fallback: use a sensible default so the image is visible
+      if (!w || !h) { w = w || 512; h = h || 512; }
+
+      this.img.style.width = `${w}px`;
+      this.img.style.height = `${h}px`;
+    };
+
+    // data URL — decode inline content
+    if (url.startsWith('data:')) {
+      try {
+        const base64 = url.split(',')[1] ?? '';
+        const text = atob(base64);
+        setFromSvgText(text);
+      } catch { /* ignore parse errors */ }
+      return Promise.resolve();
+    }
+
+    // http(s) URL — fetch the content
+    return fetch(url)
+      .then((r) => r.text())
+      .then(setFromSvgText)
+      .catch(() => { /* ignore fetch errors */ });
   }
 
   destroy(): void {
@@ -211,9 +279,14 @@ export class ImageViewer {
   }
 
   private fitToWindow(): void {
-    const nw = this.img.naturalWidth;
-    const nh = this.img.naturalHeight;
-    if (!nw || !nh) return;
+    // Use intrinsic dimensions when available; fall back to rendered size
+    // (needed for SVGs where CSS dimensions were set but naturalWidth/Height is 0).
+    let nw = this.img.naturalWidth;
+    let nh = this.img.naturalHeight;
+    if (!nw || !nh) {
+      nw = this.img.offsetWidth || 512;
+      nh = this.img.offsetHeight || 512;
+    }
 
     const pad = 24;
     const sw = Math.max(1, this.stage.clientWidth - pad);

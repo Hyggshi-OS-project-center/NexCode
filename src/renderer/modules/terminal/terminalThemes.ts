@@ -2,9 +2,9 @@
  * xterm.js themes — follow IDE light/dark workbench; CMD keeps classic colors in dark only.
  */
 import type { ITheme } from '@xterm/xterm';
-import type { TerminalShell } from '../../../shared/types';
+import type { AppTheme, TerminalShell } from '../../../shared/types';
 
-export type UiTheme = 'light' | 'dark';
+export type UiTheme = AppTheme;
 
 /** Classic Windows CMD (dark UI only) */
 export const CMD_DARK_THEME: ITheme = {
@@ -76,6 +76,106 @@ export const IDE_TERMINAL_LIGHT: ITheme = {
   cursorAccent: '#ffffff',
   selectionBackground: '#add6ff',
   selectionForeground: '#333333',
+};
+
+export const IDE_TERMINAL_CUTE: ITheme = {
+  background: '#fff7fb',
+  foreground: '#4a3441',
+  cursor: '#d14f85',
+  cursorAccent: '#fff7fb',
+  selectionBackground: '#ffd4e6',
+  selectionForeground: '#4a3441',
+  black: '#4a3441',
+  red: '#c94f6d',
+  green: '#4f9a74',
+  yellow: '#b8842b',
+  blue: '#5b7fcf',
+  magenta: '#c45aa0',
+  cyan: '#3f9d9a',
+  white: '#f5dce8',
+  brightBlack: '#8a6677',
+  brightRed: '#e66d8a',
+  brightGreen: '#62b98d',
+  brightYellow: '#d7a647',
+  brightBlue: '#7599ed',
+  brightMagenta: '#df77bb',
+  brightCyan: '#58bab6',
+  brightWhite: '#ffffff',
+};
+
+export const IDE_TERMINAL_MIDNIGHT: ITheme = {
+  background: '#10131f',
+  foreground: '#d8e3ff',
+  cursor: '#7dd3fc',
+  cursorAccent: '#10131f',
+  selectionBackground: '#33446f',
+  selectionForeground: '#ffffff',
+  black: '#10131f',
+  red: '#fb7185',
+  green: '#34d399',
+  yellow: '#fbbf24',
+  blue: '#60a5fa',
+  magenta: '#c084fc',
+  cyan: '#22d3ee',
+  white: '#d8e3ff',
+  brightBlack: '#64748b',
+  brightRed: '#fda4af',
+  brightGreen: '#86efac',
+  brightYellow: '#fde68a',
+  brightBlue: '#93c5fd',
+  brightMagenta: '#d8b4fe',
+  brightCyan: '#67e8f9',
+  brightWhite: '#ffffff',
+};
+
+export const IDE_TERMINAL_FOREST: ITheme = {
+  background: '#14201b',
+  foreground: '#d7e7dc',
+  cursor: '#9ee7b8',
+  cursorAccent: '#14201b',
+  selectionBackground: '#315846',
+  selectionForeground: '#ffffff',
+  black: '#14201b',
+  red: '#e06c75',
+  green: '#87d49a',
+  yellow: '#d8b86a',
+  blue: '#7bb6d9',
+  magenta: '#c59ad6',
+  cyan: '#70d6c7',
+  white: '#d7e7dc',
+  brightBlack: '#6c8f79',
+  brightRed: '#f08a91',
+  brightGreen: '#a6efb7',
+  brightYellow: '#efd486',
+  brightBlue: '#98d3f1',
+  brightMagenta: '#ddb4ee',
+  brightCyan: '#91f1e2',
+  brightWhite: '#ffffff',
+};
+
+export const IDE_TERMINAL_ROSE: ITheme = {
+  background: '#fffaf7',
+  foreground: '#46342e',
+  cursor: '#b45f4d',
+  cursorAccent: '#fffaf7',
+  selectionBackground: '#f4d7cc',
+  selectionForeground: '#46342e',
+  black: '#46342e',
+  red: '#b84f42',
+  green: '#5c8a64',
+  yellow: '#a87931',
+  blue: '#5f7fba',
+  magenta: '#a25d8f',
+  cyan: '#4f918a',
+  white: '#eadbd4',
+  brightBlack: '#8a6d64',
+  brightRed: '#d96f60',
+  brightGreen: '#75a87d',
+  brightYellow: '#c6954b',
+  brightBlue: '#7899d8',
+  brightMagenta: '#bf78aa',
+  brightCyan: '#68ada6',
+  brightWhite: '#ffffff',
 };
 
 /** Modern Windows PowerShell — dark UI */
@@ -183,6 +283,10 @@ export const BASH_LIGHT_THEME: ITheme = {
 };
 
 export function getTerminalTheme(shell: TerminalShell, uiTheme: UiTheme): ITheme {
+  if (uiTheme === 'cute') return IDE_TERMINAL_CUTE;
+  if (uiTheme === 'midnight') return IDE_TERMINAL_MIDNIGHT;
+  if (uiTheme === 'forest') return IDE_TERMINAL_FOREST;
+  if (uiTheme === 'rose') return IDE_TERMINAL_ROSE;
   if (uiTheme === 'light') {
     if (shell === 'cmd') return CMD_LIGHT_THEME;
     if (shell === 'powershell') return POWERSHELL_LIGHT_THEME;

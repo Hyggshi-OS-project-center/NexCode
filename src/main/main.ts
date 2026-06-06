@@ -26,10 +26,17 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('com.nexcode.ide');
 }
 
+interface NativeViteDevServer {
+  resolvedUrls: { local: string[] };
+  listen: () => Promise<void>;
+  close: () => Promise<void>;
+}
+
 let mainWindow: BrowserWindow | null = null;
 let agentWindow: BrowserWindow | null = null;
 let crashMessageShown = false;
 let updateService: UpdateService | null = null;
+let viteDevServer: Promise<NativeViteDevServer> | null = null;
 
 const isDev = !app.isPackaged;
 
@@ -56,12 +63,10 @@ function resolveAppIconPath(): string | undefined {
     ? [
         path.join(process.resourcesPath, insider ? 'insider-icon.ico' : 'icon.ico'),
         path.join(path.dirname(process.execPath), 'resources', insider ? 'insider-icon.ico' : 'icon.ico'),
-        // Fallback to regular icon if the insider icon is missing
         path.join(process.resourcesPath, 'icon.ico'),
         path.join(path.dirname(process.execPath), 'resources', 'icon.ico'),
       ]
     : [
-        // In development, the insider icon lives in src/renderer/public/
         path.join(__dirname, '../../src/renderer/public/insider-icon.ico'),
         path.join(__dirname, '../../build/icon.ico'),
         path.join(__dirname, '../../build/icon.png'),
@@ -97,6 +102,9 @@ function createWindow(): void {
       nodeIntegration: false,
       sandbox: false,
       backgroundThrottling: true,
+      // Allow file:// protocol access in dev mode (needed for binary file previews
+      // like images/video/audio when the page is loaded from http:// Vite dev server)
+      webSecurity: !isDev,
     },
   });
 
@@ -128,7 +136,41 @@ function createWindow(): void {
   });
 
   const rendererPath = path.join(__dirname, '../../dist/renderer/index.html');
-  mainWindow.loadFile(rendererPath);
+  const hasStaticBuild = fs.existsSync(rendererPath);
+
+  if (hasStaticBuild) {
+    mainWindow.loadFile(rendererPath).catch(() => {
+      /* If static load fails, the dev server block below will try */
+    });
+  }
+
+  if (isDev) {
+    void (async () => {
+      try {
+        viteDevServer ??= (async () => {
+          const { startViteDevServer } = await import('./viteDevServer');
+          return startViteDevServer();
+        })();
+        const server = await viteDevServer;
+        const devUrl = server.resolvedUrls.local[0] ?? 'http://localhost:5173';
+        if (!mainWindow?.isDestroyed()) {
+          await mainWindow.loadURL(devUrl);
+          console.log(`[Vite] Loaded dev server: ${devUrl}`);
+        }
+      } catch (error) {
+        console.error('[Vite] Failed to start dev server:', error);
+        if (!hasStaticBuild && !mainWindow?.isDestroyed()) {
+          dialog.showErrorBox(
+            'NexCode failed to start',
+            'Could not start the Vite dev server and no built renderer was found at:\n' +
+              rendererPath +
+              '\n\nRun "npm run buildfast" or "npm run dev" and try again.',
+          );
+          app.quit();
+        }
+      }
+    })();
+  }
 
   if (isDev && process.env.NEXUS_DEVTOOLS === '1') {
     mainWindow.webContents.openDevTools({ mode: 'detach' });
@@ -223,11 +265,17 @@ setupOpenFileHandlers(() => mainWindow);
 app.whenReady().then(() => {
   if (!gotSingleInstanceLock) return;
 
-  // run updateService and registerIpcHandlers
   updateService = new UpdateService(() => mainWindow);
   registerIpcHandlers(() => mainWindow, updateService);
 
-  ipcMain.handle('update:check', () => updateService?.checkForUpdates(false));
+  ipcMain.handle('fs:readFileBinary', async (_event, filePath: string) => {
+    const buf = await fs.promises.readFile(filePath);
+    return new Uint8Array(buf);
+  });
+
+  ipcMain.handle('update:check', async () => {
+    return updateService ? await updateService.checkForUpdates(false) : { available: false };
+  });
   ipcMain.handle('update:start', () => updateService?.downloadAndInstall());
   ipcMain.on('agent:open', () => createOrFocusAgentWindow());
   ipcMain.on('agent-window:minimize', () => agentWindow?.minimize());
@@ -250,6 +298,12 @@ app.whenReady().then(() => {
 
 app.on('before-quit', () => {
   shutdownTerminals();
+  if (viteDevServer) {
+    void viteDevServer.then((server) => {
+      void server.close();
+    });
+    viteDevServer = null;
+  }
 });
 
 app.on('window-all-closed', () => {

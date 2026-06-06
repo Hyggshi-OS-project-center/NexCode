@@ -1,7 +1,7 @@
 /**
  * Settings panel in the sidebar: theme, editor, AI, terminal, and autosave options.
  */
-import type { AppSettings, UpdateChannel } from '../../../shared/types';
+import type { AppSettings, AppTheme, UpdateChannel } from '../../../shared/types';
 import { bindReliableTextFocus } from '../../utils/textInputFocus';
 
 export type SettingsChangeHandler = (settings: Partial<AppSettings>) => void;
@@ -13,6 +13,16 @@ const GEMINI_MODEL_OPTIONS = [
   { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
   { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash-Lite' },
 ] as const;
+
+const THEME_OPTIONS: { value: AppTheme; label: string }[] = [
+  { value: 'dark', label: 'Dark' },
+  { value: 'light', label: 'Light' },
+  { value: 'cute', label: 'Cute Sakura' },
+  { value: 'midnight', label: 'Midnight Neon' },
+  { value: 'forest', label: 'Forest Mint' },
+  { value: 'rose', label: 'Rose Latte' },
+  { value: 'high-contrast-dark', label: 'High Contrast Dark' },
+];
 
 const FONT_FAMILY_OPTIONS = [
   { value: '"Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif', label: 'Segoe UI' },
@@ -66,8 +76,7 @@ export class SettingsPanel {
           <div class="setting-row">
             <label>Theme</label>
             <select id="set-theme">
-              <option value="dark" ${s.theme === 'dark' ? 'selected' : ''}>Dark</option>
-              <option value="light" ${s.theme === 'light' ? 'selected' : ''}>Light</option>
+              ${this.renderThemeOptions(s.theme)}
             </select>
           </div>
           <div class="setting-row">
@@ -201,7 +210,7 @@ export class SettingsPanel {
       </div>
     `;
 
-    this.bind('set-theme', 'change', (el) => this.patch({ theme: (el as HTMLSelectElement).value as 'dark' | 'light' }));
+    this.bind('set-theme', 'change', (el) => this.patch({ theme: (el as HTMLSelectElement).value as AppTheme }));
     this.bind('set-fontFamily', 'change', (el) => this.patch({ fontFamily: (el as HTMLSelectElement).value }));
     this.bind('set-insertFontFamily', 'change', (el) => this.patch({ insertFontFamily: (el as HTMLSelectElement).value }));
     this.bind('set-fontSize', 'change', (el) => this.patch({ fontSize: Number((el as HTMLInputElement).value) }));
@@ -296,6 +305,13 @@ export class SettingsPanel {
           `<option value="${this.escapeAttr(option.value)}" ${option.value === selected ? 'selected' : ''}>${option.label}</option>`,
       ).join('')
     );
+  }
+
+  private renderThemeOptions(selectedTheme: AppTheme): string {
+    return THEME_OPTIONS.map(
+      (option) =>
+        `<option value="${option.value}" ${option.value === selectedTheme ? 'selected' : ''}>${this.escapeAttr(option.label)}</option>`,
+    ).join('');
   }
 
   private renderFontFamilyOptions(selectedFont: string, customFontFamilies: string[] = []): string {

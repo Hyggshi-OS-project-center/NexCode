@@ -6,6 +6,7 @@ import fs from 'fs/promises';
 import https from 'https';
 import os from 'os';
 import path from 'path';
+import type { Stats } from 'node:fs';
 import type { AppSettings, FileEntry, ReadFileForEditorResult } from '../../shared/types';
 import type { UpdateChannel } from '../../shared/types';
 import { TerminalManager } from '../terminal/TerminalManager';
@@ -19,6 +20,7 @@ import {
 } from '../utils/fileKind';
 import { getGitStatus, gitExec } from '../git/gitService';
 import { searchMarketplaceExtensions } from '../extensions/marketplaceService';
+import { clearRecentFiles, getRecentFiles, pushRecentFile, removeRecentFile } from '../recentFiles';
 import { closeAboutWindow, showAboutWindow } from '../about/aboutWindow';
 import { closeEasterEggWindow, showEasterEggWindow } from '../easterEgg/easterEggWindow';
 import { chatWithGemini } from '../ai/geminiService';
@@ -38,24 +40,45 @@ export function shutdownTerminals(): void {
 }
 
 async function readDirShallow(dirPath: string, showHidden = false): Promise<FileEntry[]> {
-  const entries = await fs.readdir(dirPath, { withFileTypes: true });
-  const result: FileEntry[] = [];
+  try {
+    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    const result: FileEntry[] = [];
 
-  const sorted = entries.sort((a, b) => {
-    if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
-    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
-  });
-
-  for (const entry of sorted) {
-    if (!showHidden && entry.name.startsWith('.') && entry.name !== '.env') continue;
-    const fullPath = path.join(dirPath, entry.name);
-    result.push({
-      name: entry.name,
-      path: fullPath,
-      isDirectory: entry.isDirectory(),
+    const sorted = entries.sort((a, b) => {
+      if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
     });
+
+    for (const entry of sorted) {
+      if (!showHidden && entry.name.startsWith('.') && entry.name !== '.env') continue;
+      const fullPath = path.join(dirPath, entry.name);
+      result.push({
+        name: entry.name,
+        path: fullPath,
+        isDirectory: entry.isDirectory(),
+      });
+    }
+    return result;
+  } catch (error: unknown) {
+    throw wrapFsError(error, dirPath, 'read folder');
   }
-  return result;
+}
+
+function wrapFsError(error: unknown, filePath: string, operation: string): Error {
+  const code = (error as NodeJS.ErrnoException)?.code;
+  if (code === 'EACCES' || code === 'EPERM') {
+    return new Error(`Permission denied: cannot ${operation} "${filePath}". Try running NexCode IDE as administrator or choose a location with proper access rights.`);
+  }
+  if (code === 'ENOENT') {
+    return new Error(`File or folder not found: "${filePath}". It may have been moved or deleted.`);
+  }
+  if (code === 'EISDIR') {
+    return new Error(`Expected a file but found a directory: "${filePath}".`);
+  }
+  if (code === 'EISDIR' || code === 'ENOTDIR') {
+    return new Error(`Path component is not a directory: "${filePath}".`);
+  }
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 export function registerIpcHandlers(
@@ -89,18 +112,43 @@ export function registerIpcHandlers(
     async (_e, dirPath: string, options?: { showHidden?: boolean }) =>
       readDirShallow(dirPath, options?.showHidden ?? false),
   );
-  ipcMain.handle('fs:readFile', async (_e, filePath: string) => fs.readFile(filePath, 'utf-8'));
+  ipcMain.handle('fs:readFile', async (_e, filePath: string) => {
+    try {
+      return await fs.readFile(filePath, 'utf-8');
+    } catch (error: unknown) {
+      throw wrapFsError(error, filePath, 'read');
+    }
+  });
   ipcMain.handle('fs:readFileForEditor', async (_e, filePath: string): Promise<ReadFileForEditorResult> => {
-    const stat = await fs.stat(filePath);
+    let stat;
+    try {
+      stat = await fs.stat(filePath);
+    } catch (error: unknown) {
+      throw wrapFsError(error, filePath, 'access');
+    }
     const ext = getExtension(filePath);
     const mediaKind = getMediaKind(ext);
 
     if (mediaKind) {
+      const buf = await fs.readFile(filePath);
+      // Use data URLs so images/videos/audio load from http:// dev server
+      // (file:// URLs are blocked by Chromium when page origin is http://)
+      const ext = filePath.split('.').pop()?.toLowerCase() ?? '';
+      const mimeMap: Record<string, string> = {
+        png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+        svg: 'image/svg+xml', webp: 'image/webp', bmp: 'image/bmp', ico: 'image/x-icon', avif: 'image/avif',
+        mp4: 'video/mp4', webm: 'video/webm', mkv: 'video/x-matroska',
+        mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', flac: 'audio/flac', aac: 'audio/aac', m4a: 'audio/mp4',
+        pdf: 'application/pdf',
+      };
+      const mime = mimeMap[ext] ?? 'application/octet-stream';
+      const base64 = buf.toString('base64');
       return {
         isBinary: true,
         mediaKind,
         size: stat.size,
-        mediaUrl: pathToFileURL(filePath).href,
+        mediaUrl: `data:${mime};base64,${base64}`,
+        dataBase64: mediaKind === 'pdf' ? base64 : undefined,
       };
     }
 
@@ -119,8 +167,12 @@ export function registerIpcHandlers(
     };
   });
   ipcMain.handle('fs:writeFile', async (_e, filePath: string, content: string) => {
-    await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, content, 'utf-8');
+    try {
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
+      await fs.writeFile(filePath, content, 'utf-8');
+    } catch (error: unknown) {
+      throw wrapFsError(error, filePath, 'write');
+    }
   });
   ipcMain.handle('fs:exists', async (_e, filePath: string) => {
     try {
@@ -136,19 +188,35 @@ export function registerIpcHandlers(
       return { isDirectory: stat.isDirectory(), size: stat.size, mtimeMs: stat.mtimeMs };
     } catch (error: unknown) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
-      throw error;
+      throw wrapFsError(error, filePath, 'stat');
     }
   });
-  ipcMain.handle('fs:mkdir', async (_e, dirPath: string) => fs.mkdir(dirPath, { recursive: true }));
+  ipcMain.handle('fs:mkdir', async (_e, dirPath: string) => {
+    try {
+      await fs.mkdir(dirPath, { recursive: true });
+    } catch (error: unknown) {
+      throw wrapFsError(error, dirPath, 'create directory');
+    }
+  });
   ipcMain.handle('fs:unlink', async (_e, targetPath: string) => {
-    const stat = await fs.stat(targetPath);
-    if (stat.isDirectory()) {
-      await fs.rm(targetPath, { recursive: true, force: true });
-    } else {
-      await fs.unlink(targetPath);
+    try {
+      const stat = await fs.stat(targetPath);
+      if (stat.isDirectory()) {
+        await fs.rm(targetPath, { recursive: true, force: true });
+      } else {
+        await fs.unlink(targetPath);
+      }
+    } catch (error: unknown) {
+      throw wrapFsError(error, targetPath, 'delete');
     }
   });
-  ipcMain.handle('fs:rename', async (_e, oldPath: string, newPath: string) => fs.rename(oldPath, newPath));
+  ipcMain.handle('fs:rename', async (_e, oldPath: string, newPath: string) => {
+    try {
+      await fs.rename(oldPath, newPath);
+    } catch (error: unknown) {
+      throw wrapFsError(error, oldPath, 'rename');
+    }
+  });
 
   ipcMain.handle('settings:get', () => getSettings());
   ipcMain.handle('settings:set', (_e, partial: Partial<AppSettings>) => setSettings(partial));
@@ -255,6 +323,31 @@ export function registerIpcHandlers(
     updateService.setChannel(channel);
   });
 
+  ipcMain.handle('pdf:open', async () => {
+    const win = getWindow();
+    const result = await dialog.showOpenDialog(win!, {
+      properties: ['openFile'],
+      filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+      return false;
+    }
+    const filePath = result.filePaths[0];
+    const pdfWindow = new BrowserWindow({
+      width: 1000,
+      height: 800,
+      title: 'PDF Viewer',
+      webPreferences: {
+        preload: path.join(__dirname, 'preload.js'),
+        sandbox: false,
+      },
+    });
+    const viewerPath = path.join(__dirname, '../../node_modules/pdfjs-dist/web/viewer.html');
+    const encodedFilePath = encodeURIComponent(filePath);
+    pdfWindow.loadFile(viewerPath, { query: { file: encodedFilePath } });
+    return true;
+  });
+
   ipcMain.handle('terminal:create', async (_e, cwd?: string) => {
     const win = getWindow();
     if (!win) return -1;
@@ -282,24 +375,24 @@ ipcMain.handle(
        workspacePath?: string | null,
        editorContext?: AiEditorContext | null,
      ) => {
-       const settings = getSettings();
-       if (settings.aiProvider === 'openrouter') {
-         return chatWithOpenRouter(
-           settings.openRouterApiKey,
-           settings.openRouterModel,
-           messages,
-           workspacePath ?? null,
-           editorContext ?? null,
-         );
-       }
-       return chatWithGemini(
-         settings.geminiApiKey,
-         settings.geminiModel,
-         messages,
-         workspacePath ?? null,
-         editorContext ?? null,
-       );
-     },
+        const settings = getSettings();
+        if (settings.aiProvider === 'openrouter') {
+          return chatWithOpenRouter(
+            settings.openRouterApiKey,
+            settings.openRouterModel,
+            messages,
+            workspacePath ?? null,
+            editorContext ?? null,
+          );
+        }
+        return chatWithGemini(
+          settings.geminiApiKey,
+          settings.geminiModel,
+          messages,
+          workspacePath ?? null,
+          editorContext ?? null,
+        );
+      },
    );
 
    // Validate a file after user approves AI changes
@@ -307,6 +400,21 @@ ipcMain.handle(
      const cwd = workspacePath ?? process.cwd();
      return validateWrittenFile(filePath, workspacePath ?? null, cwd, []);
    });
+
+  // Recent files (Open Recent menu)
+  ipcMain.handle('recentFiles:get', () => getRecentFiles());
+  ipcMain.handle('recentFiles:clear', () => {
+    clearRecentFiles();
+    return getRecentFiles();
+  });
+  ipcMain.handle('recentFiles:push', (_e, filePath: string) => {
+    pushRecentFile(filePath);
+    return getRecentFiles();
+  });
+  ipcMain.handle('recentFiles:remove', (_e, filePath: string) => {
+    removeRecentFile(filePath);
+    return getRecentFiles();
+  });
 }
 
 function fetchJson<T>(url: string): Promise<T> {

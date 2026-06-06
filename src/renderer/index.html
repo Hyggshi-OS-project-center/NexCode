@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' https: file: data: blob:; media-src 'self' https: file: data: blob:;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' https: file: data: blob:; media-src 'self' https: file: data: blob:; connect-src 'self' file: blob: ws: http://127.0.0.1:*; worker-src 'self' blob:;" />
   <title>NexCode IDE</title>
   <link rel="icon" href="./favicon.ico" type="image/x-icon" />
   <link rel="stylesheet" href="./styles/themes.css" />
   <link rel="stylesheet" href="./styles/main.css" />
-  <link rel="stylesheet" href="./styles/components.css" />
+  <link rel="stylesheet" href="./styles/components/main.css" />
   <link rel="stylesheet" href="./styles/explorer.css" />
   <link rel="stylesheet" href="./styles/chat.css" />
   <link rel="stylesheet" href="./styles/diff-editor.css" />

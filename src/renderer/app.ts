@@ -10,6 +10,7 @@ import type {
   AiEditorContext,
   AppSettings,
   CodeValidationResult,
+  ElectronAPI,
   FileStatResult,
   MediaKind,
   OpenPathsPayload,
@@ -53,11 +54,228 @@ import {
 import splashImageRandom1Url from '@icons/loading/my-splash-Random1.png?url';
 import splashImageRandom2Url from '@icons/loading/my-splash-Random2.png?url';
 import splashImageRandom3Url from '@icons/loading/my-splash-Random3.png?url';
+import { captureDirectoryFiles, captureSingleFile, readDir as bReadDir, readFileContentAsync as bReadFile, exists as bExists, stat as bStat, writeFile as bWriteFile, mkdir as bMkdir, unlink as bUnlink, rename as bRename, reset as bReset, createFileBlobUrl as bCreateBlobUrl, BrowserFileEntry } from './browserFs';
 
 const splashImageUrls = [splashImageRandom1Url, splashImageRandom2Url, splashImageRandom3Url] as const;
 
 function getRandomSplashImageUrl(): string {
   return splashImageUrls[Math.floor(Math.random() * splashImageUrls.length)];
+}
+
+const browserElectronAPI: ElectronAPI = (() => {
+  if ((window as any).electronAPI) return (window as any).electronAPI as ElectronAPI;
+
+  const noop = () => undefined;
+  const noopPromise = async () => undefined;
+  const promiseUndefined = async () => undefined;
+  const noOpUnsubscribe = () => undefined;
+
+  const api = new Proxy(
+    {},
+    {
+      get(_target, prop: string) {
+        switch (prop) {
+          case 'onOpenPaths':
+          case 'onShortcut':
+          case 'onTerminalData':
+          case 'onTerminalCwd':
+          case 'onUpdateAvailable':
+          case 'onUpdateProgress':
+            return (_callback: any) => noOpUnsubscribe;
+          case 'minimizeWindow':
+          case 'maximizeWindow':
+          case 'closeWindow':
+          case 'showAboutWindow':
+          case 'showEasterEggWindow':
+          case 'closeEasterEggWindow':
+          case 'openAgent':
+            return noop;
+          case 'openExternal':
+          case 'setUpdateChannel':
+          case 'writeTerminal':
+          case 'resizeTerminal':
+          case 'killTerminal':
+          case 'isMaximized':
+            return promiseUndefined;
+          case 'getHomePath':
+          case 'getWorkspacePath':
+          case 'createTerminal':
+            return async () => null;
+          case 'saveFile':
+            return async () => null;
+          case 'openFolder':
+            return async () => {
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.webkitdirectory = true;
+              return new Promise<string | null>((resolve) => {
+                input.onchange = () => {
+                  if (input.files && input.files.length > 0) {
+                    const rootPath = captureDirectoryFiles(input.files);
+                    resolve(rootPath);
+                  } else {
+                    resolve(null);
+                  }
+                  input.remove();
+                };
+                input.oncancel = () => { resolve(null); input.remove(); };
+                input.click();
+              });
+            };
+          case 'openFile':
+            return async () => {
+              const input = document.createElement('input');
+              input.type = 'file';
+              return new Promise<string | null>((resolve) => {
+                input.onchange = () => {
+                  if (input.files && input.files.length > 0) {
+                    const file = input.files[0];
+                    const path = captureSingleFile(file);
+                    // Read file content immediately so it's available for readFile/readFileForEditor
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      const entry = bStat(path);
+                      if (entry && typeof reader.result === 'string') {
+                        (entry as any).content = reader.result;
+                      }
+                      resolve(path);
+                    };
+                    reader.onerror = () => resolve(path);
+                    reader.readAsText(file);
+                  } else {
+                    resolve(null);
+                  }
+                  input.remove();
+                };
+                input.oncancel = () => { resolve(null); input.remove(); };
+                input.click();
+              });
+            };
+          case 'openPdf':
+            return async () => false;
+          case 'readDir':
+            return async (dirPath: string, options?: { showHidden?: boolean }) => {
+              const entries = bReadDir(dirPath, options);
+              return entries.map(e => ({
+                name: e.name,
+                path: e.path,
+                isDirectory: e.isDirectory,
+                size: e.size,
+                mtimeMs: e.mtimeMs,
+              }));
+            };
+          case 'exists':
+            return async (path: string) => bExists(path);
+          case 'stat':
+            return async (path: string) => {
+              const entry = bStat(path);
+              if (!entry) return null;
+              return {
+                isDirectory: entry.isDirectory,
+                size: entry.size,
+                mtimeMs: entry.mtimeMs,
+              };
+            };
+          case 'writeFile':
+            return async (path: string, content: string) => {
+              bWriteFile(path, content);
+            };
+          case 'unlink':
+            return async (path: string) => {
+              bUnlink(path);
+            };
+          case 'mkdir':
+            return async (path: string) => {
+              bMkdir(path);
+            };
+          case 'rename':
+            return async (oldPath: string, newPath: string) => {
+              bRename(oldPath, newPath);
+            };
+          case 'setWorkspacePath':
+            return async (path: string) => {
+              /* no-op in browser dev mode */
+            };
+          case 'getSettings':
+            return async () => ({ ...DEFAULT_SETTINGS });
+          case 'setSettings':
+            return async (settings: Partial<AppSettings>) => ({ ...DEFAULT_SETTINGS, ...settings });
+          case 'getAboutInfo':
+            return async () => ({
+              name: 'NexCode IDE',
+              version: 'web',
+              description: 'NexCode IDE web preview',
+              author: { name: 'Hyggshi OS major project center', email: '' },
+              license: 'MIT',
+            } as any);
+          case 'getLatestReleaseNotes':
+            return async () => ({
+              title: 'Web Preview',
+              body: 'Running renderer-web preview',
+              url: '',
+            } as any);
+          case 'getRecentFiles':
+            return async () => [];
+          case 'pushRecentFile':
+          case 'removeRecentFile':
+          case 'clearRecentFiles':
+            return async () => [];
+          case 'searchMarketplaceExtensions':
+            return async () => [];
+          case 'gitExec':
+          case 'aiChat':
+          case 'aiValidate':
+          case 'readFileBinary':
+            return promiseUndefined;
+          case 'gitStatus':
+            return async () => ({ branch: null, isRepo: false });
+          case 'readFile':
+            return async (path: string) => {
+              try {
+                return await bReadFile(path);
+              } catch {
+                return '';
+              }
+            };
+          case 'readFileForEditor':
+            return async (path: string) => {
+              const entry = bStat(path);
+              if (!entry) {
+                return { isBinary: false, content: '' };
+              }
+              // Detect binary/media by extension
+              const ext = path.split('.').pop()?.toLowerCase() ?? '';
+              const imageExts = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico', 'avif'];
+              const videoExts = ['mp4', 'webm', 'mkv', 'avi', 'mov', 'wmv', 'flv'];
+              const audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'wma', 'm4a'];
+              const pdfExt = ['pdf'];
+
+              if (imageExts.includes(ext) || videoExts.includes(ext) || audioExts.includes(ext) || pdfExt.includes(ext)) {
+                const kind: MediaKind = imageExts.includes(ext) ? 'image' : videoExts.includes(ext) ? 'video' : audioExts.includes(ext) ? 'audio' : 'pdf';
+                const mediaUrl = bCreateBlobUrl(path) ?? '';
+                return { isBinary: true, content: '', size: entry.size, mediaKind: kind, mediaUrl, dataBase64: '' };
+              }
+
+              try {
+                const content = await bReadFile(path);
+                return { isBinary: false, content, size: entry.size, mediaKind: null };
+              } catch {
+                return { isBinary: true, content: '', size: entry.size, mediaKind: null, mediaUrl: '', dataBase64: '' };
+              }
+            };
+          default:
+            return promiseUndefined;
+        }
+      },
+    },
+  ) as ElectronAPI;
+
+  (window as any).electronAPI = api;
+  return api;
+})();
+
+if (!(window as any).electronAPI) {
+  (window as any).electronAPI = browserElectronAPI;
 }
 
 interface WatchedFileSnapshot {
@@ -150,6 +368,10 @@ class NexusApp {
     // Sync the saved update channel to main process on startup
     void window.electronAPI.setUpdateChannel(this.settings.updateChannel ?? 'stable');
 
+    // Pre-warm the recent-files cache so the File menu opens instantly.
+    this.recentFilesCache = await this.refreshRecentFiles();
+    this.recentFilesCacheAt = Date.now();
+
     splash.setStatus('Preparing editor…');
     EditorManager.registerSnippets();
 
@@ -194,6 +416,7 @@ class NexusApp {
       (line) => this.editor.revealLine(line),
       (oldPath, newPath, isDirectory) => this.handleRenamedPath(oldPath, newPath, isDirectory),
     );
+    this.explorer.setExtensionHost(this.pluginHost);
     this.tabs = new TabManager(
       'tab-bar',
       (path, x, y) => this.onTabContextMenu(path, x, y),
@@ -379,13 +602,7 @@ class NexusApp {
     };
     switch (menu) {
       case 'file':
-        return [
-          { label: 'Open Folder…', shortcut: 'Ctrl+Shift+O', action: () => void this.openFolder() },
-          { label: 'Open File…', shortcut: 'Ctrl+O', action: () => void this.pickFile() },
-          { label: 'New File', action: () => void this.newUntitledFile() },
-          { separator: true },
-          { label: 'Save', shortcut: 'Ctrl+S', action: () => void this.saveActiveFile() },
-        ];
+        return this.buildFileMenuItems();
       case 'edit':
         return [
           { label: 'Undo', shortcut: 'Ctrl+Z', action: () => ed('editor.action.undo')() },
@@ -464,6 +681,10 @@ class NexusApp {
             action: () => window.electronAPI.openAgent(),
           },
           { separator: true },
+          {
+            label: 'Report Issue',
+            action: () => void this.openReportIssue(),
+          },
           {
             label: 'View License',
             action: () => void this.showLicense(),
@@ -609,6 +830,7 @@ class NexusApp {
   private createShortcutActions() {
     return {
       save: () => void this.saveActiveFile(),
+      saveAs: () => void this.saveActiveFileAs(),
       find: () => this.search.show(false),
       replace: () => this.search.show(true),
       toggleTerminal: () => this.terminal.toggle(),
@@ -628,6 +850,9 @@ class NexusApp {
     switch (action) {
       case 'save':
         actions.save();
+        break;
+      case 'saveAs':
+        actions.saveAs();
         break;
       case 'find':
         actions.find();
@@ -850,6 +1075,10 @@ class NexusApp {
     this.welcome.hide();
     this.updateViewState();
 
+    // Track the file in the recent-files list (MRU). The list is consulted by
+    // the File menu's "Open Recent" section and persists across sessions.
+    void this.pushRecent(path);
+
     if (!forceText && !this.forceTextOpen.has(path)) {
       const result = await window.electronAPI.readFileForEditor(path);
       if (result.isBinary) {
@@ -892,6 +1121,7 @@ class NexusApp {
       size: meta.size,
       mediaKind: meta.mediaKind,
       mediaUrl: meta.mediaUrl,
+      dataBase64: meta.dataBase64,
       onOpenAnyway: () => {
         this.forceTextOpen.add(path);
         void this.openFile(path, true);
@@ -905,6 +1135,7 @@ class NexusApp {
     if (mediaKind === 'image') return 'Image';
     if (mediaKind === 'video') return 'Video';
     if (mediaKind === 'audio') return 'Audio';
+    if (mediaKind === 'pdf') return 'PDF';
     const ext = path.split('.').pop()?.toLowerCase() ?? '';
     if (ext) return ext.toUpperCase();
     return 'Binary';
@@ -1203,12 +1434,8 @@ class NexusApp {
     try {
       const version = await this.releaseNotes.getCurrentVersion();
       const lastShownVersion = localStorage.getItem(RELEASE_NOTES_STORAGE_KEY);
-      if (lastShownVersion && lastShownVersion !== version) {
+      if (!lastShownVersion || lastShownVersion !== version) {
         await this.openReleaseNotes(true);
-        return;
-      }
-      if (!lastShownVersion) {
-        localStorage.setItem(RELEASE_NOTES_STORAGE_KEY, version);
       }
     } catch {
       /* Release notes are optional; startup should continue if version lookup fails. */
@@ -1266,6 +1493,14 @@ class NexusApp {
     document.body.appendChild(modal);
     document.getElementById('btn-license-close')?.addEventListener('click', () => modal.remove());
     modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  }
+
+  private async openReportIssue(): Promise<void> {
+    try {
+      await window.electronAPI.openExternal('https://github.com/Hyggshi-OS-project-center/NexCode/issues/new');
+    } catch {
+      window.alert('Please report issues at: https://github.com/Hyggshi-OS-project-center/NexCode/issues/new');
+    }
   }
 
   private async switchToFile(path: string): Promise<void> {
@@ -1330,6 +1565,186 @@ class NexusApp {
     await this.saveFile(path, true);
   }
 
+  /**
+   * Save the active file under a new path (Save As… / Ctrl+Shift+S).
+   * - Always prompts for a destination via the native save dialog.
+   * - Writes content to the chosen path, then re-binds the active tab/model
+   *   to the new path (the old path's tab and dirty state is dropped).
+   * - If the old tab was newUntitled, the empty stub on disk is cleaned up.
+   */
+  private async saveActiveFileAs(): Promise<void> {
+    const oldPath = this.tabs.getActivePath();
+    if (!oldPath || this.releaseNotes.isReleaseNotesPath(oldPath) || oldPath === WELCOME_TAB_PATH) return;
+    if (this.binaryMeta.has(oldPath) && !this.forceTextOpen.has(oldPath)) return;
+
+    // Suggest a sensible default file name based on the current path.
+    const defaultName = oldPath.split(/[/\\]/).pop() ?? 'untitled.txt';
+    const newPath = await window.electronAPI.saveFile(defaultName);
+    if (!newPath || newPath === oldPath) return;
+
+    const content = this.editor.getContent(oldPath);
+    console.trace('[WRITE FILE - saveActiveFileAs]', newPath);
+    await window.electronAPI.writeFile(newPath, content);
+    await window.electronAPI.pushRecentFile(newPath);
+
+    // Rebind the existing Monaco model to the new path (preserves undo history
+    // and the user's cursor position) by closing the old tab and re-opening at
+    // the new path with the just-written content. This is simpler and more
+    // robust than mutating model URIs in place.
+    const wasActiveTab = this.tabs.getActivePath() === oldPath;
+    this.tabs.closeTab(oldPath);
+    this.dirtyFiles.delete(oldPath);
+    this.originalContent.delete(oldPath);
+    this.fileSnapshots.delete(oldPath);
+
+    await this.openFile(newPath);
+    if (wasActiveTab) this.tabs.setActive(newPath);
+
+    // Clean up the stub file left behind by newUntitledFile when the user
+    // immediately chooses "Save As" on a brand-new tab.
+    if (oldPath !== newPath && /\\untitled-\d+\.txt$/.test(oldPath)) {
+      try { await window.electronAPI.unlink(oldPath); } catch { /* ignore */ }
+    }
+
+    this.dirtyFiles.delete(newPath);
+    this.tabs.setDirty(newPath, false);
+    this.originalContent.set(newPath, content);
+    await this.updateFileSnapshot(newPath);
+
+    document.getElementById('status-file')!.textContent = `Saved ${newPath.split(/[/\\]/).pop()}`;
+    this.explorer.getTimeline().push(newPath, 'Saved');
+    void this.explorer.refreshGitDecorations();
+    if (this.workspacePath) void this.explorer.refresh();
+    this.pluginHost.emit('fileSaved', newPath);
+  }
+
+  /** Load recent-files list from main process (newest first). */
+  private async refreshRecentFiles(): Promise<string[]> {
+    try { return await window.electronAPI.getRecentFiles(); } catch { return []; }
+  }
+
+  /**
+   * Push a path to the recent-files list and update the in-memory cache.
+   * Skips the special welcome / release-notes / untitled-stub paths so the
+   * menu doesn't fill up with junk entries.
+   */
+  private async pushRecent(path: string): Promise<void> {
+    if (!path) return;
+    if (this.releaseNotes.isReleaseNotesPath(path) || path === WELCOME_TAB_PATH) return;
+    if (/\\untitled-\d+\.txt$/.test(path)) return;
+    try {
+      this.recentFilesCache = await window.electronAPI.pushRecentFile(path);
+      this.recentFilesCacheAt = Date.now();
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  /** Cache the most recent recent-files snapshot so the menu doesn't refetch every open. */
+  private recentFilesCache: string[] = [];
+  private recentFilesCacheAt = 0;
+
+  /** Recent files (max 10) with a fallback cache so the File menu can open instantly. */
+  private async getRecentFilesCached(force = false): Promise<string[]> {
+    const stale = Date.now() - this.recentFilesCacheAt > 5_000;
+    if (force || stale || this.recentFilesCacheAt === 0) {
+      this.recentFilesCache = await this.refreshRecentFiles();
+      this.recentFilesCacheAt = Date.now();
+    }
+    return this.recentFilesCache;
+  }
+
+  /**
+   * Build the File menu items. Mirrors VS Code's menu layout so the three
+   * high-frequency features — Save / Save As / Auto Save / Open Recent —
+   * sit exactly where users expect them.
+   */
+  private buildFileMenuItems(): MenuItem[] {
+    const recent = this.recentFilesCache;
+    const recentSubmenu: MenuItem[] = recent.length === 0
+      ? [{ label: '(No recent files)', disabled: true }]
+      : [
+          ...recent.map((filePath) => ({
+            label: this.shortenRecentLabel(filePath),
+            action: () => void this.openRecentFile(filePath),
+          })),
+          { separator: true },
+          { label: 'Clear Recent', action: () => void this.clearRecentFiles() },
+        ];
+
+    return [
+      { label: 'New Text File', shortcut: 'Ctrl+N', action: () => void this.newUntitledFile() },
+      { label: 'New File…', action: () => void this.newUntitledFile() },
+      { separator: true },
+      { label: 'Open File…', shortcut: 'Ctrl+O', action: () => void this.pickFile() },
+      { label: 'Open Folder…', shortcut: 'Ctrl+Shift+O', action: () => void this.openFolder() },
+      { label: 'Open Recent', submenu: recentSubmenu },
+      { separator: true },
+      { label: 'Save', shortcut: 'Ctrl+S', action: () => void this.saveActiveFile() },
+      { label: 'Save As…', shortcut: 'Ctrl+Shift+S', action: () => void this.saveActiveFileAs() },
+      {
+        label: 'Auto Save',
+        checked: this.settings.autoSave,
+        action: () => void this.toggleAutoSave(),
+      },
+      { separator: true },
+      { label: 'Revert File', action: () => void this.revertActiveFile() },
+    ];
+  }
+
+  /** Flip the Auto Save setting and refresh any open File menu. */
+  private async toggleAutoSave(): Promise<void> {
+    await this.applySettings({ autoSave: !this.settings.autoSave });
+    this.contextMenu.refresh();
+  }
+
+  /** Restore the on-disk content of the active file and clear dirty state. */
+  private async revertActiveFile(): Promise<void> {
+    const path = this.tabs.getActivePath();
+    if (!path) return;
+    if (this.releaseNotes.isReleaseNotesPath(path) || path === WELCOME_TAB_PATH) return;
+    if (this.binaryMeta.has(path) && !this.forceTextOpen.has(path)) return;
+    try {
+      const content = await window.electronAPI.readFile(path);
+      this.editor.updateFileContent(path, content);
+      this.dirtyFiles.delete(path);
+      this.tabs.setDirty(path, false);
+      this.originalContent.set(path, content);
+      await this.updateFileSnapshot(path);
+      document.getElementById('status-file')!.textContent = `Reverted ${path.split(/[/\\]/).pop()}`;
+    } catch (err) {
+      console.warn('[REVERT] failed', err);
+    }
+  }
+
+  /** Format a recent-files entry: "filename.ext  —  /path/to/dir" */
+  private shortenRecentLabel(filePath: string): string {
+    const filename = filePath.split(/[/\\]/).pop() ?? filePath;
+    const dir = filePath.substring(0, filePath.length - filename.length).replace(/[/\\]+$/, '');
+    const shortDir = dir.length > 40 ? `…${dir.slice(-37)}` : dir;
+    return shortDir ? `${filename}  \u2014  ${shortDir}` : filename;
+  }
+
+  private async openRecentFile(filePath: string): Promise<void> {
+    // Best-effort existence check so we can remove stale entries from the list.
+    const exists = await window.electronAPI.exists(filePath);
+    if (!exists) {
+      const updated = await window.electronAPI.removeRecentFile(filePath);
+      this.recentFilesCache = updated;
+      this.recentFilesCacheAt = Date.now();
+      document.getElementById('status-file')!.textContent = `Removed missing file: ${filePath.split(/[/\\]/).pop()}`;
+      return;
+    }
+    await this.openFile(filePath);
+    this.recentFilesCache = await this.refreshRecentFiles();
+    this.recentFilesCacheAt = Date.now();
+  }
+
+  private async clearRecentFiles(): Promise<void> {
+    this.recentFilesCache = await window.electronAPI.clearRecentFiles();
+    this.recentFilesCacheAt = Date.now();
+  }
+
   private async saveFile(path: string, showFeedback: boolean): Promise<void> {
     // Respect autoSave suspension — don't save if user has been asked about unsaved changes
     if (this.autoSaveSuspended) return;
@@ -1337,6 +1752,9 @@ class NexusApp {
     const content = this.editor.getContent(path);
     console.trace('[WRITE FILE - saveFile]', path);
     await window.electronAPI.writeFile(path, content);
+    // Bump MRU so the file moves to the top of Open Recent after a manual save
+    // (auto-saves still count — if you're editing it, it's recent).
+    void this.pushRecent(path);
     await this.updateFileSnapshot(path);
     // Update original content baseline ONLY on manual saves (showFeedback=true)
     // so "Don't Save" after auto-save restores to the pre-edit state.

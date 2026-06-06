@@ -1,0 +1,96 @@
+/* ── Unsaved changes dialog ─────────────────────────────────────────────── */
+
+.unsaved-changes-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: menuPop 0.15s ease;
+}
+
+.unsaved-changes-dialog {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  width: min(440px, 90vw);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.unsaved-changes-header {
+  display: flex;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.unsaved-changes-body {
+  padding: 18px 22px 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.unsaved-changes-body strong {
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.unsaved-changes-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.unsaved-changes-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 18px 16px;
+  flex-shrink: 0;
+}
+
+.unsaved-changes-actions .btn {
+  padding: 6px 16px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+  font-family: inherit;
+}
+
+.unsaved-changes-actions .btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.unsaved-changes-actions .btn-save {
+  background: var(--accent, #0078d4);
+  border-color: var(--accent, #0078d4);
+  color: #fff;
+}
+
+.unsaved-changes-actions .btn-save:hover {
+  filter: brightness(1.1);
+}
+
+.unsaved-changes-actions .btn-discard {
+  color: var(--text-danger, #e81123);
+}
+
+.unsaved-changes-actions .btn-discard:hover {
+  background: rgba(232, 17, 35, 0.08);
+  border-color: var(--text-danger, #e81123);
+}

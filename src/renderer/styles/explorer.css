@@ -116,10 +116,6 @@
   color: var(--text-muted);
 }
 
-.store-item {
-  cursor: default;
-}
-
 .store-item:hover {
   background: var(--bg-hover);
 }
@@ -407,4 +403,42 @@
   justify-content: flex-end;
   gap: 10px;
   margin-top: 16px;
+}
+
+/* Convenience Store — click menu */
+.store-item {
+  cursor: pointer;
+}
+
+.store-command-menu {
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  box-shadow: var(--shadow);
+}
+
+.store-command-item {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  transition: background var(--transition);
+}
+
+.store-command-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.store-command-empty {
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
 }

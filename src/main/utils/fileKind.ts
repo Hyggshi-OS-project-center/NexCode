@@ -62,6 +62,7 @@ export function getMediaKind(ext: string): MediaKind {
   if (IMAGE_EXTENSIONS.has(ext)) return 'image';
   if (VIDEO_EXTENSIONS.has(ext)) return 'video';
   if (AUDIO_EXTENSIONS.has(ext)) return 'audio';
+  if (ext === 'pdf') return 'pdf';
   return null;
 }
 

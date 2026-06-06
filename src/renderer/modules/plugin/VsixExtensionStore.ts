@@ -30,15 +30,21 @@ export class VsixExtensionStore {
       const entries = await window.electronAPI.readDir(dir, { showHidden: true });
       for (const entry of entries) {
         if (!entry.isDirectory && isVsixFile(entry.name)) {
-          await this.installFromPath(entry.path, host);
+          try {
+            await this.installFromPath(entry.path, host);
+          } catch (err) {
+            console.warn(`[VsixExtensionStore] Skipping "${entry.name}":`, err);
+          }
         }
       }
     }
   }
 
   async installFromPath(vsixPath: string, host: PluginHost): Promise<void> {
-    const raw = await window.electronAPI.readFile(vsixPath);
+    // readFileBinary returns Uint8Array — needed for ZIP detection inside parseVsixManifest
+    const raw = await window.electronAPI.readFileBinary(vsixPath);
     const manifest = parseVsixManifest(raw);
+
     if (this.installed.has(manifest.id)) {
       await this.installed.get(manifest.id)!.plugin.deactivate?.();
     }

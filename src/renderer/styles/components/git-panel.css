@@ -1,0 +1,173 @@
+/* Git source control panel */
+
+.git-panel {
+  padding: 8px 0 12px;
+}
+
+.git-branch-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.git-branch-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.git-branch-name {
+  font-size: 13px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.git-action-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.git-commit-row {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 10px;
+}
+
+.git-commit-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.git-commit-input:focus {
+  outline: 1px solid var(--focus-border);
+  outline-offset: -1px;
+}
+
+.git-section-title {
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.git-changes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.git-change-item {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 6px;
+  align-items: center;
+  padding: 5px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.git-change-item:hover {
+  background: var(--bg-hover);
+}
+
+.git-change-code {
+  font-family: Consolas, monospace;
+  color: var(--text-muted);
+}
+
+.git-change-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.git-change-label {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.git-change-modified .git-change-code,
+.git-change-modified .git-change-label {
+  color: #d6a85f;
+}
+
+.git-change-added .git-change-code,
+.git-change-added .git-change-label,
+.git-change-untracked .git-change-code,
+.git-change-untracked .git-change-label {
+  color: #57c878;
+}
+
+.git-change-deleted .git-change-code,
+.git-change-deleted .git-change-label,
+.git-change-conflict .git-change-code,
+.git-change-conflict .git-change-label {
+  color: #f05d5d;
+}
+
+.git-change-renamed .git-change-code,
+.git-change-renamed .git-change-label,
+.git-change-changed .git-change-code,
+.git-change-changed .git-change-label {
+  color: #6cb6ff;
+}
+
+.git-change-modified .git-change-path {
+  color: #e6d3b0;
+}
+
+.git-change-added .git-change-path,
+.git-change-untracked .git-change-path {
+  color: #c7f0d2;
+}
+
+.git-change-deleted .git-change-path,
+.git-change-conflict .git-change-path {
+  color: #ffd1d1;
+}
+
+.git-change-renamed .git-change-path,
+.git-change-changed .git-change-path {
+  color: #d3e9ff;
+}
+
+.status-cwd {
+  max-width: min(36vw, 480px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 0 8px;
+  border-left: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+}
+
+#status-branch {
+  cursor: pointer;
+}
+
+#status-branch:hover {
+  text-decoration: underline;
+}

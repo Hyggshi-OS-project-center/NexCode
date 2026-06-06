@@ -12,6 +12,7 @@ import type {
 import { bindReliableTextFocus } from '../../utils/textInputFocus';
 
 interface ChatDisplayMessage {
+  id: number;
   role: 'user' | 'model';
   text: string;
   attachments?: AiChatAttachment[];
@@ -76,6 +77,10 @@ const OPENROUTER_MODEL_OPTIONS = [
 export class ChatPanel {
   private container: HTMLElement;
   private messages: ChatDisplayMessage[] = [];
+  private nextMessageId = 1;
+  private typingMessageId: number | null = null;
+  private typingTimer: number | null = null;
+  private typingFullText = '';
   private history: AiChatMessage[] = [];
   private processItems: ChatProcessItem[] = [];
   private pendingAttachments: AiChatAttachment[] = [];
@@ -298,7 +303,7 @@ export class ChatPanel {
     if ((!text && this.pendingAttachments.length === 0) || this.loading) return;
 
     if (this.hasUnsupportedImageAttachment()) {
-      this.messages.push({
+      this.addMessage({
         role: 'model',
         text:
           'This OpenRouter model does not support image input. Choose a vision model like GPT-4o Mini, GPT-4.1 Mini, Claude 3.5 Sonnet, or Gemini 2.0 Flash, then send again.',
@@ -310,7 +315,7 @@ export class ChatPanel {
     }
 
     const attachments = this.pendingAttachments;
-    this.messages.push({ role: 'user', text, attachments });
+    this.addMessage({ role: 'user', text, attachments });
     this.history.push({ role: 'user', text, attachments });
     this.pendingAttachments = [];
     this.inputEl.value = '';
@@ -342,13 +347,13 @@ export class ChatPanel {
       }
 
       if (result.error) {
-        this.messages.push({ role: 'model', text: result.error, error: true, actions: result.actions });
+        this.addMessage({ role: 'model', text: result.error, error: true, actions: result.actions }, true);
       } else if (result.text) {
-        this.messages.push({ role: 'model', text: result.text, actions: result.actions });
+        this.addMessage({ role: 'model', text: result.text, actions: result.actions }, true);
         this.history.push({ role: 'model', text: result.text });
       } else if (result.actions?.length) {
         const summary = this.summarizeActions(result.actions);
-        this.messages.push({ role: 'model', text: summary, actions: result.actions });
+        this.addMessage({ role: 'model', text: summary, actions: result.actions }, true);
         this.history.push({ role: 'model', text: summary });
       }
     } catch (err) {
@@ -360,11 +365,11 @@ export class ChatPanel {
         },
       ];
       this.renderProcessSection();
-      this.messages.push({
+      this.addMessage({
         role: 'model',
         text: `Unexpected error: ${err instanceof Error ? err.message : String(err)}`,
         error: true,
-      });
+      }, true);
     }
 
     this.loading = false;
@@ -376,6 +381,7 @@ export class ChatPanel {
   }
 
   private clearChat(): void {
+    this.stopTypingAnimation();
     this.messages = [];
     this.history = [];
     this.processItems = [];
@@ -383,6 +389,73 @@ export class ChatPanel {
     this.renderProcessSection();
     this.renderPendingAttachments();
     this.renderMessages();
+  }
+
+  private addMessage(
+    message: Omit<ChatDisplayMessage, 'id'>,
+    animate = false,
+  ): ChatDisplayMessage {
+    const displayMessage: ChatDisplayMessage = {
+      ...message,
+      id: this.nextMessageId++,
+      text: animate && message.role === 'model' ? '' : message.text,
+    };
+    this.messages.push(displayMessage);
+    if (animate && message.role === 'model') {
+      this.startTypingAnimation(displayMessage, message.text);
+    }
+    return displayMessage;
+  }
+
+  private startTypingAnimation(message: ChatDisplayMessage, fullText: string): void {
+    this.stopTypingAnimation(true);
+    this.typingMessageId = message.id;
+    this.typingFullText = fullText;
+
+    if (!fullText) {
+      this.typingMessageId = null;
+      return;
+    }
+
+    const charsPerTick = fullText.length > 4000 ? 28 : fullText.length > 1600 ? 14 : 5;
+    let index = 0;
+    const tick = () => {
+      const current = this.messages.find((item) => item.id === message.id);
+      if (!current) {
+        this.stopTypingAnimation();
+        return;
+      }
+
+      index = Math.min(fullText.length, index + charsPerTick);
+      current.text = fullText.slice(0, index);
+      this.renderMessages();
+      this.scrollToBottom();
+
+      if (index >= fullText.length) {
+        this.typingMessageId = null;
+        this.typingTimer = null;
+        this.typingFullText = '';
+        this.renderMessages();
+        return;
+      }
+
+      this.typingTimer = window.setTimeout(tick, 16);
+    };
+
+    tick();
+  }
+
+  private stopTypingAnimation(completeCurrent = false): void {
+    if (this.typingTimer !== null) {
+      window.clearTimeout(this.typingTimer);
+      this.typingTimer = null;
+    }
+    if (completeCurrent && this.typingMessageId !== null && this.typingFullText) {
+      const current = this.messages.find((item) => item.id === this.typingMessageId);
+      if (current) current.text = this.typingFullText;
+    }
+    this.typingMessageId = null;
+    this.typingFullText = '';
   }
 
   private async attachLocalFiles(): Promise<void> {
@@ -591,7 +664,8 @@ export class ChatPanel {
         html += `<div class="chat-bubble chat-bubble-user"><div class="chat-bubble-content">${this.escapeHtml(msg.text || '(attachment)')}${this.renderAttachmentSummary(msg.attachments)}</div></div>`;
       } else {
         const cls = msg.error ? ' chat-bubble-error' : '';
-        html += `<div class="chat-bubble chat-bubble-ai${cls}"><div class="chat-bubble-avatar">✦</div><div class="chat-bubble-content">${this.renderMarkdown(msg.text)}</div></div>`;
+        const typingCls = msg.id === this.typingMessageId ? ' chat-bubble-typing' : '';
+        html += `<div class="chat-bubble chat-bubble-ai${cls}${typingCls}"><div class="chat-bubble-avatar">✦</div><div class="chat-bubble-content">${this.renderMarkdown(msg.text)}</div></div>`;
         if (msg.actions?.length) {
           for (const action of msg.actions) {
             html += `<div class="chat-action-log">${this.renderMarkdown(action.label)}</div>`;
@@ -692,20 +766,35 @@ export class ChatPanel {
       .replace(/>/g, '&gt;');
   }
 
+  private escapeRawHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
   private renderMarkdown(text: string): string {
+    const codeBlocks: string[] = [];
     let result = text.replace(
       /```(\w*)\n([\s\S]*?)```/g,
       (_match, lang: string, code: string) => {
-        const langLabel = lang || 'code';
-        const escapedCode = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        return `<div class="chat-code-block"><div class="chat-code-header"><span class="chat-code-lang">${langLabel}</span><button type="button" class="chat-code-copy">Copy</button></div><pre><code>${escapedCode}</code></pre></div>`;
+        const token = `@@CHAT_CODE_BLOCK_${codeBlocks.length}@@`;
+        const langLabel = this.escapeRawHtml(lang || 'code');
+        const escapedCode = this.escapeRawHtml(code);
+        codeBlocks.push(`<div class="chat-code-block"><div class="chat-code-header"><span class="chat-code-lang">${langLabel}</span><button type="button" class="chat-code-copy">Copy</button></div><pre><code>${escapedCode}</code></pre></div>`);
+        return token;
       },
     );
 
+    result = this.escapeRawHtml(result);
     result = result.replace(/`([^`]+)`/g, '<code class="chat-inline-code">$1</code>');
     result = result.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     result = result.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
     result = result.replace(/\n/g, '<br>');
+    codeBlocks.forEach((block, index) => {
+      result = result.replace(`@@CHAT_CODE_BLOCK_${index}@@`, block);
+    });
     return result;
   }
 }

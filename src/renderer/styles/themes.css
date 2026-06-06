@@ -76,3 +76,187 @@
   --accent-soft: #616161;
   --accent-glow: transparent;
 }
+
+[data-theme="cute"] {
+  --bg-app: #fff7fb;
+  --bg-sidebar: #fff0f7;
+  --bg-activity: #f9d9e8;
+  --bg-editor: #fff7fb;
+  --bg-panel: #fff4fa;
+  --bg-hover: rgba(209, 79, 133, 0.1);
+  --bg-active: rgba(209, 79, 133, 0.16);
+  --bg-selected: #ffd7e8;
+  --bg-tab: #ffe8f2;
+  --bg-tab-active: #fff7fb;
+  --bg-titlebar: #ffe1ef;
+  --bg-statusbar: #f6c5db;
+  --bg-input: #ffffff;
+  --bg-terminal: #fff7fb;
+  --bg-dropdown: #ffffff;
+
+  --text-primary: #4a3441;
+  --text-secondary: #7a5366;
+  --text-muted: #9a7283;
+  --text-accent: #b93870;
+  --text-statusbar: #4a3441;
+
+  --border: #efbfd4;
+  --border-subtle: #f7d7e5;
+  --border-strong: #dda2bc;
+  --focus-border: #d14f85;
+
+  --accent: #d14f85;
+  --accent-soft: #e98db1;
+  --accent-glow: rgba(209, 79, 133, 0.18);
+  --success: #4f9a74;
+  --warning: #b8842b;
+  --danger: #c94f6d;
+}
+
+[data-theme="midnight"] {
+  --bg-app: #0d101a;
+  --bg-sidebar: #151a2a;
+  --bg-activity: #111625;
+  --bg-editor: #10131f;
+  --bg-panel: #151a2a;
+  --bg-hover: rgba(125, 211, 252, 0.1);
+  --bg-active: rgba(125, 211, 252, 0.16);
+  --bg-selected: #232d4a;
+  --bg-tab: #171d2f;
+  --bg-tab-active: #10131f;
+  --bg-titlebar: #121827;
+  --bg-statusbar: #172033;
+  --bg-input: #20283c;
+  --bg-terminal: #10131f;
+  --bg-dropdown: #151a2a;
+
+  --text-primary: #d8e3ff;
+  --text-secondary: #a7b5d9;
+  --text-muted: #6f7ea4;
+  --text-accent: #7dd3fc;
+  --text-statusbar: #d8e3ff;
+
+  --border: #2c3652;
+  --border-subtle: #20283d;
+  --border-strong: #3b496c;
+  --focus-border: #7dd3fc;
+
+  --accent: #7dd3fc;
+  --accent-soft: #8b9cf6;
+  --accent-glow: rgba(125, 211, 252, 0.18);
+  --success: #34d399;
+  --warning: #fbbf24;
+  --danger: #fb7185;
+}
+
+[data-theme="forest"] {
+  --bg-app: #101914;
+  --bg-sidebar: #18251f;
+  --bg-activity: #14201b;
+  --bg-editor: #14201b;
+  --bg-panel: #1a2a23;
+  --bg-hover: rgba(158, 231, 184, 0.1);
+  --bg-active: rgba(158, 231, 184, 0.16);
+  --bg-selected: #284438;
+  --bg-tab: #1b2a23;
+  --bg-tab-active: #14201b;
+  --bg-titlebar: #17231e;
+  --bg-statusbar: #20352b;
+  --bg-input: #23362d;
+  --bg-terminal: #14201b;
+  --bg-dropdown: #1a2a23;
+
+  --text-primary: #d7e7dc;
+  --text-secondary: #adc7b7;
+  --text-muted: #6c8f79;
+  --text-accent: #9ee7b8;
+  --text-statusbar: #d7e7dc;
+
+  --border: #31483c;
+  --border-subtle: #25372e;
+  --border-strong: #446253;
+  --focus-border: #9ee7b8;
+
+  --accent: #9ee7b8;
+  --accent-soft: #70d6c7;
+  --accent-glow: rgba(158, 231, 184, 0.18);
+  --success: #87d49a;
+  --warning: #d8b86a;
+  --danger: #e06c75;
+}
+
+[data-theme="rose"] {
+  --bg-app: #fffaf7;
+  --bg-sidebar: #fff3ed;
+  --bg-activity: #f3ded5;
+  --bg-editor: #fffaf7;
+  --bg-panel: #fff4ee;
+  --bg-hover: rgba(180, 95, 77, 0.09);
+  --bg-active: rgba(180, 95, 77, 0.15);
+  --bg-selected: #f5ddd3;
+  --bg-tab: #f8e7df;
+  --bg-tab-active: #fffaf7;
+  --bg-titlebar: #f4e2da;
+  --bg-statusbar: #e6cfc5;
+  --bg-input: #ffffff;
+  --bg-terminal: #fffaf7;
+  --bg-dropdown: #ffffff;
+
+  --text-primary: #46342e;
+  --text-secondary: #73564d;
+  --text-muted: #8f7168;
+  --text-accent: #9e5142;
+  --text-statusbar: #46342e;
+
+  --border: #dec4ba;
+  --border-subtle: #ecd9d1;
+  --border-strong: #caa99d;
+  --focus-border: #b45f4d;
+
+  --accent: #b45f4d;
+  --accent-soft: #d58c75;
+  --accent-glow: rgba(180, 95, 77, 0.16);
+  --success: #5c8a64;
+  --warning: #a87931;
+  --danger: #b84f42;
+}
+
+[data-theme="high-contrast-dark"] {
+  /* --- Khối Nền Hệ Thống (Backgrounds) --- */
+  --bg-app: #0a0a0c;          /* Nền tổng thể của ứng dụng, đen sâu giảm mỏi mắt */
+  --bg-sidebar: #111115;      /* Thanh bên, tối hơn để dồn tiêu điểm vào vùng trung tâm */
+  --bg-activity: #0d0d11;     /* Thanh công cụ biểu tượng (Activity Bar) ngoài cùng */
+  --bg-editor: #0a0a0c;       /* Khu vực nhập liệu/viết code chính */
+  --bg-panel: #121216;        /* Tấm bảng chứa terminal/output phía dưới */
+  --bg-hover: rgba(255, 255, 255, 0.12);  /* Trạng thái hover, tăng độ tương phản rõ rệt */
+  --bg-active: rgba(255, 255, 255, 0.2);  /* Trạng thái click/kích hoạt */
+  --bg-selected: #222530;     /* Phần tử đang được chọn trong danh sách */
+  --bg-tab: #141418;          /* Các tab không active, chìm vào nền */
+  --bg-tab-active: #0a0a0c;   /* Tab đang active, đồng bộ với nền editor */
+  --bg-titlebar: #111115;     /* Thanh tiêu đề trên cùng của ứng dụng */
+  --bg-statusbar: #007acc;    /* Thanh trạng thái dưới đáy, dùng màu neon nhận diện cao */
+  --bg-input: #000000;        /* Ô nhập liệu đen tuyệt đối để nổi bật chữ trắng */
+  --bg-terminal: #000000;     /* Trình giả lập dòng lệnh */
+  --bg-dropdown: #16161a;     /* Menu thả xuống */
+
+  /* --- Khối Văn Bản (Typography) --- */
+  --text-primary: #ffffff;    /* Chữ chính, trắng tinh khiết để đạt độ tương phản tối đa */
+  --text-secondary: #e2e8f0;  /* Chữ phụ, xám sáng rất dễ đọc */
+  --text-muted: #a0aec0;      /* Chữ bị vô hiệu hóa hoặc ghi chú (comment) */
+  --text-accent: #63b3ed;     /* Điểm nhấn chữ (ví dụ: links hoặc keywords quan trọng) */
+  --text-statusbar: #ffffff;  /* Chữ trên thanh trạng thái */
+
+  /* --- Hệ Thống Đường Viền (Borders - Quan trọng nhất cho High Contrast) --- */
+  --border: #4a5568;          /* Đường viền tiêu chuẩn phân chia các panel */
+  --border-subtle: #2d3748;   /* Đường viền mờ hơn cho các thành phần bên trong */
+  --border-strong: #ffffff;   /* Đường viền mạnh, dùng để đóng khung các thành phần quan trọng */
+  --focus-border: #f6ad55;    /* Viền khi focus, màu cam neon bắt mắt bắt buộc người dùng chú ý */
+
+  /* --- Màu Sắc Tín Hiệu & Điểm Nhấn (Accents & Status) --- */
+  --accent: #3182ce;          /* Màu thương hiệu chính (Xanh lam đậm tính công nghệ) */
+  --accent-soft: #1a365d;     /* Phiên bản giảm sắc độ của màu accent */
+  --accent-glow: rgba(66, 153, 225, 0.35); /* Hiệu ứng đổ bóng phát sáng */
+  --success: #48bb78;         /* Xanh lá cây tương phản cao cho thông báo thành công */
+  --warning: #ecc94b;         /* Vàng rực cho cảnh báo */
+  --danger: #f56565;          /* Đỏ tươi báo lỗi hệ thống */
+}

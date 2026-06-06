@@ -322,6 +322,18 @@
   max-width: calc(100% - 32px);
 }
 
+.chat-bubble-typing .chat-bubble-content::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 1em;
+  margin-left: 3px;
+  border-radius: 2px;
+  background: var(--text-accent);
+  vertical-align: -2px;
+  animation: chat-type-caret 0.8s ease-in-out infinite;
+}
+
 .chat-bubble-user .chat-bubble-content {
   flex: unset;
   max-width: 85%;
@@ -486,6 +498,17 @@
   30% {
     color: var(--text-primary);
     background: var(--bg-hover);
+  }
+}
+
+@keyframes chat-type-caret {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  46%,
+  100% {
+    opacity: 0.18;
   }
 }
 

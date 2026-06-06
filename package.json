@@ -1,7 +1,7 @@
 {
   "name": "NexCode-ide",
   "productName": "NexCode IDE",
-  "version": "3.5.7-Insider.4",
+  "version": "3.5.7-Insider.5",
   "description": "NexCode IDE — desktop code editor",
   "main": "dist/main/main.js",
   "author": {
@@ -15,17 +15,22 @@
     ".clipse": "./cli/bin/nexcode.js"
   },
   "scripts": {
+    "buildfast:Nocompile": "vite build",
     "buildfast": "vite build && npm run build:main",
     "debug": "concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
     "Devtools": "concurrently \"npm run dev:renderer\" \"npm run dev:electron-devtools\"",
-    "dev": "npm run build:main && concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
-    "dev:renderer": "vite build --watch --mode development",
-    "dev:electron": "wait-on dist/renderer/index.html && electron .",
+    "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
+    "dev:vite": "cross-env NODE_ENV=development vite --config vite.config.ts",
+    "dev:electron": "wait-on -t 60000 http://localhost:5173 && npm run build:main && cross-env VITE_DEV_SERVER=1 electron .",
+    "dev:renderer": "cross-env NODE_ENV=development vite --config vite.config.ts",
     "icons": "node scripts/generate-icons.mjs && node scripts/ensure-default-win32-icon.mjs && node scripts/normalize-win32-icons.mjs && node scripts/copy-win32-icons.mjs",
     "build": "npm run icons && npm run build:main && npm run build:renderer",
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "vite build && npm run build:agent-renderer",
     "build:agent-renderer": "node scripts/copy-agent-renderer.mjs",
+    "build:themes-hsixet": "node scripts/build-theme-hsixet.cjs",
+    "build:renderer-web": "npm run build:renderer && npx vite --config vite.config.ts",
+    "renderer:web": "npx vite --config vite.config.ts",
     "prepack:clean": "node scripts/prepack-clean.mjs",
     "pack": "npm run build && node scripts/pack-installer.mjs",
     "pack:portable": "npm run build && node scripts/pack-portable.mjs",
@@ -45,7 +50,9 @@
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^5.5.0",
     "electron-updater": "^6.8.3",
-    "monaco-editor": "0.55.1"
+    "fflate": "^0.8.3",
+    "monaco-editor": "^0.55.1",
+    "pdfjs-dist": "^4.0.269"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

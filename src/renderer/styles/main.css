@@ -167,7 +167,7 @@ body {
   display: flex;
   -webkit-app-region: no-drag;
 }
-/* Window button visuals are defined in components.css */
+/* Window button visuals are defined in components/buttons.css */
 
 /* Workbench grid */
 .app-shell {
@@ -249,7 +249,9 @@ body {
   background: var(--text-primary);
 }
 
-[data-theme="light"] .activity-item.active::before {
+[data-theme="light"] .activity-item.active::before,
+[data-theme="cute"] .activity-item.active::before,
+[data-theme="rose"] .activity-item.active::before {
    background: #333333;
 }
 
@@ -845,12 +847,16 @@ body {
   animation-delay: 2.1s;
 }
 
-[data-theme="light"] .editor-idle-egg {
+[data-theme="light"] .editor-idle-egg,
+[data-theme="cute"] .editor-idle-egg,
+[data-theme="rose"] .editor-idle-egg {
   background: color-mix(in srgb, var(--bg-panel) 94%, #dff8f5 6%);
   box-shadow: 0 14px 32px rgba(40, 50, 60, 0.18);
 }
 
-[data-theme="light"] .editor-idle-egg-code {
+[data-theme="light"] .editor-idle-egg-code,
+[data-theme="cute"] .editor-idle-egg-code,
+[data-theme="rose"] .editor-idle-egg-code {
   background: rgba(0, 0, 0, 0.04);
   color: #8a5a00;
 }
@@ -995,7 +1001,11 @@ body {
 }
 
 [data-theme="light"] .statusbar-btn:hover,
-[data-theme="light"] .statusbar-btn.active {
+[data-theme="light"] .statusbar-btn.active,
+[data-theme="cute"] .statusbar-btn:hover,
+[data-theme="cute"] .statusbar-btn.active,
+[data-theme="rose"] .statusbar-btn:hover,
+[data-theme="rose"] .statusbar-btn.active {
   background: rgba(0, 0, 0, 0.06);
 }
 

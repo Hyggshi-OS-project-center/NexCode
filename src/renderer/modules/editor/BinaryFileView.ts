@@ -1,10 +1,11 @@
 /**
  * Media preview panel — images (viewer), video, and audio.
  */
-import type { MediaKind } from '../../../shared/types';
+import type { MediaKind, ReadFileForEditorResult } from '../../../shared/types';
 import { renderFileIconHtml } from '../../utils/fileIcons';
 import { escapeHtml, formatFileSize } from '../../utils/textAnalysis';
 import { ImageViewer } from './ImageViewer';
+import { PdfViewer } from './PdfViewer';
 
 const EL = 'd' + 'iv';
 
@@ -12,6 +13,7 @@ export class BinaryFileView {
   private el: HTMLElement;
   private onOpenAnyway?: () => void;
   private imageViewer: ImageViewer | null = null;
+  private pdfViewer: PdfViewer | null = null;
 
   constructor(containerId: string) {
     const parent = document.getElementById(containerId)!;
@@ -26,9 +28,11 @@ export class BinaryFileView {
     size: number;
     mediaKind?: MediaKind;
     mediaUrl?: string;
+    dataBase64?: string;
     onOpenAnyway: () => void;
   }): void {
     this.disposeImageViewer();
+    this.disposePdfViewer();
     this.pausePlayback();
     this.onOpenAnyway = options.onOpenAnyway;
     const fileName = options.path.split(/[/\\]/).pop() ?? options.path;
@@ -51,8 +55,22 @@ export class BinaryFileView {
       const host = this.el.querySelector('.image-viewer-host') as HTMLElement;
       const alt = options.path.split(/[/\\]/).pop() ?? options.path;
       this.imageViewer = new ImageViewer(host, url, alt);
+    } else if (options.mediaKind === 'pdf' && url) {
+      this.el.classList.add('binary-view--pdf');
+      this.el.innerHTML = `
+        <${EL} class="binary-view-content binary-view-content-pdf">
+          <${EL} class="pdf-viewer-host"></${EL}>
+          <footer class="binary-view-footer">
+            <p class="binary-meta">${name} · ${sizeLabel}</p>
+            <button type="button" class="welcome-btn" data-action="open-anyway">Open as Text</button>
+          </footer>
+        </${EL}>
+      `;
+      const host = this.el.querySelector('.pdf-viewer-host') as HTMLElement;
+      this.pdfViewer = new PdfViewer(host, url, options.dataBase64);
     } else if (options.mediaKind && url) {
       this.el.classList.remove('binary-view--image');
+      (this.el.classList as DOMTokenList).remove('binary-view--pdf');
       const mediaBody = this.renderMedia(options.mediaKind, url, name);
       this.el.innerHTML = `
         <${EL} class="binary-view-content media-preview">
@@ -62,7 +80,7 @@ export class BinaryFileView {
         </${EL}>
       `;
     } else {
-      this.el.classList.remove('binary-view--image');
+      (this.el.classList as DOMTokenList).remove('binary-view--image', 'binary-view--pdf');
       this.el.innerHTML = `
         <${EL} class="binary-view-content binary-view-content-placeholder">
           <${EL} class="binary-icon binary-icon-file">${fileIconHtml}</${EL}>
@@ -88,6 +106,8 @@ export class BinaryFileView {
     switch (kind) {
       case 'image':
         return '';
+      case 'pdf':
+        return '';
       case 'video':
         return `<${EL} class="media-preview-frame media-preview-video">
           <video src="${safeUrl}" controls playsinline preload="metadata"></video>
@@ -107,6 +127,11 @@ export class BinaryFileView {
     this.imageViewer = null;
   }
 
+  private disposePdfViewer(): void {
+    this.pdfViewer?.destroy();
+    this.pdfViewer = null;
+  }
+
   private pausePlayback(): void {
     this.el.querySelectorAll('video, audio').forEach((el) => {
       (el as HTMLMediaElement).pause();
@@ -116,7 +141,8 @@ export class BinaryFileView {
   hide(): void {
     this.pausePlayback();
     this.disposeImageViewer();
-    this.el.classList.remove('binary-view--image');
+    this.disposePdfViewer();
+    this.el.classList.remove('binary-view--image', 'binary-view--pdf');
     this.el.classList.add('hidden');
   }
 

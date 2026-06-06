@@ -2,7 +2,7 @@
  * Monaco Editor module — core editing experience with themes, IntelliSense, minimap, zoom.
  */
 import * as monaco from 'monaco-editor';
-import type { AiEditorContext, AppSettings } from '../../../shared/types';
+import type { AiEditorContext, AppSettings, AppTheme } from '../../../shared/types';
 import { getLanguageFromPath } from '../../utils/language';
 
 export type EditorChangeHandler = (path: string) => void;
@@ -15,6 +15,25 @@ interface EditorInstance {
 }
 
 type EditorPane = 'primary' | 'secondary';
+
+function getMonacoTheme(theme: AppTheme): string {
+  switch (theme) {
+    case 'light':
+      return 'nexus-light';
+    case 'cute':
+      return 'nexus-cute';
+    case 'midnight':
+      return 'nexus-midnight';
+    case 'forest':
+      return 'nexus-forest';
+    case 'rose':
+      return 'nexus-rose';
+    case 'high-contrast-dark':
+      return 'nexus-high-contrast-dark';
+    default:
+      return 'nexus-dark';
+  }
+}
 
 export class EditorManager {
   private host: HTMLElement;
@@ -103,6 +122,94 @@ export class EditorManager {
         'editorCursor.foreground': '#000000',
         'editor.lineHighlightBackground': '#f0f0f0',
         'editorWidget.background': '#f3f3f3',
+      },
+    });
+
+    monaco.editor.defineTheme('nexus-cute', {
+      base: 'vs',
+      inherit: true,
+      rules: [],
+      colors: {
+        'editor.background': '#fff7fb',
+        'editor.foreground': '#4a3441',
+        'editorLineNumber.foreground': '#c9799d',
+        'editor.selectionBackground': '#ffd4e6',
+        'editorCursor.foreground': '#d14f85',
+        'editor.lineHighlightBackground': '#ffeaf3',
+        'editorWidget.background': '#fff0f7',
+        'editorSuggestWidget.background': '#fff0f7',
+        'minimap.background': '#fff7fb',
+      },
+    });
+
+    monaco.editor.defineTheme('nexus-midnight', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [],
+      colors: {
+        'editor.background': '#10131f',
+        'editor.foreground': '#d8e3ff',
+        'editorLineNumber.foreground': '#62709a',
+        'editor.selectionBackground': '#33446f',
+        'editor.inactiveSelectionBackground': '#252d46',
+        'editorCursor.foreground': '#7dd3fc',
+        'editor.lineHighlightBackground': '#171c2c',
+        'editorWidget.background': '#151a2a',
+        'editorSuggestWidget.background': '#151a2a',
+        'minimap.background': '#10131f',
+      },
+    });
+
+    monaco.editor.defineTheme('nexus-forest', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [],
+      colors: {
+        'editor.background': '#14201b',
+        'editor.foreground': '#d7e7dc',
+        'editorLineNumber.foreground': '#6c8f79',
+        'editor.selectionBackground': '#315846',
+        'editor.inactiveSelectionBackground': '#25382f',
+        'editorCursor.foreground': '#9ee7b8',
+        'editor.lineHighlightBackground': '#1a2a23',
+        'editorWidget.background': '#1a2a23',
+        'editorSuggestWidget.background': '#1a2a23',
+        'minimap.background': '#14201b',
+      },
+    });
+
+    monaco.editor.defineTheme('nexus-rose', {
+      base: 'vs',
+      inherit: true,
+      rules: [],
+      colors: {
+        'editor.background': '#fffaf7',
+        'editor.foreground': '#46342e',
+        'editorLineNumber.foreground': '#b07a6a',
+        'editor.selectionBackground': '#f4d7cc',
+        'editorCursor.foreground': '#b45f4d',
+        'editor.lineHighlightBackground': '#fff0ea',
+        'editorWidget.background': '#fff4ee',
+        'editorSuggestWidget.background': '#fff4ee',
+        'minimap.background': '#fffaf7',
+      },
+    });
+
+    monaco.editor.defineTheme('nexus-high-contrast-dark', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [],
+      colors: {
+        'editor.background': '#0a0a0c',
+        'editor.foreground': '#ffffff',
+        'editorLineNumber.foreground': '#4a5568',
+        'editor.selectionBackground': '#222530',
+        'editor.inactiveSelectionBackground': '#1a1a1e',
+        'editorCursor.foreground': '#f6ad55',
+        'editor.lineHighlightBackground': '#111115',
+        'editorWidget.background': '#121216',
+        'editorSuggestWidget.background': '#121216',
+        'minimap.background': '#0a0a0c',
       },
     });
   }
@@ -236,7 +343,7 @@ export class EditorManager {
 
   private buildOptions(): monaco.editor.IStandaloneEditorConstructionOptions {
     return {
-      theme: this.settings.theme === 'dark' ? 'nexus-dark' : 'nexus-light',
+      theme: getMonacoTheme(this.settings.theme),
       fontFamily: this.settings.fontFamily,
       fontSize: this.settings.fontSize,
       tabSize: this.settings.tabSize,
@@ -268,7 +375,7 @@ export class EditorManager {
   applySettings(settings: AppSettings): void {
     this.settings = settings;
     const options = {
-      theme: settings.theme === 'dark' ? 'nexus-dark' : 'nexus-light',
+      theme: getMonacoTheme(settings.theme),
       fontFamily: settings.fontFamily,
       fontSize: settings.fontSize,
       tabSize: settings.tabSize,
@@ -277,6 +384,7 @@ export class EditorManager {
     };
     this.editor?.updateOptions(options);
     this.editorSecondary?.updateOptions(options);
+    monaco.editor.setTheme(getMonacoTheme(settings.theme));
     document.body.dataset.theme = settings.theme;
   }
 

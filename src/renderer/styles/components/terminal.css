@@ -1,0 +1,163 @@
+/* Terminal panel styles */
+
+.panel-header-terminal {
+  gap: 8px;
+}
+
+.terminal-view-tabs {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.terminal-view-tab {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 0 10px;
+  min-height: 35px;
+  display: inline-flex;
+  align-items: center;
+  border-bottom: 1px solid transparent;
+}
+
+button.terminal-view-tab {
+  cursor: pointer;
+}
+
+.terminal-view-tab.active {
+  color: var(--text-primary);
+  border-bottom-color: var(--text-primary);
+}
+
+.terminal-placeholder {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+  background: var(--bg-terminal);
+}
+
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.icon-btn-labeled {
+  width: auto;
+  padding: 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.terminal-command-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.terminal-command-row .action-btn-sm {
+  flex-shrink: 0;
+}
+
+.terminal-prompt-label {
+  color: var(--accent);
+  font-family: Consolas, 'Cascadia Mono', 'Cascadia Code', monospace;
+  font-size: 12px;
+  max-width: min(42vw, 520px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+  flex-shrink: 0;
+}
+
+.terminal-command-input {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: Consolas, 'Cascadia Code', monospace;
+  font-size: 12px;
+}
+
+.terminal-command-input:focus {
+  outline: 1px solid var(--focus-border);
+  outline-offset: -1px;
+}
+
+.terminal-xterm-wrap {
+  height: 100%;
+}
+
+/* Classic CMD chrome — dark theme only (light uses workbench vars) */
+[data-theme="dark"] .terminal-shell-cmd {
+  --bg-terminal: #0c0c0c;
+}
+
+[data-theme="dark"] .terminal-shell-cmd .panel-header-terminal {
+  background: #1a1a1a;
+  color: #cccccc;
+  border-bottom-color: #3a3a3a;
+}
+
+[data-theme="dark"] .terminal-shell-cmd .terminal-command-row {
+  background: #0c0c0c;
+  border-bottom-color: #3a3a3a;
+}
+
+[data-theme="dark"] .terminal-shell-cmd .terminal-prompt-label {
+  color: #cccccc;
+  font-family: Consolas, 'Lucida Console', 'Courier New', monospace;
+}
+
+[data-theme="dark"] .terminal-shell-cmd .terminal-command-input {
+  background: #0c0c0c;
+  color: #cccccc;
+  border-color: #5a5a5a;
+  font-family: Consolas, 'Lucida Console', 'Courier New', monospace;
+}
+
+[data-theme="light"] .terminal-prompt-label {
+  color: var(--text-secondary);
+}
+
+[data-theme="light"] .terminal-command-row .action-btn-sm {
+  background: var(--bg-input);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .terminal-command-row .action-btn-sm:hover {
+  background: var(--bg-hover);
+}
+
+[data-theme="dark"] .terminal-shell-powershell .terminal-prompt-label {
+  color: #9cdcfe;
+}
+
+/* xterm overrides */
+.xterm {
+  height: 100%;
+}
+
+.xterm-viewport {
+  border-radius: var(--radius-sm);
+}

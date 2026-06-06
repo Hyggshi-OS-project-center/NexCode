@@ -1,8 +1,17 @@
 /**
  * Bottom status bar - cursor position, language, theme, and active file info.
  */
-import type { AppSettings } from '../../../shared/types';
+import type { AppSettings, AppTheme } from '../../../shared/types';
 import { getDisplayLanguage } from '../../utils/language';
+
+const THEME_LABELS: Record<AppTheme, string> = {
+  dark: 'Dark',
+  light: 'Light',
+  cute: 'Cute',
+  midnight: 'Midnight',
+  forest: 'Forest',
+  rose: 'Rose',
+};
 
 export class StatusBar {
   private elFile = document.getElementById('status-file')!;
@@ -78,6 +87,6 @@ export class StatusBar {
 
   applySettings(settings: AppSettings): void {
     this.elIndent.textContent = `Spaces: ${settings.tabSize}`;
-    this.elTheme.textContent = settings.theme === 'dark' ? 'Dark' : 'Light';
+    this.elTheme.textContent = THEME_LABELS[settings.theme] ?? settings.theme;
   }
 }

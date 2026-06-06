@@ -34,8 +34,8 @@ export class UpdateController {
     );
 
     void window.electronAPI.checkForUpdates().then((result) => {
-      if (result.available && result.info) this.setUpdateAvailable(result.info);
-      else if (result.error) this.showToast('Update check failed', result.error, 'error');
+      if (result?.available && result.info) this.setUpdateAvailable(result.info);
+      else if (result?.error) this.showToast('Update check failed', result.error, 'error');
     });
   }
 
@@ -76,7 +76,7 @@ export class UpdateController {
         void window.electronAPI.setUpdateChannel(channel).then(() => {
           // Re-check updates với channel mới
           void window.electronAPI.checkForUpdates().then((result) => {
-            if (result.available && result.info) this.setUpdateAvailable(result.info);
+            if (result?.available && result.info) this.setUpdateAvailable(result.info);
           });
         });
       });

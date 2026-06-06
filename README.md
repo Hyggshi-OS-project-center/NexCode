@@ -97,7 +97,7 @@ NexCode is part of the broader **Hyggshi OS** ecosystem:
 
 - [File an issue](https://github.com/Hyggshi-OS-project-center/NexCode/issues)
 - [Request a new feature](https://github.com/Hyggshi-OS-project-center/NexCode/issues/new)
-- Join the Hyggshi OS Discord community
+- [Join the Hyggshi OS Discord community](https://discord.gg/PZuDkFzJtc)
 
 ## License
 

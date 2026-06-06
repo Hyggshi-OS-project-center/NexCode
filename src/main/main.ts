@@ -102,9 +102,10 @@ function createWindow(): void {
       nodeIntegration: false,
       sandbox: false,
       backgroundThrottling: true,
-      // Allow file:// protocol access in dev mode (needed for binary file previews
-      // like images/video/audio when the page is loaded from http:// Vite dev server)
-      webSecurity: !isDev,
+      // webSecurity is left at its secure default (true). Binary file previews
+      // (images / video / audio) work in both modes without disabling it:
+      //   - Electron: fs:readFileForEditor returns base64 data URLs.
+      //   - Vite browser dev: blob: URLs are created from in-memory File refs.
     },
   });
 

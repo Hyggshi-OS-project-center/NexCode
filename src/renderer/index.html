@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' https: file: data: blob:; media-src 'self' https: file: data: blob:; connect-src 'self' file: blob: ws: http://127.0.0.1:*; worker-src 'self' blob:;" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' blob: data:; style-src 'self' 'unsafe-inline' data:; font-src 'self' data:; img-src 'self' https: file: data: blob:; media-src 'self' https: file: data: blob:; connect-src 'self' file: blob: ws: http://127.0.0.1:*; worker-src 'self' blob:; frame-src 'self' blob: data: https: http:;" />
   <title>NexCode IDE</title>
   <link rel="icon" href="./favicon.ico" type="image/x-icon" />
   <link rel="stylesheet" href="./styles/themes.css" />
@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="./styles/chat.css" />
   <link rel="stylesheet" href="./styles/diff-editor.css" />
   <link rel="stylesheet" href="./styles/splash.css" />
+  <link rel="stylesheet" href="./styles/components/browser-view.css" />
 </head>
 <body data-theme="dark">
   <div id="app-splash" class="app-splash" role="dialog" aria-modal="true" aria-live="polite" aria-busy="true" aria-label="Loading NexCode">

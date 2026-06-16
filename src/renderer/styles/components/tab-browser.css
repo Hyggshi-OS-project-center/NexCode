@@ -1,0 +1,299 @@
+/**
+ * Tab Browser overlay — quick tab switcher with filtering, keyboard nav, and history.
+ */
+
+.tab-browser-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 10vh;
+  animation: tab-browser-fadein 0.1s ease-out;
+}
+
+@keyframes tab-browser-fadein {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.tab-browser-dialog {
+  background: var(--bg-secondary, #252526);
+  border: 1px solid var(--border-primary, #3c3c3c);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+  width: 560px;
+  max-width: calc(100vw - 64px);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  animation: tab-browser-slidein 0.12s ease-out;
+}
+
+@keyframes tab-browser-slidein {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ── Header ─────────────────────────────────── */
+
+.tab-browser-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-primary, #3c3c3c);
+  user-select: none;
+}
+
+.tab-browser-icon {
+  flex-shrink: 0;
+  color: var(--fg-accent, #007acc);
+}
+
+.tab-browser-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg-primary, #cccccc);
+}
+
+.tab-browser-count {
+  font-size: 12px;
+  color: var(--fg-secondary, #858585);
+  margin-left: auto;
+}
+
+/* ── Filter row ─────────────────────────────── */
+
+.tab-browser-filter-row {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border-primary, #3c3c3c);
+}
+
+.tab-browser-filter {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border-primary, #3c3c3c);
+  border-radius: 4px;
+  background: var(--bg-tertiary, #1e1e1e);
+  color: var(--fg-primary, #cccccc);
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.tab-browser-filter:focus {
+  border-color: var(--fg-accent, #007acc);
+}
+
+.tab-browser-filter::placeholder {
+  color: var(--fg-secondary, #858585);
+}
+
+/* ── Tab list ────────────────────────────────── */
+
+.tab-browser-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px;
+  min-height: 0;
+}
+
+.tab-browser-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.tab-browser-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tab-browser-list::-webkit-scrollbar-thumb {
+  background: var(--border-primary, #3c3c3c);
+  border-radius: 3px;
+}
+
+/* ── Individual tab item ────────────────────── */
+
+.tab-browser-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.08s ease;
+  user-select: none;
+}
+
+.tab-browser-item:hover {
+  background: var(--bg-hover, #2a2d2e);
+}
+
+.tab-browser-item.selected {
+  background: var(--bg-selected, #37373d);
+  outline: 1px solid var(--fg-accent, #007acc);
+}
+
+.tab-browser-item.active-tab {
+  background: var(--bg-active-tab, #2a2d2e);
+}
+
+.tab-browser-item-icon {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tab-browser-item-icon img,
+.tab-browser-item-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.tab-browser-item-name {
+  flex: 0 1 auto;
+  font-size: 13px;
+  color: var(--fg-primary, #cccccc);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.tab-browser-item-name.dirty {
+  color: var(--fg-warning, #cca700);
+}
+
+.tab-browser-item-path {
+  flex: 1 1 auto;
+  font-size: 11px;
+  color: var(--fg-secondary, #858585);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  direction: rtl;
+  text-align: left;
+}
+
+.tab-browser-item-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--fg-accent, #007acc);
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ── Empty state ────────────────────────────── */
+
+.tab-browser-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 16px;
+  color: var(--fg-secondary, #858585);
+  font-size: 13px;
+}
+
+.tab-browser-empty-icon {
+  font-size: 24px;
+}
+
+/* ── Footer ──────────────────────────────────── */
+
+.tab-browser-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border-primary, #3c3c3c);
+  user-select: none;
+}
+
+.tab-browser-footer-key {
+  font-size: 11px;
+  color: var(--fg-secondary, #858585);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tab-browser-footer-key kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  font-size: 10px;
+  font-family: inherit;
+  background: var(--bg-tertiary, #1e1e1e);
+  border: 1px solid var(--border-primary, #3c3c3c);
+  border-radius: 3px;
+  color: var(--fg-primary, #cccccc);
+  line-height: 1;
+}
+
+/* ── Light theme overrides ─────────────────── */
+
+[data-theme="light"] .tab-browser-overlay {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+[data-theme="light"] .tab-browser-dialog {
+  background: #f3f3f3;
+  border-color: #d4d4d4;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="light"] .tab-browser-title {
+  color: #333333;
+}
+
+[data-theme="light"] .tab-browser-filter {
+  background: #ffffff;
+  border-color: #cecece;
+  color: #333333;
+}
+
+[data-theme="light"] .tab-browser-filter:focus {
+  border-color: #007acc;
+}
+
+[data-theme="light"] .tab-browser-item:hover {
+  background: #e4e6f1;
+}
+
+[data-theme="light"] .tab-browser-item.selected {
+  background: #d6d9e8;
+}
+
+[data-theme="light"] .tab-browser-item-name {
+  color: #333333;
+}
+
+[data-theme="light"] .tab-browser-item-path {
+  color: #888888;
+}

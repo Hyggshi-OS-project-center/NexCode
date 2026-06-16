@@ -3,6 +3,9 @@ REM ============================================
 REM code-build.bat — Build TypeScript source only
 REM ============================================
 setlocal
+
+set NODE_OPTIONS=--max-old-space-size=4096
+
 cd /d "%~dp0.."
 echo [code-build] Compiling TypeScript...
 call npm run build:main

@@ -5,12 +5,4 @@ declare module '*?worker' {
   export default WorkerFactory;
 }
 
-import type { ElectronAPI } from '../shared/types';
-
-declare global {
-  interface Window {
-    electronAPI?: ElectronAPI;
-  }
-}
-
 export {};

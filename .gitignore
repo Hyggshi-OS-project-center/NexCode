@@ -125,3 +125,6 @@ Thumbs.db
 .continue
 .claude
 .nexcode
+
+# C/C++ files
+cli/**/*.o

@@ -36,9 +36,33 @@ export interface CodeValidationResult {
 }
 
 export type TerminalShell = 'cmd' | 'powershell' | 'bash';
-export type AiProvider = 'gemini' | 'openrouter';
-export type AppTheme = 'dark' | 'light' | 'cute' | 'midnight' | 'forest' | 'rose' | 'high-contrast-dark';
-
+export type AiProvider = 'gemini' | 'openrouter' | 'claude';
+export type AppTheme = 
+  | 'dark' 
+  | 'light' 
+  | 'cute' 
+  | 'midnight' 
+  | 'forest' 
+  | 'rose' 
+  | 'high-contrast-dark'
+  | 'Cyber Lime'
+  | 'Electric Cobalt'
+  | 'Absolute Obsidian'
+  | 'Crimson Matrix'
+  | 'Ultraviolet Horizon'
+  | 'Toxic Amber'
+  | 'Glitch Teal'
+  | 'Deep Void Magenta'
+  | 'Neo Gold'
+  | 'Radioactive Poison'
+  | 'Polar Blizzard'
+  | 'Laser Orange'
+  | 'Deep Ocean Cyan'
+  | 'Synthwave Pink'
+  | 'Industrial Steel'
+  | '2017 Dark (Visual Studio - C/C++)'
+  | '2017 Light (Visual Studio - C/C++)';
+  
 export interface ShellAdapter {
   SHELL: TerminalShell;
   formatPrompt(cwd: string | null): string;
@@ -74,6 +98,10 @@ export interface AppSettings {
   openRouterApiKey: string;
   /** OpenRouter model id, e.g. openai/gpt-4o-mini */
   openRouterModel: string;
+  /** Anthropic Claude API key for the autonomous AI agent */
+  claudeApiKey: string;
+  /** Claude model id, e.g. claude-sonnet-4-20250514 */
+  claudeModel: string;
   /** Enable Chromium sandbox (requires restart) — off by default for memory savings */
   sandbox: boolean;
 }
@@ -164,6 +192,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   aiProvider: 'gemini',
   openRouterApiKey: '',
   openRouterModel: 'openai/gpt-4o-mini',
+  claudeApiKey: '',
+  claudeModel: 'claude-sonnet-4-20250514',
   sandbox: false,
 };
 
@@ -220,6 +250,9 @@ export type IpcChannel =
   | 'recentFiles:push'
   | 'recentFiles:remove'
   | 'fs:readFileBinary'
+  | 'models:list-gemini'
+  | 'models:list-openrouter'
+  | 'models:list-claude'
 
 /** Paths to open from OS file association or second-instance launch */
 export interface OpenPathsPayload {
@@ -323,6 +356,8 @@ export type UpdateChannel = 'stable' | 'insider';
 
 export interface ElectronAPI {
   openFolder: () => Promise<string | null>;
+  toggleDevtools: () => void;
+  getCrashAudio: () => Promise<string | null>;
   openFile: () => Promise<string | null>;
   saveFile: (defaultPath?: string) => Promise<string | null>;
   readDir: (dirPath: string, options?: { showHidden?: boolean }) => Promise<FileEntry[]>;
@@ -344,6 +379,7 @@ export interface ElectronAPI {
   showAboutWindow: () => void;
   showEasterEggWindow: () => void;
   closeEasterEggWindow: () => void;
+  reportCrash: (detail: { message: string; stack?: string; source?: string }) => void;
   openExternal: (url: string) => Promise<void>;
   getAboutInfo: () => Promise<AboutInfo>;
   getLatestReleaseNotes: () => Promise<ReleaseNotesInfo>;
@@ -382,6 +418,12 @@ export interface ElectronAPI {
   removeRecentFile: (filePath: string) => Promise<string[]>;
   /** Wipe the entire recent-files list. */
   clearRecentFiles: () => Promise<string[]>;
+  /** Fetch available Gemini models from the API dynamically. */
+  listGeminiModels: () => Promise<{ value: string; label: string; supportsImages: boolean }[]>;
+  /** Fetch available OpenRouter models from the API dynamically. */
+  listOpenRouterModels: () => Promise<{ value: string; label: string; supportsImages: boolean }[]>;
+  /** Fetch available Claude models from the API dynamically. */
+  listClaudeModels: () => Promise<{ value: string; label: string; supportsImages: boolean }[]>;
 }
 
 declare global {

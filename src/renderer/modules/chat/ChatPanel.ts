@@ -28,7 +28,8 @@ interface ChatProcessItem {
 
 export type AgentActionsHandler = (actions: AiAgentAction[]) => void | Promise<void>;
 
-const GEMINI_MODEL_OPTIONS = [
+/** Fallback Gemini model list used when the API key is missing or the API call fails. */
+const GEMINI_MODEL_FALLBACK = [
   { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
   { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite' },
   { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview' },
@@ -40,7 +41,8 @@ const GEMINI_MODEL_OPTIONS = [
   { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite' },
 ] as const;
 
-const OPENROUTER_MODEL_OPTIONS = [
+/** Fallback OpenRouter model list used when the API key is missing or the API call fails. */
+const OPENROUTER_MODEL_FALLBACK = [
   { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini (vision)', supportsImages: true },
   { value: 'openai/gpt-4.1-mini', label: 'GPT-4.1 Mini (vision)', supportsImages: true },
   { value: 'openai/gpt-4.1', label: 'GPT-4.1 (vision)', supportsImages: true },
@@ -51,6 +53,7 @@ const OPENROUTER_MODEL_OPTIONS = [
   { value: 'openai/gpt-5.4', label: 'GPT-5.4 (vision)', supportsImages: true },
   { value: 'openai/gpt-5.3-codex', label: 'GPT-5.3 Codex (vision)', supportsImages: true },
   { value: 'openai/gpt-oss-120b:free', label: 'GPT-OSS 120B (free)' },
+  { value: 'anthropic/claude-fable-5', label: 'Claude Fable 5 (vision)', supportsImages: true },
   { value: 'anthropic/claude-opus-4.8-fast', label: 'Claude Opus 4.8 Fast (vision)', supportsImages: true },
   { value: 'anthropic/claude-opus-4.8', label: 'Claude Opus 4.8 (vision)', supportsImages: true },
   { value: 'anthropic/claude-opus-4.7', label: 'Claude Opus 4.7 (vision)', supportsImages: true },
@@ -72,6 +75,7 @@ const OPENROUTER_MODEL_OPTIONS = [
   { value: 'xiaomi/mimo-v2.5-pro', label: 'Mimo V2.5 Pro (vision)', supportsImages: true },
   { value: 'xiaomi/mimo-v2.5', label: 'Mimo V2.5 (vision)', supportsImages: true },
   { value: 'minimax/minimax-m2.7', label: 'minimax m2.7 (vision)', supportsImages: true },
+  { value: 'qwen/qwen3.7-max', label: 'Qwen 3.7 Max (vision)', supportsImages: true },
 ] as const;
 
 export class ChatPanel {
@@ -218,6 +222,8 @@ export class ChatPanel {
         const settings = this.getSettings();
         if (settings.aiProvider === 'openrouter') {
           void this.onSettingsChange({ openRouterModel: model });
+        } else if (settings.aiProvider === 'claude') {
+          void this.onSettingsChange({ claudeModel: model });
         } else {
           void this.onSettingsChange({ geminiModel: model });
         }
@@ -238,21 +244,31 @@ export class ChatPanel {
     this.renderProcessSection();
     this.renderPendingAttachments();
     this.renderMessages();
+
+    // Fetch the latest model lists from the API on mount
+    void this.refreshGeminiModels();
+    void this.refreshOpenRouterModels();
+    void this.refreshClaudeModels();
   }
 
   private renderSettingsBar(): void {
     if (!this.mounted) return;
     const settings = this.getSettings();
     const bar = this.container.querySelector('.chat-model-bar');
-    bar?.classList.toggle('hidden', settings.aiProvider !== 'gemini' && settings.aiProvider !== 'openrouter');
+    bar?.classList.toggle('hidden', settings.aiProvider !== 'gemini' && settings.aiProvider !== 'openrouter' && settings.aiProvider !== 'claude');
     if (!this.modelSelect) return;
 
     const current =
       settings.aiProvider === 'openrouter'
         ? settings.openRouterModel || 'openai/gpt-4o-mini'
-        : settings.geminiModel || 'gemini-2.5-flash';
+        : settings.aiProvider === 'claude'
+          ? settings.claudeModel || 'claude-sonnet-4-20250514'
+          : settings.geminiModel || 'gemini-2.5-flash';
     this.modelSelect.innerHTML = this.renderModelOptions(settings);
-    this.modelSelect.value = current;
+    // Try to preserve the current selection after re-render
+    if (this.modelSelect.querySelector(`option[value="${CSS.escape(current)}"]`)) {
+      this.modelSelect.value = current;
+    }
   }
 
   private renderContextBar(): void {
@@ -272,12 +288,27 @@ export class ChatPanel {
     bar.setAttribute('title', context.activeFilePath);
   }
 
+  /** Cache of dynamically-fetched models from the API. */
+  private geminiModelsCache: { value: string; label: string; supportsImages: boolean }[] | null = null;
+  private openRouterModelsCache: { value: string; label: string; supportsImages: boolean }[] | null = null;
+  private claudeModelsCache: { value: string; label: string; supportsImages: boolean }[] | null = null;
+
   private renderModelOptions(settings: AppSettings): string {
+    const isClaude = settings.aiProvider === 'claude';
     const isOpenRouter = settings.aiProvider === 'openrouter';
-    const options = isOpenRouter ? OPENROUTER_MODEL_OPTIONS : GEMINI_MODEL_OPTIONS;
-    const selected = isOpenRouter
-      ? settings.openRouterModel || 'openai/gpt-4o-mini'
-      : settings.geminiModel || 'gemini-2.5-flash';
+    let options: readonly { value: string; label: string; supportsImages?: boolean }[];
+    let selected: string;
+
+    if (isClaude) {
+      options = this.claudeModelsCache ?? [];
+      selected = settings.claudeModel || 'claude-sonnet-4-20250514';
+    } else if (isOpenRouter) {
+      options = this.openRouterModelsCache ?? OPENROUTER_MODEL_FALLBACK;
+      selected = settings.openRouterModel || 'openai/gpt-4o-mini';
+    } else {
+      options = this.geminiModelsCache ?? GEMINI_MODEL_FALLBACK;
+      selected = settings.geminiModel || 'gemini-2.5-flash';
+    }
     const hasSelected = options.some((option) => option.value === selected);
     const custom = hasSelected
       ? ''
@@ -290,6 +321,45 @@ export class ChatPanel {
           `<option value="${this.escapeAttr(option.value)}" ${option.value === selected ? 'selected' : ''}>${this.escapeHtml(option.label)}</option>`,
       ).join('')
     );
+  }
+
+  /** Fetch Gemini models dynamically via IPC, falling back to the static list on failure. */
+  async refreshGeminiModels(): Promise<void> {
+    try {
+      const models = await window.electronAPI.listGeminiModels();
+      if (models.length > 0) {
+        this.geminiModelsCache = models;
+        this.renderSettingsBar();
+      }
+    } catch {
+      // keep using the fallback list
+    }
+  }
+
+  /** Fetch OpenRouter models dynamically via IPC, falling back to the static list on failure. */
+  async refreshOpenRouterModels(): Promise<void> {
+    try {
+      const models = await window.electronAPI.listOpenRouterModels();
+      if (models.length > 0) {
+        this.openRouterModelsCache = models;
+        this.renderSettingsBar();
+      }
+    } catch {
+      // keep using the fallback list
+    }
+  }
+
+  /** Fetch Claude models dynamically via IPC, falling back to the static list on failure. */
+  async refreshClaudeModels(): Promise<void> {
+    try {
+      const models = await window.electronAPI.listClaudeModels();
+      if (models.length > 0) {
+        this.claudeModelsCache = models;
+        this.renderSettingsBar();
+      }
+    } catch {
+      // keep using the fallback list
+    }
   }
 
   private autoResizeInput(): void {
@@ -819,7 +889,7 @@ function guessMimeType(name: string): string {
 
 function openRouterModelSupportsImages(model: string): boolean {
   const normalized = model.trim().toLowerCase();
-  return OPENROUTER_MODEL_OPTIONS.some(
+  return OPENROUTER_MODEL_FALLBACK.some(
     (option) => option.value === normalized && 'supportsImages' in option && option.supportsImages === true,
   );
 }

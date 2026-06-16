@@ -6,7 +6,8 @@ import { bindReliableTextFocus } from '../../utils/textInputFocus';
 
 export type SettingsChangeHandler = (settings: Partial<AppSettings>) => void;
 
-const GEMINI_MODEL_OPTIONS = [
+/** Fallback Gemini model list used when no API key is configured or the API call fails. */
+const GEMINI_MODEL_FALLBACK = [
   { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
   { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
   { value: 'gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite' },
@@ -22,6 +23,23 @@ const THEME_OPTIONS: { value: AppTheme; label: string }[] = [
   { value: 'forest', label: 'Forest Mint' },
   { value: 'rose', label: 'Rose Latte' },
   { value: 'high-contrast-dark', label: 'High Contrast Dark' },
+  { value: 'Cyber Lime', label: 'Cyber Lime' },
+  { value: 'Electric Cobalt', label: 'Electric Cobalt' },
+  { value: 'Absolute Obsidian', label: 'Absolute Obsidian' },
+  { value: 'Crimson Matrix', label: 'Crimson Matrix' },
+  { value: 'Ultraviolet Horizon', label: 'Ultraviolet Horizon' },
+  { value: 'Toxic Amber', label: 'Toxic Amber' },
+  { value: 'Glitch Teal', label: 'Glitch Teal' },
+  { value: 'Deep Void Magenta', label: 'Deep Void Magenta' },
+  { value: 'Neo Gold', label: 'Neo Gold' },
+  { value: 'Radioactive Poison', label: 'Radioactive Poison' },
+  { value: 'Polar Blizzard', label: 'Polar Blizzard' },
+  { value: 'Laser Orange', label: 'Laser Orange' },
+  { value: 'Deep Ocean Cyan', label: 'Deep Ocean Cyan' },
+  { value: 'Synthwave Pink', label: 'Synthwave Pink' },
+  { value: 'Industrial Steel', label: 'Industrial Steel' },
+  { value: '2017 Dark (Visual Studio - C/C++)', label: 'C/C++ HC Dark' },
+  { value: '2017 Light (Visual Studio - C/C++)', label: 'C/C++ HC Light' },
 ];
 
 const FONT_FAMILY_OPTIONS = [
@@ -137,6 +155,7 @@ export class SettingsPanel {
             <select id="set-aiProvider" class="settings-provider-select">
               <option value="gemini" ${s.aiProvider === 'gemini' ? 'selected' : ''}>Google Gemini</option>
               <option value="openrouter" ${s.aiProvider === 'openrouter' ? 'selected' : ''}>OpenRouter</option>
+              <option value="claude" ${s.aiProvider === 'claude' ? 'selected' : ''}>Anthropic Claude</option>
             </select>
           </div>
           <div class="setting-row setting-row-field ${s.aiProvider === 'gemini' ? '' : 'hidden'}">
@@ -165,6 +184,18 @@ export class SettingsPanel {
             <input type="text" id="set-openRouterModel" placeholder="openai/gpt-4o-mini" value="${this.escapeAttr(s.openRouterModel || '')}" autocomplete="off" />
           </div>
           <p class="settings-hint ${s.aiProvider === 'openrouter' ? '' : 'hidden'}">Use an OpenRouter model id such as <code>openai/gpt-4o-mini</code>. Tool-capable models work best for file and terminal actions.</p>
+          <div class="setting-row setting-row-field ${s.aiProvider === 'claude' ? '' : 'hidden'}">
+            <label>Claude API Key</label>
+            <div class="settings-key-row">
+              <input type="password" id="set-claudeKey" placeholder="sk-ant-..." value="${this.escapeAttr(s.claudeApiKey || '')}" autocomplete="off" />
+              <button type="button" class="welcome-btn" id="btn-toggle-claude-key">Show</button>
+            </div>
+          </div>
+          <div class="setting-row setting-row-field ${s.aiProvider === 'claude' ? '' : 'hidden'}">
+            <label>Claude Model</label>
+            <input type="text" id="set-claudeModel" placeholder="claude-sonnet-4-20250514" value="${this.escapeAttr(s.claudeModel || '')}" autocomplete="off" />
+          </div>
+          <p class="settings-hint ${s.aiProvider === 'claude' ? '' : 'hidden'}">Use a Claude model id such as <code>claude-sonnet-4-20250514</code>. Get an API key at <a href="https://console.anthropic.com/" target="_blank" rel="noopener">Anthropic Console</a>.</p>
         </div>
         <div class="settings-group">
           <h3>Terminal</h3>
@@ -257,6 +288,13 @@ export class SettingsPanel {
     const openRouterModel = this.container.querySelector('#set-openRouterModel') as HTMLInputElement | null;
     openRouterModel?.addEventListener('change', () => this.patch({ openRouterModel: openRouterModel.value.trim() }));
 
+    const claudeKey = this.container.querySelector('#set-claudeKey') as HTMLInputElement | null;
+    claudeKey?.addEventListener('change', () => this.patch({ claudeApiKey: claudeKey.value.trim() }));
+    this.bindKeyVisibility('set-claudeKey', 'btn-toggle-claude-key');
+
+    const claudeModel = this.container.querySelector('#set-claudeModel') as HTMLInputElement | null;
+    claudeModel?.addEventListener('change', () => this.patch({ claudeModel: claudeModel.value.trim() }));
+
     this.container.querySelector('#btn-settings-about')?.addEventListener('click', () => {
       window.electronAPI.showAboutWindow();
     });
@@ -264,6 +302,9 @@ export class SettingsPanel {
     this.container.querySelectorAll<HTMLElement>('input:not([type="checkbox"]), textarea').forEach((el) => {
       bindReliableTextFocus(el);
     });
+
+    // Trigger dynamic model refresh whenever the Gemini section becomes visible
+    void this.refreshGeminiModels();
   }
 
   private bind(id: string, event: string, handler: (el: HTMLElement) => void): void {
@@ -291,20 +332,36 @@ export class SettingsPanel {
     this.onChange(partial);
   }
 
+  /** Cache of dynamically-fetched Gemini models */
+  private geminiModelsCache: { value: string; label: string; supportsImages: boolean }[] | null = null;
+
   private renderGeminiModelOptions(selectedModel: string): string {
     const selected = selectedModel || 'gemini-2.5-flash';
-    const hasSelected = GEMINI_MODEL_OPTIONS.some((option) => option.value === selected);
+    const models = this.geminiModelsCache ?? GEMINI_MODEL_FALLBACK;
+    const hasSelected = models.some((option) => option.value === selected);
     const custom = hasSelected
       ? ''
       : `<option value="${this.escapeAttr(selected)}" selected>${this.escapeAttr(selected)}</option>`;
 
     return (
       custom +
-      GEMINI_MODEL_OPTIONS.map(
+      models.map(
         (option) =>
           `<option value="${this.escapeAttr(option.value)}" ${option.value === selected ? 'selected' : ''}>${option.label}</option>`,
       ).join('')
     );
+  }
+
+  /** Fetch Gemini models dynamically via IPC, falling back to the static list on failure. */
+  async refreshGeminiModels(): Promise<void> {
+    try {
+      const models = await window.electronAPI.listGeminiModels();
+      if (models.length > 0) {
+        this.geminiModelsCache = models;
+      }
+    } catch {
+      // keep using the fallback list
+    }
   }
 
   private renderThemeOptions(selectedTheme: AppTheme): string {

@@ -9,6 +9,7 @@ import type {
   AiChatResult,
   AiEditorContext,
   AppSettings,
+  AppTheme,
   CodeValidationResult,
   ElectronAPI,
   FileStatResult,
@@ -25,6 +26,7 @@ import { EditorBanner } from './modules/editor/EditorBanner';
 import { hasManyInvisibleCharacters } from './utils/textAnalysis';
 import { Explorer } from './modules/explorer/Explorer';
 import { TabManager } from './modules/tabs/TabManager';
+import { TabBrowser } from './modules/tabs/TabBrowser';
 import { TerminalModule } from './modules/terminal/TerminalModule';
 import { SearchReplace } from './modules/search/SearchReplace';
 import { SettingsPanel } from './modules/settings/SettingsPanel';
@@ -43,6 +45,7 @@ import { GitPanel } from './modules/git/GitPanel';
 import { ChatPanel } from './modules/chat/ChatPanel';
 import { DiffEditor } from './modules/editor/DiffEditor';
 import type { DiffEditorPendingWrite } from './modules/editor/DiffEditor';
+import { BrowserView } from './modules/editor/BrowserView';
 import { SplashScreen } from './modules/ui/SplashScreen';
 import { NexCodeMoments } from './modules/ui/NexCodeMoments';
 import { UpdateController } from './modules/update/UpdateController';
@@ -90,6 +93,12 @@ const browserElectronAPI: ElectronAPI = (() => {
           case 'closeEasterEggWindow':
           case 'openAgent':
             return noop;
+          case 'toggleDevtools':
+            return () => {
+              // In browser mode, just use the browser's built-in DevTools (F12)
+            };
+          case 'getCrashAudio':
+            return async () => null;
           case 'openExternal':
           case 'setUpdateChannel':
           case 'writeTerminal':
@@ -288,7 +297,11 @@ class NexusApp {
   private workspacePath: string | null = null;
   private dirtyFiles = new Set<string>();
   private pluginHost = new PluginHost();
-  private vsixStore = new VsixExtensionStore();
+  private vsixStore = new VsixExtensionStore((themeId) => {
+    if (themeId && this.settings.theme !== themeId) {
+      void this.applySettings({ theme: themeId as AppTheme });
+    }
+  });
   private binaryMeta = new Map<string, ReadFileForEditorResult>();
   private forceTextOpen = new Set<string>();
   private fileSnapshots = new Map<string, WatchedFileSnapshot>();
@@ -321,6 +334,8 @@ class NexusApp {
   private releaseNotes!: ReleaseNotesView;
   private renameService!: RenameService;
   private diffEditor!: DiffEditor;
+  private tabBrowser!: TabBrowser;
+  private browserView!: BrowserView;
   /** Set while the diff editor is reviewing AI changes — suppresses file watcher reloads */
   private diffEditorActive = false;
   /** Trimmed terminal output sample for moment detection — capped to reduce memory */
@@ -417,6 +432,42 @@ class NexusApp {
       (oldPath, newPath, isDirectory) => this.handleRenamedPath(oldPath, newPath, isDirectory),
     );
     this.explorer.setExtensionHost(this.pluginHost);
+    this.pluginHost.configure({
+      getWorkspacePath: () => this.workspacePath,
+      getSettings: () => this.settings,
+      getActiveFilePath: () => this.tabs.getActivePath(),
+      getActiveText: () => {
+        const path = this.tabs.getActivePath();
+        return path ? this.editor.getContent(path) : '';
+      },
+      getActiveLanguageId: () => this.editor.getActiveModel()?.getLanguageId() ?? 'plaintext',
+      replaceActiveText: (text) => {
+        const path = this.tabs.getActivePath();
+        if (!path) return;
+        if (this.editor.replaceActiveText(text)) {
+          this.onEditorChange(path);
+        }
+      },
+      insertIntoActiveEditor: (text) => this.editor.insertTextAtCursor(text),
+      openTextDocument: async (path) => {
+        const result = await window.electronAPI.readFileForEditor(path);
+        return {
+          uri: path,
+          fileName: path,
+          languageId: result.isBinary ? 'plaintext' : (this.editor.getActiveModel()?.getLanguageId() ?? 'plaintext'),
+          getText: () => result.content ?? '',
+        };
+      },
+      showMessage: (message, severity) => {
+        const prefix = severity === 'error' ? 'Error' : severity === 'warning' ? 'Warning' : 'Info';
+        document.getElementById('status-file')!.textContent = `${prefix}: ${message}`;
+      },
+      setStatus: (message) => {
+        document.getElementById('status-file')!.textContent = message;
+      },
+      readFile: (path) => window.electronAPI.readFile(path),
+      writeFile: (path, content) => window.electronAPI.writeFile(path, content),
+    });
     this.tabs = new TabManager(
       'tab-bar',
       (path, x, y) => this.onTabContextMenu(path, x, y),
@@ -476,7 +527,10 @@ class NexusApp {
       },
     );
 
-    this.tabs.on('select', (path) => void this.switchToFile(path));
+    // Initialize BrowserView for HTML file preview
+    this.browserView = new BrowserView('editor-container');
+    
+    this.tabs.on('select', (path) => { void this.switchToFile(path); });
     this.tabs.on('close', (path) => this.onTabClose(path));
 
     this.startFileChangeWatcher();
@@ -531,6 +585,49 @@ class NexusApp {
       requestAnimationFrame(() => this.editor.layout());
     });
 
+    // Back/Forward navigation buttons — open Tab Browser to navigate tabs
+    document.getElementById('titlebar-nav-back')?.addEventListener('click', () => {
+      // Try to navigate back in history first
+      const path = this.tabBrowser.navigateBack();
+      if (path) {
+        this.tabs.setActive(path);
+      } else {
+        // No history — open Tab Browser overlay to let user pick a tab
+        this.tabBrowser.updateTabs(this.tabs.getTabs(), this.tabs.getActivePath());
+        this.tabBrowser.show();
+      }
+    });
+    document.getElementById('titlebar-nav-forward')?.addEventListener('click', () => {
+      // Try to navigate forward in history first
+      const path = this.tabBrowser.navigateForward();
+      if (path) {
+        this.tabs.setActive(path);
+      } else {
+        // No history — open Tab Browser overlay to let user pick a tab
+        this.tabBrowser.updateTabs(this.tabs.getTabs(), this.tabs.getActivePath());
+        this.tabBrowser.show();
+      }
+    });
+
+    // F12 — toggle Developer Tools
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'F12' && !e.ctrlKey && !e.shiftKey && !e.metaKey) {
+        e.preventDefault();
+        window.electronAPI.toggleDevtools();
+      }
+    });
+
+    // Ctrl+Tab — open Tab Browser overlay (quick tab switcher)
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === 'Tab') {
+        e.preventDefault();
+        e.stopPropagation();
+        // Update Tab Browser with current tab data before showing
+        this.tabBrowser.updateTabs(this.tabs.getTabs(), this.tabs.getActivePath());
+        this.tabBrowser.toggle();
+      }
+    });
+
     window.addEventListener('beforeunload', () => {
       if (this.fileWatchTimer !== null) window.clearInterval(this.fileWatchTimer);
       this.idleEasterEgg.dispose();
@@ -539,9 +636,68 @@ class NexusApp {
     });
   }
 
+  /** Pre-load crash audio so it plays instantly on error */
+  private crashAudio: HTMLAudioElement | null = null;
+
+  private async initCrashAudio(): Promise<void> {
+    try {
+      // Load the crash.ogg as a base64 data URL from the main process
+      // The main process resolves the actual path (user override or built-in)
+      const audioUrl = await window.electronAPI.getCrashAudio();
+      if (!audioUrl) return;
+      const audio = new Audio(audioUrl);
+      audio.preload = 'auto';
+      audio.volume = 0.7;
+      audio.load();
+      this.crashAudio = audio;
+    } catch {
+      // Best-effort
+    }
+  }
+
+  private playCrashAudio(): void {
+    if (!this.crashAudio) return;
+    try {
+      this.crashAudio.currentTime = 0;
+      void this.crashAudio.play().catch(() => {});
+    } catch {
+      // Best-effort
+    }
+  }
+
   private bindCrashMoments(): void {
-    window.addEventListener('error', () => this.moments.showCrash());
-    window.addEventListener('unhandledrejection', () => this.moments.showCrash());
+    this.initCrashAudio();
+
+    window.addEventListener('error', (event) => {
+      this.playCrashAudio();
+      this.moments.showCrash();
+      const target = event.error instanceof Error ? event.error : new Error(event.message || 'Renderer error');
+      window.electronAPI.reportCrash({
+        source: 'renderer.error',
+        message: target.message,
+        stack: target.stack,
+      });
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+      this.playCrashAudio();
+      this.moments.showCrash();
+      const reason = event.reason;
+      const err =
+        reason instanceof Error
+          ? reason
+          : new Error(
+              typeof reason === 'string'
+                ? reason
+                : typeof reason?.message === 'string'
+                  ? reason.message
+                  : 'Unhandled rejection',
+            );
+      window.electronAPI.reportCrash({
+        source: 'renderer.unhandledrejection',
+        message: err.message,
+        stack: err.stack,
+      });
+    });
   }
 
   private handleTerminalOutput(data: string): void {
@@ -679,6 +835,12 @@ class NexusApp {
           {
             label: 'Open AI IDE Agent',
             action: () => window.electronAPI.openAgent(),
+          },
+          { separator: true },
+          {
+            label: 'Toggle Developer Tools',
+            shortcut: 'F12',
+            action: () => window.electronAPI.toggleDevtools(),
           },
           { separator: true },
           {
@@ -884,6 +1046,23 @@ class NexusApp {
     if (!path) return;
     if (this.releaseNotes.isReleaseNotesPath(path)) return;
     if (this.binaryMeta.has(path) && !this.forceTextOpen.has(path)) return;
+
+    // For HTML/HTM files, open the BrowserView (embedded browser tab) instead of
+    const ext = path.split('.').pop()?.toLowerCase() ?? '';
+    if (ext === 'html' || ext === 'htm') {
+      // Hide other views
+      this.editor.hide();
+      this.binaryView.hide();
+      this.releaseNotes.hide();
+      this.mdPreview.hide();
+      this.welcome.hide();
+      // Show the browser view with the file URL
+      this.browserView.show(path);
+      this.statusBar.setFile(path);
+      this.statusBar.setLanguage('HTML');
+      document.getElementById('status-file')!.textContent = 'Browser preview';
+      return;
+    }
 
     if (this.dirtyFiles.has(path)) await this.saveFile(path, false);
 
@@ -1155,6 +1334,7 @@ class NexusApp {
   private async showTextTab(path: string, content: string, checkUnicode = false): Promise<void> {
     this.releaseNotes.hide();
     this.binaryView.hide();
+    this.browserView.hide();
     this.statusBar.restoreTextEditor(this.settings);
     this.updateRunButtonForActiveTab();
     this.editor.show();
@@ -1516,6 +1696,7 @@ class NexusApp {
       this.editorBanner.hide();
       this.mdPreview.hide();
       this.releaseNotes.hide();
+      this.browserView.hide();
       this.statusBar.setFile('Welcome');
       this.statusBar.setInternalPage('Welcome');
       this.updateRunButtonForActiveTab();
@@ -1525,6 +1706,7 @@ class NexusApp {
     if (this.binaryMeta.has(path) && !this.forceTextOpen.has(path)) {
       this.showBinaryTab(path);
       this.statusBar.setFile(path);
+      this.browserView.hide();
       return;
     }
 
@@ -1888,6 +2070,22 @@ class NexusApp {
     }
   }
 
+  /**
+   * Update the back/forward navigation buttons based on history state.
+   */
+  private updateNavButtons(): void {
+    const backBtn = document.getElementById('titlebar-nav-back') as HTMLButtonElement | null;
+    const forwardBtn = document.getElementById('titlebar-nav-forward') as HTMLButtonElement | null;
+    if (backBtn) {
+      backBtn.classList.toggle('disabled', !this.tabBrowser.canGoBack);
+      backBtn.title = this.tabBrowser.canGoBack ? 'Back' : 'No history';
+    }
+    if (forwardBtn) {
+      forwardBtn.classList.toggle('disabled', !this.tabBrowser.canGoForward);
+      forwardBtn.title = this.tabBrowser.canGoForward ? 'Forward' : 'No history';
+    }
+  }
+
   private updateViewState(): void {
     if (this.tabs.hasTabs()) {
       const active = this.tabs.getActivePath();
@@ -1902,6 +2100,7 @@ class NexusApp {
         this.editorBanner.hide();
         this.mdPreview.hide();
         this.releaseNotes.hide();
+        this.browserView.hide();
         this.statusBar.setFile('Welcome');
         this.statusBar.setInternalPage('Welcome');
         this.updateRunButtonForActiveTab();
@@ -1911,15 +2110,18 @@ class NexusApp {
         if (active && this.binaryMeta.has(active) && !this.forceTextOpen.has(active)) {
           this.showBinaryTab(active);
           this.mdPreview.hide();
+          this.browserView.hide();
         } else if (this.releaseNotes.isReleaseNotesPath(active)) {
           this.editor.hide();
           this.binaryView.hide();
           this.editorBanner.hide();
           this.mdPreview.hide();
+          this.browserView.hide();
           void this.releaseNotes.show();
         } else {
           this.releaseNotes.hide();
           this.binaryView.hide();
+          this.browserView.hide();
           this.editor.show();
           this.updateRunButtonForActiveTab();
           if (!isMarkdown) {
@@ -1933,6 +2135,7 @@ class NexusApp {
       this.binaryView.hide();
       this.releaseNotes.hide();
       this.mdPreview.hide();
+      this.browserView.hide();
       const previewBtn = document.getElementById('btn-md-preview') as HTMLButtonElement | null;
       if (previewBtn) previewBtn.style.display = 'none';
       this.updateRunButtonForActiveTab();
@@ -1945,3 +2148,21 @@ class NexusApp {
 }
 
 void new NexusApp().init();
+
+window.addEventListener('unhandledrejection', (event) => {
+  const reason = event.reason;
+  const message =
+    typeof reason === 'string'
+      ? reason
+      : reason instanceof Error
+        ? reason.message
+        : typeof reason?.message === 'string'
+          ? reason.message
+          : '';
+
+  // Monaco and related disposables can reject with a cancellation error during
+  // normal editor churn. These are expected and should not surface as fatal.
+  if (message === 'Canceled' || message === 'Canceled: Canceled') {
+    event.preventDefault();
+  }
+});

@@ -43,6 +43,28 @@ interface GeminiResponse {
   error?: { message?: string; code?: number };
 }
 
+// Shape returned by the Gemini models list endpoint
+interface GeminiModelEntry {
+  name: string;           // "models/gemini-2.5-flash"
+  displayName: string;
+  supportedGenerationMethods?: string[];
+  inputTokenLimit?: number;
+  outputTokenLimit?: number;
+  description?: string;
+}
+
+interface GeminiModelsListResponse {
+  models?: GeminiModelEntry[];
+  nextPageToken?: string;
+  error?: { message?: string; code?: number };
+}
+
+export interface ListedModel {
+  value: string;        // model id ready to pass to the API
+  label: string;        // human-readable display name
+  supportsImages: boolean;
+}
+
 const TOOLS = [
   {
     functionDeclarations: [
@@ -87,6 +109,56 @@ const TOOLS = [
     ],
   },
 ];
+
+// ---------------------------------------------------------------------------
+// Dynamic model listing
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetches available Gemini models from the API.
+ * Call this from the main process and expose via IPC — the API key stays
+ * in the secure Node context and never touches the renderer.
+ *
+ * Returns a sorted array of ListedModel, or throws on network/auth failure.
+ */
+export async function listGeminiModels(apiKey: string): Promise<ListedModel[]> {
+  if (!apiKey?.trim()) {
+    throw new Error('No Gemini API key provided.');
+  }
+
+  const allModels: GeminiModelEntry[] = [];
+  let pageToken: string | undefined;
+
+  // Paginate through all available models
+  do {
+    const pagePath =
+      `/v1beta/models?key=${encodeURIComponent(apiKey)}&pageSize=200` +
+      (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '');
+
+    const raw = await httpsGet(GEMINI_HOST, pagePath);
+    const data = JSON.parse(raw) as GeminiModelsListResponse;
+
+    if (data.error) {
+      throw new Error(`Gemini API error: ${data.error.message ?? 'Unknown'} (code ${data.error.code ?? '?'})`);
+    }
+
+    if (data.models) allModels.push(...data.models);
+    pageToken = data.nextPageToken;
+  } while (pageToken);
+
+  return allModels
+    .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+    .map((m) => ({
+      value: m.name.replace(/^models\//, ''),
+      label: m.displayName || m.name.replace(/^models\//, ''),
+      supportsImages: true, // All current Gemini generateContent models support vision
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
+// ---------------------------------------------------------------------------
+// Chat
+// ---------------------------------------------------------------------------
 
 function resolveInWorkspace(filePath: string, workspacePath: string | null): string {
   if (path.isAbsolute(filePath)) return path.normalize(filePath);
@@ -222,7 +294,9 @@ Be concise and proactive.`,
       };
     }
 
-    const part = candidateContent.parts.find((candidatePart) => candidatePart.functionCall || candidatePart.text);
+    const part = candidateContent.parts.find(
+      (candidatePart) => candidatePart.functionCall || candidatePart.text,
+    );
     if (!part) {
       return { error: 'Received an empty or unsupported response from Gemini.', actions };
     }
@@ -235,11 +309,10 @@ Be concise and proactive.`,
       try {
         if (call.name === 'write_file') {
           const resolved = resolveInWorkspace(call.args.filePath, workspacePath);
-          // Read original content (for diff editor review) - do NOT write to disk yet
           let originalContent = '';
           try {
             originalContent = await fs.promises.readFile(resolved, 'utf-8');
-          } catch { /* file does not exist yet — originalContent stays '' */ }
+          } catch { /* file does not exist yet */ }
           const newContent = call.args.content ?? '';
           actions.push({
             type: 'write_file',
@@ -262,7 +335,9 @@ Be concise and proactive.`,
           const result = await runCommandCapture(call.args.command, cwd);
           functionResult = {
             code: result.code,
-            output: result.output || (result.code === 0 ? 'Command completed without output.' : 'Command failed without output.'),
+            output:
+              result.output ||
+              (result.code === 0 ? 'Command completed without output.' : 'Command failed without output.'),
           };
           actions.push({
             type: 'run_command',
@@ -322,13 +397,41 @@ function formatEditorContext(context: AiEditorContext | null): string {
   }
 
   if (context.content) {
-    lines.push(`Active file content${context.contentTruncated ? ' (truncated)' : ''}:`, context.content);
+    lines.push(
+      `Active file content${context.contentTruncated ? ' (truncated)' : ''}:`,
+      context.content,
+    );
   }
 
   return lines.join('\n');
 }
 
-async function makeRequestWithRetry(url: string, body: string, maxRetries: number): Promise<GeminiResponse> {
+// ---------------------------------------------------------------------------
+// HTTP helpers
+// ---------------------------------------------------------------------------
+
+/** Simple GET helper used for the models list endpoint. */
+function httpsGet(hostname: string, urlPath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      { hostname, path: urlPath, method: 'GET', timeout: 30_000 },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+      },
+    );
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('Request timed out')); });
+    req.end();
+  });
+}
+
+async function makeRequestWithRetry(
+  url: string,
+  body: string,
+  maxRetries: number,
+): Promise<GeminiResponse> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const response = await new Promise<GeminiResponse>((resolve, reject) => {
@@ -356,7 +459,11 @@ async function makeRequestWithRetry(url: string, body: string, maxRetries: numbe
                 }
                 resolve(json);
               } catch {
-                resolve({ error: { message: `Failed to parse Gemini response: ${raw.slice(0, 200)}` } });
+                resolve({
+                  error: {
+                    message: `Failed to parse Gemini response: ${raw.slice(0, 200)}`,
+                  },
+                });
               }
             });
           },
@@ -377,7 +484,9 @@ async function makeRequestWithRetry(url: string, body: string, maxRetries: numbe
       if (attempt === maxRetries) {
         return {
           error: {
-            message: `Request failed after ${maxRetries} retries: ${err instanceof Error ? err.message : 'Unknown error'}`,
+            message: `Request failed after ${maxRetries} retries: ${
+              err instanceof Error ? err.message : 'Unknown error'
+            }`,
           },
         };
       }

@@ -6,6 +6,13 @@ setlocal
 
 cd /d "%~dp0.."
 
+echo [env 4GB] Setting environment variable to allow 4GB+ memory usage for Electron Builder...
+set NODE_OPTIONS=--max-old-space-size=4096
+if %errorlevel% neq 0 (
+  echo [env 4GB] Setting environment variable FAILED
+  exit /b %errorlevel%
+)
+
 echo [build-app] Building icons and compiling source...
 call npm run build
 if %errorlevel% neq 0 (
@@ -14,7 +21,9 @@ if %errorlevel% neq 0 (
 )
 
 echo [build-app] Packaging application...
-call npx electron-builder --win --x64 --config.nsis.artifactName="NexCode.IDE-${version}-Setup-${arch}.${ext}"
+
+echo [build-app] Skipping native module rebuild (npmRebuild=false) -- canvas is unused optional dep of pdfjs-dist
+call npx electron-builder --win --x64 --config.npmRebuild=false --config.nsis.artifactName="NexCode.IDE-${version}-Setup-${arch}.${ext}"
 if %errorlevel% neq 0 (
   echo [build-app] Pack FAILED
   exit /b %errorlevel%

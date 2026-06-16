@@ -20,8 +20,8 @@ export class ConvenienceStoreView {
   render(extensions: InstalledVsixExtension[]): void {
     if (extensions.length === 0) {
       this.listEl.innerHTML = `
-        <p class="sidebar-section-empty">No .vsix extensions installed</p>
-        <p class="sidebar-section-hint">Add manifests to <code>.nexcode/extensions/*.vsix</code></p>
+        <p class="sidebar-section-empty">No theme extensions installed</p>
+        <p class="sidebar-section-hint">Add manifests to <code>.nexcode/extensions/*.hsixet</code> or <code>*.hsiext</code></p>
       `;
       return;
     }
@@ -35,7 +35,7 @@ export class ConvenienceStoreView {
         <span class="store-icon">📦</span>
         <span class="store-meta">
           <span class="store-name">${escapeHtml(ext.manifest.name)}</span>
-          <span class="store-version">v${escapeHtml(ext.manifest.version)} · .vsix</span>
+          <span class="store-version">v${escapeHtml(ext.manifest.version)} · theme manifest</span>
         </span>
       `;
       row.title = ext.path;

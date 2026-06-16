@@ -4,15 +4,6 @@
 import type { AppSettings, AppTheme } from '../../../shared/types';
 import { getDisplayLanguage } from '../../utils/language';
 
-const THEME_LABELS: Record<AppTheme, string> = {
-  dark: 'Dark',
-  light: 'Light',
-  cute: 'Cute',
-  midnight: 'Midnight',
-  forest: 'Forest',
-  rose: 'Rose',
-};
-
 export class StatusBar {
   private elFile = document.getElementById('status-file')!;
   private elCwd = document.getElementById('status-cwd')!;
@@ -87,6 +78,57 @@ export class StatusBar {
 
   applySettings(settings: AppSettings): void {
     this.elIndent.textContent = `Spaces: ${settings.tabSize}`;
-    this.elTheme.textContent = THEME_LABELS[settings.theme] ?? settings.theme;
+    this.elTheme.textContent = this.themeLabel(settings.theme);
+  }
+
+  private themeLabel(theme: AppTheme): string {
+    switch (theme) {
+      case 'dark':
+        return 'Dark';
+      case 'light':
+        return 'Light';
+      case 'cute':
+        return 'Cute';
+      case 'midnight':
+        return 'Midnight';
+      case 'forest':
+        return 'Forest';
+      case 'rose':
+        return 'Rose';
+      case 'high-contrast-dark':
+        return 'High Contrast Dark';
+      case 'Cyber Lime':
+        return 'Cyber Lime';
+      case 'Electric Cobalt':
+        return 'Electric Cobalt';
+      case 'Absolute Obsidian':
+        return 'Absolute Obsidian';
+      case 'Crimson Matrix':
+        return 'Crimson Matrix';
+      case 'Ultraviolet Horizon':
+        return 'Ultraviolet Horizon';
+      case 'Toxic Amber':
+        return 'Toxic Amber';
+      case 'Glitch Teal':
+        return 'Glitch Teal';
+      case 'Deep Void Magenta':
+        return 'Deep Void Magenta';
+      case 'Neo Gold':
+        return 'Neo Gold';
+      case 'Radioactive Poison':
+        return 'Radioactive Poison';
+      case 'Polar Blizzard':
+        return 'Polar Blizzard';
+      case 'Laser Orange':
+        return 'Laser Orange';
+      case 'Deep Ocean Cyan':
+        return 'Deep Ocean Cyan';
+      case 'Synthwave Pink':
+        return 'Synthwave Pink';
+      case 'Industrial Steel':
+        return 'Industrial Steel';
+      default:
+        return theme;
+    }
   }
 }

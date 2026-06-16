@@ -1,0 +1,335 @@
+# electron-builder.yml — file associations use unique ProgIDs from scripts/file-associations.cjs
+appId: com.nexcode.ide
+productName: NexCode IDE
+icon: build/icon.ico
+npmRebuild: false
+asar: true
+afterPack: ./scripts/after-pack.cjs
+
+directories:
+  output: dist/pack-out
+  buildResources: build
+
+extraResources:
+  - from: build/icon.ico
+    to: icon.ico
+  - from: src/renderer/public/insider-icon.ico
+    to: insider-icon.ico
+
+files:
+  - dist/main/**/*
+  - dist/agents/**/*
+  - dist/renderer/**/*
+  - dist/shared/**/*
+  - package.json
+
+win:
+  icon: icon.ico
+  executableName: NexCode IDE
+  signAndEditExecutable: false
+  target:
+    - target: portable
+      arch:
+        - x64
+        - arm64
+        - ia32
+    - target: nsis
+      arch:
+        - x64
+        - arm64
+        - ia32
+
+portable:
+  artifactName: "${productName}-${version}-portable.${ext}"
+
+nsis:
+  oneClick: false
+  perMachine: true
+  allowToChangeInstallationDirectory: true
+  artifactName: "${productName}-${version}-setup.${ext}"
+  shortcutName: NexCode IDE
+  installerIcon: icon.ico
+  uninstallerIcon: icon.ico
+  installerHeaderIcon: icon.ico
+  license: LICENSE
+  include: scripts/installer.nsh
+
+linux:
+  icon: build/icon.png
+  category: Development
+  executableName: nexcode-ide
+  artifactName: "${productName}-${version}-${arch}.${ext}"
+  maintainer: "Hyggshi OS major project center <hyggshidev@gmail.com>"
+  target:
+    - target: AppImage
+      arch:
+        - x64
+        - arm64
+    - target: deb
+      arch:
+        - x64
+        - arm64
+    - target: rpm
+      arch:
+        - x64
+        - arm64
+    - target: tar.gz
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+
+deb:
+  packageCategory: devel
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - libasound2
+
+fileAssociations:
+  - ext: js
+    name: NexCodeIDE.JavaScript
+    description: JavaScript Source File
+    icon: win32/javascript.ico
+  - ext: mjs
+    name: NexCodeIDE.JavaScript
+    description: JavaScript Source File
+    icon: win32/javascript.ico
+  - ext: cjs
+    name: NexCodeIDE.JavaScript
+    description: JavaScript Source File
+    icon: win32/javascript.ico
+  - ext: jsx
+    name: NexCodeIDE.React
+    description: React Source File
+    icon: win32/react.ico
+  - ext: tsx
+    name: NexCodeIDE.React
+    description: React Source File
+    icon: win32/react.ico
+  - ext: ts
+    name: NexCodeIDE.TypeScript
+    description: TypeScript Source File
+    icon: win32/typescript.ico
+  - ext: json
+    name: NexCodeIDE.Json
+    description: JSON Document
+    icon: win32/json.ico
+  - ext: jsonc
+    name: NexCodeIDE.Json
+    description: JSON Document
+    icon: win32/json.ico
+  - ext: py
+    name: NexCodeIDE.Python
+    description: Python Source File
+    icon: win32/python.ico
+  - ext: pyw
+    name: NexCodeIDE.Python
+    description: Python Source File
+    icon: win32/python.ico
+  - ext: html
+    name: NexCodeIDE.Html
+    description: HTML Document
+    icon: win32/html.ico
+  - ext: htm
+    name: NexCodeIDE.Html
+    description: HTML Document
+    icon: win32/html.ico
+  - ext: css
+    name: NexCodeIDE.Css
+    description: CSS Stylesheet
+    icon: win32/css.ico
+  - ext: scss
+    name: NexCodeIDE.Scss
+    description: SCSS Stylesheet
+    icon: win32/sass.ico
+  - ext: sass
+    name: NexCodeIDE.Sass
+    description: Sass Stylesheet
+    icon: win32/sass.ico
+  - ext: less
+    name: NexCodeIDE.Less
+    description: Less Stylesheet
+    icon: win32/less.ico
+  - ext: md
+    name: NexCodeIDE.Markdown
+    description: Markdown Document
+    icon: win32/markdown.ico
+  - ext: mdx
+    name: NexCodeIDE.Markdown
+    description: Markdown Document
+    icon: win32/markdown.ico
+  - ext: markdown
+    name: NexCodeIDE.Markdown
+    description: Markdown Document
+    icon: win32/markdown.ico
+  - ext: java
+    name: NexCodeIDE.Java
+    description: Java Source File
+    icon: win32/java.ico
+  - ext: class
+    name: NexCodeIDE.Java
+    description: Java Source File
+    icon: win32/java.ico
+  - ext: jar
+    name: NexCodeIDE.Java
+    description: Java Source File
+    icon: win32/java.ico
+  - ext: c
+    name: NexCodeIDE.C
+    description: C Source File
+    icon: win32/c.ico
+  - ext: h
+    name: NexCodeIDE.C
+    description: C Source File
+    icon: win32/c.ico
+  - ext: cpp
+    name: NexCodeIDE.Cpp
+    description: C++ Source File
+    icon: win32/cpp.ico
+  - ext: cc
+    name: NexCodeIDE.Cpp
+    description: C++ Source File
+    icon: win32/cpp.ico
+  - ext: cxx
+    name: NexCodeIDE.Cpp
+    description: C++ Source File
+    icon: win32/cpp.ico
+  - ext: hpp
+    name: NexCodeIDE.Cpp
+    description: C++ Source File
+    icon: win32/cpp.ico
+  - ext: rs
+    name: NexCodeIDE.Cpp
+    description: C++ Source File
+    icon: win32/cpp.ico
+  - ext: cs
+    name: NexCodeIDE.CSharp
+    description: C# Source File
+    icon: win32/csharp.ico
+  - ext: php
+    name: NexCodeIDE.Php
+    description: PHP Source File
+    icon: win32/php.ico
+  - ext: rb
+    name: NexCodeIDE.Ruby
+    description: Ruby Source File
+    icon: win32/ruby.ico
+  - ext: go
+    name: NexCodeIDE.Go
+    description: Go Source File
+    icon: win32/go.ico
+  - ext: kt
+    name: NexCodeIDE.Kotlin
+    description: Kotlin Source File
+    icon: win32/kotlin.ico
+  - ext: kts
+    name: NexCodeIDE.Kotlin
+    description: Kotlin Source File
+    icon: win32/kotlin.ico
+  - ext: lua
+    name: NexCodeIDE.Lua
+    description: Lua Source File
+    icon: win32/lua.ico
+  - ext: luau
+    name: NexCodeIDE.Luau
+    description: Luau Source File
+    icon: win32/luau.ico
+  - ext: hosc
+    name: NexCodeIDE.Hosc
+    description: Hyggshi OS Code Language Source File
+    icon: win32/hosc.ico
+  - ext: vue
+    name: NexCodeIDE.Vue
+    description: Vue Component
+    icon: win32/vue.ico
+  - ext: sql
+    name: NexCodeIDE.Sql
+    description: SQL Script
+    icon: win32/sql.ico
+  - ext: ps1
+    name: NexCodeIDE.PowerShell
+    description: PowerShell Script
+    icon: win32/powershell.ico
+  - ext: psm1
+    name: NexCodeIDE.PowerShell
+    description: PowerShell Script
+    icon: win32/powershell.ico
+  - ext: sh
+    name: NexCodeIDE.Shell
+    description: Shell Script
+    icon: win32/shell.ico
+  - ext: bash
+    name: NexCodeIDE.Shell
+    description: Shell Script
+    icon: win32/shell.ico
+  - ext: bat
+    name: NexCodeIDE.Shell
+    description: Shell Script
+    icon: win32/shell.ico
+  - ext: cmd
+    name: NexCodeIDE.Shell
+    description: Shell Script
+    icon: win32/shell.ico
+  - ext: yml
+    name: NexCodeIDE.Yaml
+    description: YAML Document
+    icon: win32/yaml.ico
+  - ext: yaml
+    name: NexCodeIDE.Yaml
+    description: YAML Document
+    icon: win32/yaml.ico
+  - ext: xml
+    name: NexCodeIDE.Xml
+    description: XML Document
+    icon: win32/xml.ico
+  - ext: svg
+    name: NexCodeIDE.Xml
+    description: XML Document
+    icon: win32/xml.ico
+  - ext: vsix
+    name: NexCodeIDE.Xml
+    description: XML Document
+    icon: win32/xml.ico
+  - ext: pug
+    name: NexCodeIDE.Pug
+    description: Pug Template
+    icon: win32/jade.ico
+  - ext: jade
+    name: NexCodeIDE.Pug
+    description: Pug Template
+    icon: win32/jade.ico
+  - ext: ini
+    name: NexCodeIDE.Config
+    description: Configuration File
+    icon: win32/config.ico
+  - ext: cfg
+    name: NexCodeIDE.Config
+    description: Configuration File
+    icon: win32/config.ico
+  - ext: conf
+    name: NexCodeIDE.Config
+    description: Configuration File
+    icon: win32/config.ico
+  - ext: env
+    name: NexCodeIDE.Config
+    description: Configuration File
+    icon: win32/config.ico
+  - ext: txt
+    name: NexCodeIDE.Text
+    description: Text Document
+    icon: win32/default.ico
+  - ext: log
+    name: NexCodeIDE.Text
+    description: Text Document
+    icon: win32/default.ico
+  - ext: text
+    name: NexCodeIDE.Text
+    description: Text Document
+    icon: win32/default.ico

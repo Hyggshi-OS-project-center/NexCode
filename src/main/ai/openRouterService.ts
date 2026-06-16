@@ -6,17 +6,99 @@ import fs from 'fs';
 import path from 'path';
 import type { AiAgentAction, AiChatMessage, AiChatResult, AiEditorContext } from '../../shared/types';
 import { runCommandCapture } from './agentWorkflow';
+import type { ListedModel } from './geminiService';
 
 const OPENROUTER_HOST = 'openrouter.ai';
 const OPENROUTER_PATH = '/api/v1/chat/completions';
+const OPENROUTER_MODELS_PATH = '/api/v1/models';
 const DEFAULT_OPENROUTER_MODEL = 'openai/gpt-4o-mini';
-const KNOWN_OPENROUTER_IMAGE_MODELS = new Set([
-  'openai/gpt-4o-mini',
-  'openai/gpt-4.1-mini',
-  'openai/gpt-4.1',
-  'anthropic/claude-3.5-sonnet',
-  'google/gemini-2.0-flash-001',
-]);
+
+// ---------------------------------------------------------------------------
+// Dynamic model listing
+// ---------------------------------------------------------------------------
+
+interface OpenRouterModelEntry {
+  id: string;
+  name: string;
+  architecture?: {
+    modality?: string;               // e.g. "text+image->text"
+    input_modalities?: string[];     // e.g. ["text", "image"]
+    output_modalities?: string[];
+  };
+  pricing?: {
+    prompt?: string;
+    completion?: string;
+  };
+  context_length?: number;
+}
+
+interface OpenRouterModelsListResponse {
+  data?: OpenRouterModelEntry[];
+  error?: { message?: string; code?: number };
+}
+
+/**
+ * Fetches available OpenRouter models from the API.
+ * Intended to be called from the main process and exposed via IPC so the
+ * API key never reaches the renderer.
+ *
+ * An unauthenticated request still works but returns fewer models;
+ * passing the API key gives the full list including private/beta models.
+ */
+export async function listOpenRouterModels(apiKey?: string): Promise<ListedModel[]> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'HTTP-Referer': 'https://nexcode.local',
+    'X-OpenRouter-Title': 'NexCode IDE',
+  };
+  if (apiKey?.trim()) {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  }
+
+  const raw = await httpsGetWithHeaders(OPENROUTER_HOST, OPENROUTER_MODELS_PATH, headers);
+  const data = JSON.parse(raw) as OpenRouterModelsListResponse;
+
+  if (data.error) {
+    throw new Error(
+      `OpenRouter models API error: ${data.error.message ?? 'Unknown'} (code ${data.error.code ?? '?'})`,
+    );
+  }
+
+  if (!data.data?.length) {
+    throw new Error('OpenRouter returned an empty models list.');
+  }
+
+  return data.data
+    .filter((m) => m.id && m.name)
+    .map((m): ListedModel => {
+      const modality = m.architecture?.modality ?? '';
+      const inputModalities = m.architecture?.input_modalities ?? [];
+      const supportsImages =
+        modality.includes('image') ||
+        inputModalities.includes('image') ||
+        inputModalities.includes('file') ||
+        openRouterModelIdSupportsImages(m.id);
+
+      const isFree =
+        m.pricing?.prompt === '0' ||
+        m.pricing?.prompt === '0.0' ||
+        m.id.endsWith(':free');
+
+      const label = isFree ? `${m.name} (free)` : m.name;
+
+      return { value: m.id, label, supportsImages };
+    })
+    // Vision models first, then alphabetical
+    .sort((a, b) => {
+      if (a.supportsImages && !b.supportsImages) return -1;
+      if (!a.supportsImages && b.supportsImages) return 1;
+      return a.label.localeCompare(b.label);
+    });
+}
+
+// ---------------------------------------------------------------------------
+// OpenRouter chat
+// ---------------------------------------------------------------------------
 
 interface OpenRouterToolCall {
   id: string;
@@ -138,18 +220,29 @@ export async function chatWithOpenRouter(
   messages: AiChatMessage[],
   workspacePath: string | null,
   editorContext: AiEditorContext | null = null,
+  /** Optional: pass the cached model list so image-support check is authoritative */
+  modelCache?: ListedModel[],
 ): Promise<AiChatResult> {
   if (!apiKey?.trim()) {
-    return { error: 'No OpenRouter API key configured. Open Settings -> AI and add your OpenRouter API key.' };
+    return {
+      error: 'No OpenRouter API key configured. Open Settings → AI and add your OpenRouter API key.',
+    };
   }
 
   const selectedModel = model.trim() || DEFAULT_OPENROUTER_MODEL;
-  if (messages.some(hasImageAttachment) && !openRouterModelSupportsImages(selectedModel)) {
-    return {
-      error:
-        `The selected OpenRouter model (${selectedModel}) does not support image input. ` +
-        'Choose a vision model such as openai/gpt-4o-mini, openai/gpt-4.1-mini, anthropic/claude-3.5-sonnet, or google/gemini-2.0-flash-001.',
-    };
+
+  if (messages.some(hasImageAttachment)) {
+    const supportsImages = modelCache
+      ? (modelCache.find((m) => m.value === selectedModel)?.supportsImages ?? openRouterModelIdSupportsImages(selectedModel))
+      : openRouterModelIdSupportsImages(selectedModel);
+
+    if (!supportsImages) {
+      return {
+        error:
+          `The selected OpenRouter model (${selectedModel}) does not support image input. ` +
+          'Choose a vision model such as openai/gpt-4o-mini, anthropic/claude-3.5-sonnet, or google/gemini-2.0-flash-001.',
+      };
+    }
   }
 
   const workspaceHint = workspacePath
@@ -171,7 +264,9 @@ export async function chatWithOpenRouter(
         'You may call run_command to execute local command prompts for builds, tests, linting, type checks, and diagnostics. Prefer targeted checks over broad unrelated commands.',
         'After write_file succeeds, briefly confirm what you did in plain language.',
         'Be concise and proactive.',
-      ].filter(Boolean).join('\n'),
+      ]
+        .filter(Boolean)
+        .join('\n'),
     },
     ...messages.map<OpenRouterMessage>((m) => ({
       role: m.role === 'model' ? 'assistant' : 'user',
@@ -222,12 +317,7 @@ export async function chatWithOpenRouter(
       });
 
       for (const toolCall of message.tool_calls) {
-        const { result, error } = await runToolCall(
-          toolCall,
-          workspacePath,
-          workspacePath ?? process.cwd(),
-          actions,
-        );
+        const { result, error } = await runToolCall(toolCall, workspacePath, actions);
         openRouterMessages.push({
           role: 'tool',
           tool_call_id: toolCall.id,
@@ -254,33 +344,41 @@ export async function chatWithOpenRouter(
 }
 
 function completedActionsFallback(actions: AiAgentAction[]): AiChatResult {
-  const labels = actions.map((action) => action.label.replace(/`/g, '')).join(', ');
-  return {
-    text: `Done. ${labels}.`,
-    actions,
-  };
+  const labels = actions.map((a) => a.label.replace(/`/g, '')).join(', ');
+  return { text: `Done. ${labels}.`, actions };
 }
 
 function hasImageAttachment(message: AiChatMessage): boolean {
-  return message.attachments?.some((attachment) => attachment.kind === 'image' && Boolean(attachment.dataUrl)) ?? false;
+  return (
+    message.attachments?.some((a) => a.kind === 'image' && Boolean(a.dataUrl)) ?? false
+  );
 }
 
-function openRouterModelSupportsImages(model: string): boolean {
-  const normalized = model.trim().toLowerCase();
-  if (KNOWN_OPENROUTER_IMAGE_MODELS.has(normalized)) return true;
-
+/**
+ * Heuristic fallback: checks the model id string for known vision-capable patterns.
+ * Used when the dynamic model cache is unavailable.
+ */
+function openRouterModelIdSupportsImages(model: string): boolean {
+  const n = model.trim().toLowerCase();
   return [
     'gpt-4o',
     'gpt-4.1',
+    'gpt-4v',
+    'gpt-5',
     'claude-3',
     'claude-sonnet-4',
     'claude-opus-4',
+    'claude-haiku-4',
     'gemini',
     'qwen-vl',
     'llava',
     'pixtral',
     'vision',
-  ].some((marker) => normalized.includes(marker));
+    'mimo',
+    'minimax',
+    'kimi-k',
+    'nemotron',
+  ].some((marker) => n.includes(marker));
 }
 
 function formatEditorContext(context: AiEditorContext | null): string {
@@ -304,7 +402,10 @@ function formatEditorContext(context: AiEditorContext | null): string {
   }
 
   if (context.content) {
-    lines.push(`Active file content${context.contentTruncated ? ' (truncated)' : ''}:`, context.content);
+    lines.push(
+      `Active file content${context.contentTruncated ? ' (truncated)' : ''}:`,
+      context.content,
+    );
   }
 
   return lines.join('\n');
@@ -313,7 +414,6 @@ function formatEditorContext(context: AiEditorContext | null): string {
 async function runToolCall(
   toolCall: OpenRouterToolCall,
   workspacePath: string | null,
-  _cwd: string,
   actions: AiAgentAction[],
 ): Promise<{ result?: unknown; error?: string }> {
   let args: Record<string, string>;
@@ -329,7 +429,7 @@ async function runToolCall(
       let originalContent = '';
       try {
         originalContent = await fs.promises.readFile(resolved, 'utf-8');
-      } catch { /* file does not exist yet — originalContent stays '' */ }
+      } catch { /* file does not exist yet */ }
       const newContent = args.content ?? '';
       actions.push({
         type: 'write_file',
@@ -363,7 +463,9 @@ async function runToolCall(
       return {
         result: {
           code: result.code,
-          output: result.output || (result.code === 0 ? 'Command completed without output.' : 'Command failed without output.'),
+          output:
+            result.output ||
+            (result.code === 0 ? 'Command completed without output.' : 'Command failed without output.'),
         },
       };
     }
@@ -374,7 +476,38 @@ async function runToolCall(
   }
 }
 
-async function makeRequestWithRetry(apiKey: string, body: string, maxRetries: number): Promise<OpenRouterResponse> {
+// ---------------------------------------------------------------------------
+// HTTP helpers
+// ---------------------------------------------------------------------------
+
+function httpsGetWithHeaders(
+  hostname: string,
+  urlPath: string,
+  headers: Record<string, string>,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      { hostname, path: urlPath, method: 'GET', headers, timeout: 30_000 },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+      },
+    );
+    req.on('error', reject);
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Request timed out'));
+    });
+    req.end();
+  });
+}
+
+async function makeRequestWithRetry(
+  apiKey: string,
+  body: string,
+  maxRetries: number,
+): Promise<OpenRouterResponse> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const response = await new Promise<OpenRouterResponse>((resolve, reject) => {
@@ -410,7 +543,11 @@ async function makeRequestWithRetry(apiKey: string, body: string, maxRetries: nu
                 }
                 resolve(json);
               } catch {
-                resolve({ error: { message: `Failed to parse OpenRouter response: ${raw.slice(0, 200)}` } });
+                resolve({
+                  error: {
+                    message: `Failed to parse OpenRouter response: ${raw.slice(0, 200)}`,
+                  },
+                });
               }
             });
           },
@@ -435,7 +572,9 @@ async function makeRequestWithRetry(apiKey: string, body: string, maxRetries: nu
       if (attempt === maxRetries) {
         return {
           error: {
-            message: `Request failed after ${maxRetries} retries: ${err instanceof Error ? err.message : 'Unknown error'}`,
+            message: `Request failed after ${maxRetries} retries: ${
+              err instanceof Error ? err.message : 'Unknown error'
+            }`,
           },
         };
       }

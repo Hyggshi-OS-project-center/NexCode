@@ -21,6 +21,8 @@ import type {
 
 const api: ElectronAPI = {
   openFolder: () => ipcRenderer.invoke('dialog:openFolder'),
+  toggleDevtools: () => ipcRenderer.send('window:toggleDevtools'),
+  getCrashAudio: () => ipcRenderer.invoke('app:getCrashAudio') as Promise<string | null>,
   openFile: () => ipcRenderer.invoke('dialog:openFile'),
   saveFile: (defaultPath?: string) => ipcRenderer.invoke('dialog:saveFile', defaultPath),
   readDir: (dirPath, options) => ipcRenderer.invoke('fs:readDir', dirPath, options),
@@ -45,6 +47,7 @@ const api: ElectronAPI = {
   showAboutWindow: () => ipcRenderer.send('window:showAbout'),
   showEasterEggWindow: () => ipcRenderer.send('window:showEasterEgg'),
   closeEasterEggWindow: () => ipcRenderer.send('window:closeEasterEgg'),
+  reportCrash: (detail) => ipcRenderer.send('app:reportCrash', detail),
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url) as Promise<void>,
   getAboutInfo: () => ipcRenderer.invoke('about:getInfo') as Promise<AboutInfo>,
   getLatestReleaseNotes: () => ipcRenderer.invoke('releaseNotes:getLatest') as Promise<ReleaseNotesInfo>,
@@ -87,6 +90,9 @@ const api: ElectronAPI = {
     ipcRenderer.invoke('ai:chat', messages, workspacePath ?? null, editorContext ?? null) as Promise<AiChatResult>,
   aiValidate: (filePath, workspacePath) =>
     ipcRenderer.invoke('ai:validate', filePath, workspacePath ?? null) as Promise<CodeValidationResult | null>,
+  listGeminiModels: () => ipcRenderer.invoke('models:list-gemini') as Promise<{ value: string; label: string; supportsImages: boolean }[]>,
+  listOpenRouterModels: () => ipcRenderer.invoke('models:list-openrouter') as Promise<{ value: string; label: string; supportsImages: boolean }[]>,
+  listClaudeModels: () => ipcRenderer.invoke('models:list-claude') as Promise<{ value: string; label: string; supportsImages: boolean }[]>,
   openAgent: () => ipcRenderer.send('agent:open'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   startUpdate: () => ipcRenderer.invoke('update:start'),

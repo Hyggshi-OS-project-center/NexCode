@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import { resolve } from 'path';
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.VITE_DEV_SERVER === '1';
+const noSourcemap = process.env.VITE_NO_SOURCEMAP === '1';
 
 export default defineConfig({
   root: resolve(__dirname, 'src/renderer'),
@@ -20,11 +21,35 @@ export default defineConfig({
     outDir: resolve(__dirname, 'dist/renderer'),
     emptyOutDir: true,
     target: 'es2022',
+    sourcemap: noSourcemap ? false : (isDev ? 'inline' : true),
+    chunkSizeWarningLimit: 2500,
     rollupOptions: {
       input: {
         main: resolve(__dirname, 'src/renderer/index.html'),
         about: resolve(__dirname, 'src/renderer/about.html'),
         easterEgg: resolve(__dirname, 'src/renderer/easterEgg.html'),
+      },
+      output: {
+        manualChunks(id) {
+          // Monaco is separated into feature groups to avoid becoming a single massive block.
+          if (id.includes('monaco-editor/esm/vs/language')) {
+            return 'monaco-languages';
+          }
+          if (id.includes('monaco-editor/esm/vs/editor')) {
+            return 'monaco-editor-core';
+          }
+          if (id.includes('monaco-editor')) {
+            return 'monaco-base';
+          }
+          // PDFJS is also quite heavy, so it's a separate file.
+          if (id.includes('pdfjs-dist')) {
+            return 'pdfjs';
+          }
+          // The remaining node_modules go to vendor.
+          if (id.includes('node_modules')) {
+            return 'vendor';
+          }
+        },
       },
     },
   },

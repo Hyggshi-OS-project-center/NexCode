@@ -230,7 +230,7 @@ export class PluginHost {
       version: 'nexcode-vscode-api-0.1',
       ExtensionContext: Object,
       commands: {
-        registerCommand: (id: string, callback: (...args: unknown[]) => unknown) => {
+        registerCommand: (id: string, callback: (...args: unknown[]) => void | Promise<unknown>) => {
           const disposable = this.registerCommand({
             id,
             title: id,

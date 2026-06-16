@@ -665,6 +665,24 @@ export class EditorManager {
     return true;
   }
 
+  replaceActiveText(text: string): boolean {
+    const editor = this.getFocusedEditor() ?? this.editor;
+    const model = editor?.getModel();
+    if (!editor || !model) return false;
+    const fullRange = model.getFullModelRange();
+    editor.executeEdits('replace-active-text', [{ range: fullRange, text, forceMoveMarkers: true }]);
+    return true;
+  }
+
+  insertTextAtCursor(text: string): boolean {
+    const editor = this.getFocusedEditor() ?? this.editor;
+    const model = editor?.getModel();
+    const selection = editor?.getSelection();
+    if (!editor || !model || !selection) return false;
+    editor.executeEdits('insert-text-at-cursor', [{ range: selection, text, forceMoveMarkers: true }]);
+    return true;
+  }
+
   show(): void {
     this.splitRoot.classList.remove('hidden');
     this.host.classList.remove('hidden');

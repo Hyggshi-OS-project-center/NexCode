@@ -23,8 +23,9 @@ import { searchMarketplaceExtensions } from '../extensions/marketplaceService';
 import { clearRecentFiles, getRecentFiles, pushRecentFile, removeRecentFile } from '../recentFiles';
 import { closeAboutWindow, showAboutWindow } from '../about/aboutWindow';
 import { closeEasterEggWindow, showEasterEggWindow } from '../easterEgg/easterEggWindow';
-import { chatWithGemini } from '../ai/geminiService';
-import { chatWithOpenRouter } from '../ai/openRouterService';
+import { chatWithGemini, listGeminiModels } from '../ai/geminiService';
+import { chatWithOpenRouter, listOpenRouterModels } from '../ai/openRouterService';
+import { chatWithClaude, listClaudeModels } from '../ai/claudeService';
 import { validateWrittenFile } from '../ai/agentWorkflow';
 import type { AboutInfo, AiChatMessage, AiEditorContext } from '../../shared/types';
 import type { GitHubRelease, ReleaseNotesInfo } from '../../shared/types';
@@ -385,6 +386,15 @@ ipcMain.handle(
             editorContext ?? null,
           );
         }
+        if (settings.aiProvider === 'claude') {
+          return chatWithClaude(
+            settings.claudeApiKey,
+            settings.claudeModel,
+            messages,
+            workspacePath ?? null,
+            editorContext ?? null,
+          );
+        }
         return chatWithGemini(
           settings.geminiApiKey,
           settings.geminiModel,
@@ -400,6 +410,21 @@ ipcMain.handle(
      const cwd = workspacePath ?? process.cwd();
      return validateWrittenFile(filePath, workspacePath ?? null, cwd, []);
    });
+
+  // Dynamic AI model listing
+  ipcMain.handle('models:list-gemini', async () => {
+    const settings = getSettings();
+    return listGeminiModels(settings.geminiApiKey);
+  });
+
+  ipcMain.handle('models:list-openrouter', async () => {
+    const settings = getSettings();
+    return listOpenRouterModels(settings.openRouterApiKey);
+  });
+
+  ipcMain.handle('models:list-claude', async () => {
+    return listClaudeModels();
+  });
 
   // Recent files (Open Recent menu)
   ipcMain.handle('recentFiles:get', () => getRecentFiles());

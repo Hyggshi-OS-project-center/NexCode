@@ -20,6 +20,10 @@ export interface VsixExtensionManifest {
   description?: string;
   author?: string;
   main?: string;
+  theme?: string;
+  themeCss?: string;
+  audio?: string;
+  error?: string;
   activationEvents?: string[];
   contributes?: {
     commands?: VsixCommandContribution[];
@@ -29,10 +33,11 @@ export interface VsixExtensionManifest {
 
 export const VSIX_EXTENSION = 'vsix';
 export const HSIXET_EXTENSION = 'hsixet';
+export const HSIEXT_EXTENSION = 'hsiext';
 
 export function isVsixFile(name: string): boolean {
   const lower = name.toLowerCase();
-  return lower.endsWith(`.${VSIX_EXTENSION}`) || lower.endsWith(`.${HSIXET_EXTENSION}`);
+  return lower.endsWith(`.${VSIX_EXTENSION}`) || lower.endsWith(`.${HSIXET_EXTENSION}`) || lower.endsWith(`.${HSIEXT_EXTENSION}`);
 }
 
 /**
@@ -41,10 +46,10 @@ export function isVsixFile(name: string): boolean {
  * - .vsix  → ZIP → đọc extension/package.json bên trong
  * - .hsixet → INI-like text
  */
-export function parseVsixManifest(raw: Uint8Array | string): VsixExtensionManifest {
+export function parseVsixManifest(raw: Uint8Array | string, source = 'extension manifest'): VsixExtensionManifest {
   // ── .vsix: ZIP archive ──────────────────────────────────────────────────────
   if (isZipBytes(raw)) {
-    return parseFromZip(raw as Uint8Array);
+    return parseFromZip(raw as Uint8Array, source);
   }
 
   const text = typeof raw === 'string' ? raw : new TextDecoder().decode(raw);
@@ -52,11 +57,11 @@ export function parseVsixManifest(raw: Uint8Array | string): VsixExtensionManife
 
   // ── Plain JSON (non-zip .vsix hoặc direct JSON) ─────────────────────────────
   if (trimmed.startsWith('{')) {
-    return parseFromJson(trimmed);
+    return parseFromJson(trimmed, source);
   }
 
   // ── .hsixet INI-like ────────────────────────────────────────────────────────
-  return parseFromIni(trimmed);
+  return parseFromIni(trimmed, source);
 }
 
 // ── ZIP (real .vsix) ─────────────────────────────────────────────────────────
@@ -67,34 +72,34 @@ function isZipBytes(raw: Uint8Array | string): boolean {
   return raw.length > 2 && raw[0] === 0x50 && raw[1] === 0x4b;
 }
 
-function parseFromZip(bytes: Uint8Array): VsixExtensionManifest {
+function parseFromZip(bytes: Uint8Array, source: string): VsixExtensionManifest {
   let files: Record<string, Uint8Array>;
   try {
     files = unzipSync(bytes);
   } catch (e) {
-    throw new Error(`Failed to unzip .vsix: ${(e as Error).message}`);
+    throw new Error(`Failed to unzip ${source}: ${(e as Error).message}`);
   }
 
   // VSCode .vsix lưu manifest tại extension/package.json
   const entry = files['extension/package.json'];
   if (!entry) {
     throw new Error(
-      'Invalid .vsix: missing extension/package.json inside ZIP. ' +
+      `Invalid ${source}: missing extension/package.json inside ZIP. ` +
       `Found entries: ${Object.keys(files).slice(0, 8).join(', ')}`
     );
   }
 
-  return parseFromJson(strFromU8(entry));
+  return parseFromJson(strFromU8(entry), source);
 }
 
 // ── JSON ─────────────────────────────────────────────────────────────────────
 
-function parseFromJson(text: string): VsixExtensionManifest {
+function parseFromJson(text: string, source: string): VsixExtensionManifest {
   let data: Record<string, unknown>;
   try {
     data = JSON.parse(text) as Record<string, unknown>;
   } catch {
-    throw new Error('Invalid .vsix manifest: malformed JSON');
+    throw new Error(`Invalid ${source}: malformed JSON`);
   }
 
   // VSCode dùng "publisher" + "name" thay vì "id"
@@ -104,12 +109,15 @@ function parseFromJson(text: string): VsixExtensionManifest {
   }
 
   const id = (data['id'] as string | undefined) ?? '';
-  const name = (data['name'] as string | undefined) ?? '';
+  const name =
+    (data['name'] as string | undefined) ??
+    (data['displayName'] as string | undefined) ??
+    '';
   const version = (data['version'] as string | undefined) ?? '';
 
   if (!id || !name || !version) {
     throw new Error(
-      `Invalid extension manifest: missing ${[!id && 'id', !name && 'name', !version && 'version'].filter(Boolean).join(', ')}`
+      `Invalid ${source}: missing ${[!id && 'id', !name && 'name', !version && 'version'].filter(Boolean).join(', ')}`
     );
   }
 
@@ -122,6 +130,10 @@ function parseFromJson(text: string): VsixExtensionManifest {
       ? data['author']
       : (data['author'] as { name?: string } | undefined)?.name,
     main: data['main'] as string | undefined,
+    theme: data['theme'] as string | undefined,
+    themeCss: data['themeCss'] as string | undefined,
+    audio: data['audio'] as string | undefined,
+    error: data['error'] as string | undefined,
     activationEvents: data['activationEvents'] as string[] | undefined,
     contributes: data['contributes'] as VsixExtensionManifest['contributes'],
   };
@@ -132,7 +144,7 @@ function parseFromJson(text: string): VsixExtensionManifest {
 
 // ── INI-like (.hsixet) ────────────────────────────────────────────────────────
 
-function parseFromIni(text: string): VsixExtensionManifest {
+function parseFromIni(text: string, source: string): VsixExtensionManifest {
   const map = new Map<string, string>();
   for (const line of text.split(/\r?\n/)) {
     const t = line.trim();
@@ -147,9 +159,7 @@ function parseFromIni(text: string): VsixExtensionManifest {
   const version = map.get('version') ?? '';
 
   if (!id || !name || !version) {
-    throw new Error(
-      `Invalid .hsixet manifest: missing ${[!id && 'id', !name && 'name', !version && 'version'].filter(Boolean).join(', ')}`
-    );
+    throw new Error(`Invalid ${source}: missing ${[!id && 'id', !name && 'name', !version && 'version'].filter(Boolean).join(', ')}`);
   }
 
   const commandsRaw = map.get('commands') ?? '';
@@ -172,6 +182,10 @@ function parseFromIni(text: string): VsixExtensionManifest {
     author: map.get('author'),
     description: map.get('description'),
     main: map.get('main'),
+    theme: map.get('theme'),
+    themeCss: map.get('themecss'),
+    audio: map.get('audio'),
+    error: map.get('error'),
     activationEvents: splitList(map.get('activationevents')),
     commands,
   };

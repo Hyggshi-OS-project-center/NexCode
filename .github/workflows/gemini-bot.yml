@@ -17,7 +17,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Run Gemini Agent
         uses: google-github-actions/run-gemini-cli@v1

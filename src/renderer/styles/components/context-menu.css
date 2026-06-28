@@ -1,0 +1,99 @@
+/* Context menu */
+
+.context-menu {
+  position: fixed;
+  z-index: 10000;
+  min-width: 180px;
+  padding: 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  list-style: none;
+  animation: menuPop 0.15s ease;
+}
+
+.context-menu.hidden {
+  display: none !important;
+  pointer-events: none !important;
+  visibility: hidden;
+}
+
+@keyframes menuPop {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.context-menu li {
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 13px;
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.context-menu li:hover {
+  background: var(--bg-hover);
+}
+
+.context-menu li .shortcut {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.context-menu .separator {
+  height: 1px;
+  margin: 4px 0;
+  padding: 0;
+  background: var(--border);
+  cursor: default;
+}
+
+.context-menu .separator:hover {
+  background: var(--border);
+}
+
+/* Disabled section header / non-clickable item */
+.context-menu li.is-disabled {
+  opacity: 0.55;
+  cursor: default;
+  pointer-events: none;
+}
+
+.context-menu li.is-disabled:hover {
+  background: transparent;
+}
+
+/* Toggleable / checked item — shows a leading checkmark */
+.context-menu li.is-checked {
+  color: var(--text-primary);
+}
+.context-menu li .context-check {
+  width: 14px;
+  flex-shrink: 0;
+  color: var(--accent, #0078d4);
+  font-weight: 700;
+  font-size: 12px;
+}
+.context-menu li .context-chevron {
+  color: var(--text-muted);
+  font-size: 14px;
+  margin-left: 4px;
+}
+.context-menu li.has-submenu {
+  position: relative;
+}
+
+/* One-level hover flyout submenu */
+.context-menu.submenu {
+  position: fixed;
+  z-index: 10001;
+  min-width: 180px;
+  margin: 0;
+  padding: 6px;
+}
+
+

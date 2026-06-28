@@ -1,0 +1,81 @@
+/* Shared button primitives */
+
+.icon-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 14px;
+  transition: background var(--transition), color var(--transition);
+  -webkit-app-region: no-drag;
+}
+
+.icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.icon-btn:disabled,
+.icon-btn.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.icon-btn:disabled:hover,
+.icon-btn.is-disabled:hover {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.icon-btn-svg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.icon-btn-svg:hover {
+  color: var(--text-primary);
+}
+
+/* Main window controls (frameless titlebar) */
+.titlebar-btn {
+  width: 46px;
+  height: 30px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", "Segoe UI Symbol", system-ui;
+  font-size: 10px;
+  line-height: 1;
+  -webkit-app-region: no-drag;
+  transition: background var(--transition), color var(--transition);
+}
+
+.titlebar-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .titlebar-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.titlebar-btn-close:hover {
+  background: #e81123;
+  color: #fff;
+}
+
+.titlebar-btn:focus-visible {
+  outline: 1px solid var(--focus-border);
+  outline-offset: -2px;
+}

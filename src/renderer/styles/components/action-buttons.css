@@ -1,0 +1,46 @@
+/* Editor / terminal action buttons */
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.action-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.action-btn.active {
+  background: var(--bg-selected);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.action-btn-primary {
+  background: var(--bg-selected);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.action-btn-primary:hover {
+  background: var(--bg-hover);
+}
+
+.action-btn-sm {
+  padding: 5px 12px;
+  font-size: 11px;
+}
+
+.action-icon {
+  font-size: 11px;
+}

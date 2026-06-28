@@ -1,0 +1,20 @@
+/* Components — imports only, no rules */
+
+@import url("./buttons.css");
+@import url("./file-explorer.css");
+@import url("./editor-tabs.css");
+@import url("./welcome-screen.css");
+@import url("./settings.css");
+@import url("./context-menu.css");
+@import url("./sidebars.css");
+@import url("./editor-banner.css");
+@import url("./binary-viewer.css");
+@import url("./release-notes.css");
+@import url("./action-buttons.css");
+@import url("./terminal.css");
+@import url("./breakpoints.css");
+@import url("./git-panel.css");
+@import url("./markdown-preview.css");
+@import url("./license-modal.css");
+@import url("./unsaved-changes.css");
+@import url("./pdf-viewer.css");

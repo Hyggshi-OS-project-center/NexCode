@@ -1,0 +1,303 @@
+/**
+ * BrowserView — embedded web browser inside the editor area.
+ */
+
+.browser-view {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-primary, #1e1e1e);
+  position: relative;
+}
+
+.browser-view.hidden {
+  display: none;
+}
+
+/* ── Address bar ──────────────────────────── */
+
+.browser-view-addressbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: var(--bg-secondary, #252526);
+  border-bottom: 1px solid var(--border-primary, #3c3c3c);
+  user-select: none;
+  flex-wrap: wrap;
+}
+
+.browser-nav-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg-primary, #cccccc);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.1s;
+  white-space: nowrap;
+}
+
+.browser-nav-btn:hover {
+  background: var(--bg-hover, #2a2d2e);
+}
+
+.browser-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.browser-nav-btn:disabled:hover {
+  background: transparent;
+}
+
+.browser-url-input {
+  flex: 1;
+  min-width: 200px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-primary, #3c3c3c);
+  border-radius: 4px;
+  background: var(--bg-tertiary, #1e1e1e);
+  color: var(--fg-primary, #cccccc);
+  font-size: 12px;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.browser-url-input:focus {
+  border-color: var(--fg-accent, #007acc);
+}
+
+/* ── Iframe container ─────────────────────── */
+
+.browser-view-frame {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.browser-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #ffffff;
+  transform-origin: top left;
+}
+
+/* ── Zoom controls ────────────────────────── */
+
+.browser-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+}
+
+.browser-zoom-level {
+  font-size: 11px;
+  color: var(--fg-secondary, #999999);
+  min-width: 36px;
+  text-align: center;
+  user-select: none;
+}
+
+/* ── Console panel ────────────────────────── */
+
+.browser-console-panel {
+  display: flex;
+  flex-direction: column;
+  height: 180px;
+  border-top: 1px solid var(--border-primary, #3c3c3c);
+  background: var(--bg-secondary, #252526);
+  flex-shrink: 0;
+}
+
+.browser-console-panel.hidden {
+  display: none;
+}
+
+.browser-console-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border-primary, #3c3c3c);
+  background: var(--bg-tertiary, #1e1e1e);
+}
+
+.browser-console-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--fg-secondary, #999999);
+  letter-spacing: 0.5px;
+}
+
+.browser-console-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.browser-console-clear,
+.browser-console-close {
+  font-size: 11px;
+  height: 22px;
+  padding: 0 8px;
+}
+
+.browser-console-output {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 10px;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.browser-console-entry {
+  display: flex;
+  gap: 8px;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  align-items: flex-start;
+}
+
+.browser-console-time {
+  color: var(--fg-muted, #666666);
+  font-size: 10px;
+  white-space: nowrap;
+  min-width: 70px;
+}
+
+.browser-console-type {
+  font-weight: 600;
+  white-space: nowrap;
+  min-width: 50px;
+}
+
+.browser-console-msg {
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+/* Console entry colors */
+.browser-console-log .browser-console-type { color: var(--fg-primary, #cccccc); }
+.browser-console-info .browser-console-type { color: #3794ff; }
+.browser-console-warn .browser-console-type { color: #cca700; }
+.browser-console-warn { background: rgba(204, 167, 0, 0.06); }
+.browser-console-error .browser-console-type { color: #f14c4c; }
+.browser-console-error { background: rgba(241, 76, 76, 0.06); }
+.browser-console-debug .browser-console-type { color: #b0b0b0; }
+
+/* ── Context menu ─────────────────────────── */
+
+.browser-context-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 200px;
+  background: var(--bg-secondary, #252526);
+  border: 1px solid var(--border-primary, #3c3c3c);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  padding: 4px 0;
+  user-select: none;
+}
+
+.browser-context-menu.hidden {
+  display: none;
+}
+
+.browser-context-item {
+  padding: 6px 16px;
+  font-size: 12px;
+  color: var(--fg-primary, #cccccc);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.browser-context-item:hover {
+  background: var(--bg-hover, #2a2d2e);
+}
+
+.browser-context-separator {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border-primary, #3c3c3c);
+}
+
+/* ── Light theme overrides ────────────────── */
+
+[data-theme="light"] .browser-view {
+  background: #ffffff;
+}
+
+[data-theme="light"] .browser-view-addressbar {
+  background: #f3f3f3;
+  border-bottom-color: #d4d4d4;
+}
+
+[data-theme="light"] .browser-nav-btn {
+  color: #333333;
+}
+
+[data-theme="light"] .browser-nav-btn:hover {
+  background: #e8e8e8;
+}
+
+[data-theme="light"] .browser-url-input {
+  background: #ffffff;
+  border-color: #cecece;
+  color: #333333;
+}
+
+[data-theme="light"] .browser-url-input:focus {
+  border-color: #007acc;
+}
+
+[data-theme="light"] .browser-console-panel {
+  background: #f3f3f3;
+  border-top-color: #d4d4d4;
+}
+
+[data-theme="light"] .browser-console-header {
+  background: #e8e8e8;
+  border-bottom-color: #d4d4d4;
+}
+
+[data-theme="light"] .browser-console-entry {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .browser-console-time {
+  color: #888888;
+}
+
+[data-theme="light"] .browser-console-warn { background: rgba(204, 167, 0, 0.08); }
+[data-theme="light"] .browser-console-error { background: rgba(241, 76, 76, 0.08); }
+
+[data-theme="light"] .browser-context-menu {
+  background: #ffffff;
+  border-color: #d4d4d4;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+
+[data-theme="light"] .browser-context-item {
+  color: #333333;
+}
+
+[data-theme="light"] .browser-context-item:hover {
+  background: #e8e8e8;
+}
+
+[data-theme="light"] .browser-context-separator {
+  background: #d4d4d4;
+}

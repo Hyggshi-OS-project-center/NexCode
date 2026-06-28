@@ -1,0 +1,104 @@
+/* Full-screen loading splash (PyQt-style blue → green gradient) */
+
+body.app-is-loading .titlebar,
+body.app-is-loading .app-shell,
+body.app-is-loading .statusbar {
+  visibility: hidden;
+}
+
+.app-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: opacity 0.35s ease, visibility 0.35s ease;
+}
+
+.app-splash::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, #1c60d7 0%, #26a74b 100%);
+  z-index: 0;
+}
+
+.app-splash.app-splash--legacy-2025::before {
+  background:
+    linear-gradient(135deg, rgba(8, 34, 68, 0.9), rgba(34, 109, 72, 0.88)),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 4px);
+}
+
+.app-splash.app-splash--legacy-2025 .app-splash-title::after {
+  content: " 2025";
+  color: #b8f7d4;
+}
+
+.app-splash.app-splash--hide {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.app-splash.hidden {
+  display: none;
+}
+
+.app-splash-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  text-align: center;
+}
+
+.app-splash-image {
+  width: auto;
+  height: auto;
+  max-width: min(1090px, 92vw);
+  max-height: min(615px, 72vh);
+  object-fit: contain;
+  object-position: center;
+  display: block;
+  filter: drop-shadow(0 6px 28px rgba(0, 0, 0, 0.28));
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.app-splash-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: #ffffff;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.2);
+}
+
+.app-splash-spinner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: app-splash-spin 0.75s linear infinite;
+}
+
+.app-splash-status {
+  margin: 0;
+  min-height: 20px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.88);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+@keyframes app-splash-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

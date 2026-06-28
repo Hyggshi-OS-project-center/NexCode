@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' blob: data:; style-src 'self' 'unsafe-inline' data:; font-src 'self' data:; img-src 'self' https: file: data: blob:; media-src 'self' https: file: data: blob:; connect-src 'self' file: blob: ws: http://127.0.0.1:*; worker-src 'self' blob:; frame-src 'self' blob: data: https: http:;" />
+  <title>NexCode IDE</title>
+  <link rel="icon" href="./favicon.ico" type="image/x-icon" />
+  <link rel="stylesheet" href="./styles/themes.css" />
+  <link rel="stylesheet" href="./styles/main.css" />
+  <link rel="stylesheet" href="./styles/components/main.css" />
+  <link rel="stylesheet" href="./styles/explorer.css" />
+  <link rel="stylesheet" href="./styles/chat.css" />
+  <link rel="stylesheet" href="./styles/diff-editor.css" />
+  <link rel="stylesheet" href="./styles/splash.css" />
+  <link rel="stylesheet" href="./styles/components/browser-view.css" />
+</head>
+<body data-theme="dark">
+  <div id="app-splash" class="app-splash" role="dialog" aria-modal="true" aria-live="polite" aria-busy="true" aria-label="Loading NexCode">
+    <div class="app-splash-inner">
+      <img class="app-splash-image" src="" width="480" height="270" alt="" />
+      <h1 class="app-splash-title">NexCode IDE</h1>
+      <div class="app-splash-spinner" aria-hidden="true"></div>
+      <p class="app-splash-status">Loading…</p>
+    </div>
+  </div>
+  <header id="titlebar" class="titlebar">
+    <div class="titlebar-drag">
+      <div class="titlebar-brand">
+        <svg class="brand-icon" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1.5l6.5 3.75v6.5L8 15.5 1.5 11.75v-6.5L8 1.5z"/></svg>
+        <span class="brand-name">NexCode</span>
+      </div>
+    </div>
+    <nav class="titlebar-menu" aria-label="Application menu">
+      <button class="titlebar-menu-item" type="button" data-titlebar-menu="file">File</button>
+      <button class="titlebar-menu-item" type="button" data-titlebar-menu="edit">Edit</button>
+      <button class="titlebar-menu-item" type="button" data-titlebar-menu="selection">Selection</button>
+      <button class="titlebar-menu-item" type="button" data-titlebar-menu="view">View</button>
+      <button class="titlebar-menu-item" type="button" data-titlebar-menu="go">Go</button>
+      <button class="titlebar-menu-item" type="button" data-titlebar-menu="run">Run</button>
+      <button class="titlebar-menu-item" type="button" data-titlebar-menu="terminal">Terminal</button>
+      <button class="titlebar-menu-item" type="button" data-titlebar-menu="help">Help</button>
+    </nav>
+    <div class="titlebar-center" id="titlebar-path"></div>
+    <div class="titlebar-nav">
+      <button class="titlebar-update-btn hidden" type="button" id="btn-update" aria-label="Update NexCode IDE">
+        Update
+      </button>
+      <button class="titlebar-nav-btn" type="button" id="titlebar-btn-agent" title="Open AI IDE Agent" aria-label="Open AI IDE Agent">
+        <svg class="titlebar-nav-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" fill="none" width="16" height="16">
+          <path d="M499 42C523 38 546 44 564 58L889 246L889 246C895 249 899 253 904 258C919 272 927 291 928 311C929 317 929 324 929 331V699C930 709 929 719 926 729C925 731 925 733 924 736C917 757 901 775 880 784L566 966C554 975 541 980 528 982C504 987 480 981 462 967L137 779L137 779C132 775 127 772 123 767C107 751 99 731 98 710H98V315H98C99 283 117 254 147 241L461 59C472 50 485 45 499 42Z" fill="url(#grad0)"/>
+          <path d="M513 251L723 514L513 773L302 514L513 251Z" fill="#388BFD"/>
+          <path d="M512 339L639 513L512 686L385 513L512 339Z" fill="#499AFE"/>
+          <defs>
+            <linearGradient id="grad0" x1="723.5" y1="305" x2="-327.5" y2="1352" gradientUnits="userSpaceOnUse">
+              <stop offset="0" stop-color="#666666"/>
+              <stop offset="1" stop-color="#888888"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </button>
+      <button class="titlebar-nav-btn" type="button" id="titlebar-btn-sidebar" title="Toggle sidebar">▢</button>
+      <button class="titlebar-nav-btn" type="button" id="titlebar-nav-back" title="Back">←</button>
+      <button class="titlebar-nav-btn" type="button" id="titlebar-nav-forward" title="Forward">→</button>
+    </div>
+    <div class="titlebar-controls">
+      <button class="titlebar-btn" id="btn-minimize" title="Minimize" aria-label="Minimize">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <rect x="2" y="5.5" width="8" height="1" fill="currentColor"/>
+        </svg>
+      </button>
+      <button class="titlebar-btn" id="btn-maximize" title="Maximize" aria-label="Maximize">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <rect x="2" y="2.5" width="8" height="7" rx="1" stroke="currentColor" stroke-width="1" fill="none"/>
+        </svg>
+      </button>
+      <button class="titlebar-btn titlebar-btn-close" id="btn-close" title="Close" aria-label="Close">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <path d="M3 3L9 9M9 3L3 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="app-shell">
+    <nav class="activity-bar" aria-label="Primary sidebar">
+      <button class="activity-item active" data-panel="explorer" title="Explorer" aria-label="Explorer">
+        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M14.5 3H7.71l-.85-.85L6.51 2h-5a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5z"/></svg>
+      </button>
+      <button class="activity-item" data-panel="search" title="Search" aria-label="Search">
+        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg>
+      </button>
+      <!-- FIXED: git-branch icon (GitHub Primer git-branch-16) -->
+      <button class="activity-item" data-panel="git" title="Source Control" aria-label="Source Control">
+        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true">
+          <path fill="currentColor" d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V9.5A2.5 2.5 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25zm-5 8.25a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm9.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5z"/>
+        </svg>
+      </button>
+      <button class="activity-item" data-panel="chat" title="Chat AI" aria-label="Chat AI">
+        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 2.75A1.75 1.75 0 0 1 3.75 1h8.5A1.75 1.75 0 0 1 14 2.75v6.5A1.75 1.75 0 0 1 12.25 11H7.9l-3.2 2.6a.5.5 0 0 1-.82-.39V11H3.75A1.75 1.75 0 0 1 2 9.25v-6.5z"/></svg>
+      </button>
+      <button class="activity-item" id="activity-bar-agent" title="AI IDE Agent" aria-label="AI IDE Agent">
+        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1.5a.75.75 0 0 1 .75.75V3h.75a2.5 2.5 0 0 1 2.5 2.5V8a2.5 2.5 0 0 1-2.5 2.5H6.5A2.5 2.5 0 0 1 4 8V5.5A2.5 2.5 0 0 1 6.5 3h.75v-.75A.75.75 0 0 1 8 1.5ZM5.5 6a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm5 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2ZM6 11.5h4a2.5 2.5 0 0 1-4 0ZM2.75 5a.75.75 0 0 1 .75.75V8A4.75 4.75 0 0 0 8.25 12.75h1.5A4.75 4.75 0 0 0 14.5 8V5.75a.75.75 0 0 1 1.5 0V8A6.25 6.25 0 0 1 9.75 14.25h-1.5A6.25 6.25 0 0 1 2 8V5.75A.75.75 0 0 1 2.75 5Z"/></svg>
+      </button>
+      <button class="activity-item" data-panel="settings" title="Settings" aria-label="Settings">
+        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M7.429 1.525a6.593 6.593 0 0 1 1.142 0c.036.003.108.036.137.146l.289 1.105c.147.56.55.967.997 1.189.174.086.341.183.501.29.435.283.956.37 1.424.144l1.01-.483a.145.145 0 0 1 .187.04c.196.273.373.562.528.862a6.57 6.57 0 0 1 .44 1.011.144.144 0 0 1-.083.167l-.966.4c-.456.188-.724.62-.72 1.067.002.176 0 .352-.005.527-.013.449.258.878.72 1.063l.966.396a.144.144 0 0 1 .082.168 6.53 6.53 0 0 1-.97 1.869.145.145 0 0 1-.187.04l-1.01-.482c-.468-.226-.989-.14-1.424.143a5.08 5.08 0 0 1-.502.29c-.446.222-.85.629-.997 1.188l-.289 1.106c-.029.11-.1.143-.137.146a6.63 6.63 0 0 1-1.142 0c-.036-.003-.108-.036-.137-.146l-.289-1.106c-.147-.56-.55-.966-.997-1.188a5.085 5.085 0 0 1-.501-.29c-.435-.283-.956-.37-1.424-.144l-1.01.483a.145.145 0 0 1-.187-.04 6.53 6.53 0 0 1-.97-1.868.144.144 0 0 1 .083-.168l.966-.396c.462-.185.733-.614.72-1.063a6.16 6.16 0 0 1-.005-.527c.004-.447-.264-.879-.72-1.067l-.966-.4a.144.144 0 0 1-.082-.167 6.57 6.57 0 0 1 .968-1.873.145.145 0 0 1 .187-.04l1.01.483c.468.226.989.14 1.424-.144.16-.107.327-.204.5-.29.447-.222.85-.629.998-1.189l.289-1.105c.029-.11.1-.143.137-.146zM8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg>
+      </button>
+    </nav>
+
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <span id="sidebar-title">EXPLORER</span>
+        <button class="icon-btn icon-btn-svg" id="btn-open-folder" title="Open Folder" aria-label="Open Folder">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M14.5 4H7.71l-.85-.85L6.51 3h-5a.5.5 0 0 0-.5.5v9a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5V4.5a.5.5 0 0 0-.5-.5zM14 12.5H2V4.27l2.48-2.48h.01L6.51 3.85l.85.85H14v8.8z"/></svg>
+        </button>
+      </div>
+      <div id="sidebar-panels" class="sidebar-content">
+        <div id="panel-explorer" class="sidebar-panel"></div>
+        <div id="panel-search" class="sidebar-panel hidden"></div>
+        <div id="panel-git" class="sidebar-panel hidden"></div>
+        <div id="panel-chat" class="sidebar-panel hidden"></div>
+        <div id="panel-settings" class="sidebar-panel hidden"></div>
+      </div>
+    </aside>
+
+    <main class="editor-area">
+      <div class="editor-tabs-row">
+        <div id="tab-bar" class="tab-bar"></div>
+        <div class="editor-toolbar-actions">
+          <button type="button" id="btn-md-preview" class="icon-btn icon-btn-labeled" title="Toggle Markdown preview" style="display:none">Preview</button>
+          <button type="button" id="btn-extensions" class="icon-btn" title="Extension Marketplace" aria-label="Extension Marketplace">
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M1 3.5A1.5 1.5 0 0 1 2.5 2h3A1.5 1.5 0 0 1 7 3.5v3A1.5 1.5 0 0 1 5.5 8h-3A1.5 1.5 0 0 1 1 6.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm5.5.5A1.5 1.5 0 0 1 9.5 2h3A1.5 1.5 0 0 1 14 3.5v3A1.5 1.5 0 0 1 12.5 8h-3A1.5 1.5 0 0 1 8 6.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm-7.5 6A1.5 1.5 0 0 1 3.5 8h3A1.5 1.5 0 0 1 8 9.5v.293l.646-.647a.5.5 0 0 1 .708.708L8 11.207V12.5A1.5 1.5 0 0 1 6.5 14h-3A1.5 1.5 0 0 1 2 12.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm5.354-.854a.5.5 0 0 0-.708.708L10.793 11l-1.147 1.146a.5.5 0 0 0 .708.708L11.5 11.707l1.146 1.147a.5.5 0 0 0 .708-.708L12.207 11l1.147-1.146a.5.5 0 0 0-.708-.708L11.5 10.293l-1.146-1.147z"/></svg>
+          </button>
+          <button type="button" id="btn-run" class="icon-btn icon-btn-labeled" title="Run file (F5)">Run</button>
+          <button type="button" id="btn-terminal-quick" class="icon-btn" title="Toggle terminal" aria-label="Terminal">
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5v-9zM3.5 3a.5.5 0 0 0-.5.5v9a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5h-9zm1.75 2.5l2.5 2.25L5.25 10h1l1.5-1.35L8.25 10h1l-1.5-2.25L8.25 5.5h-1L5.75 7.35 5.25 5.5h-1z"/></svg>
+          </button>
+          <button type="button" id="btn-split-down" class="icon-btn" title="Split editor down" aria-label="Split editor">
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M2 2.5A.5.5 0 0 1 2.5 2h11a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-4zm.5-.5a.5.5 0 0 0-.5.5v3h11v-3a.5.5 0 0 0-.5-.5h-11zM2 9.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-4zm.5-.5a.5.5 0 0 0-.5.5v3h11v-3a.5.5 0 0 0-.5-.5h-11z"/></svg>
+          </button>
+        </div>
+      </div>
+      <div id="editor-toolbar" class="editor-toolbar hidden">
+        <input type="text" id="search-input" placeholder="Search" />
+        <input type="text" id="replace-input" placeholder="Replace" />
+        <button id="btn-search-prev" title="Previous">↑</button>
+        <button id="btn-search-next" title="Next">↓</button>
+        <button id="btn-replace-one">Replace</button>
+        <button id="btn-replace-all">Replace All</button>
+        <button id="btn-close-search">×</button>
+      </div>
+      <div id="editor-container" class="editor-container">
+        <div id="welcome-screen" class="welcome-screen"></div>
+        <div id="editor-split-root" class="editor-split-root">
+          <div id="monaco-host" class="monaco-pane monaco-pane-primary hidden"></div>
+          <div id="editor-split-divider" class="editor-split-divider hidden" aria-hidden="true"></div>
+          <div id="monaco-host-secondary" class="monaco-pane monaco-pane-secondary hidden"></div>
+        </div>
+      </div>
+      <div id="terminal-panel" class="terminal-panel hidden">
+        <div class="panel-header panel-header-terminal">
+          <div class="terminal-view-tabs" role="tablist" aria-label="Panel views">
+            <button type="button" class="terminal-view-tab" data-terminal-view="problems" aria-selected="false" tabindex="-1">PROBLEMS</button>
+            <button type="button" class="terminal-view-tab" data-terminal-view="output" aria-selected="false" tabindex="-1">OUTPUT</button>
+            <span id="terminal-tab-label" class="terminal-view-tab active" data-terminal-view="terminal" role="tab" aria-selected="true">TERMINAL</span>
+            <button type="button" class="terminal-view-tab" data-terminal-view="debug" aria-selected="false" tabindex="-1">DEBUG CONSOLE</button>
+          </div>
+          <div class="panel-header-actions">
+            <button type="button" class="icon-btn icon-btn-labeled" id="btn-terminal-paste" title="Paste (Ctrl+V)">Paste</button>
+            <button type="button" class="icon-btn icon-btn-labeled" id="btn-terminal-copy" title="Copy selection">Copy</button>
+            <button type="button" class="icon-btn icon-btn-labeled" id="btn-terminal-clear" title="Clear terminal">Clear</button>
+            <button class="icon-btn" id="btn-new-terminal" title="New Terminal">+</button>
+            <button class="icon-btn" id="btn-toggle-terminal" title="Close panel">×</button>
+          </div>
+        </div>
+        <div class="terminal-command-row">
+          <span class="terminal-prompt-label">PS&gt;</span>
+          <input type="text" id="terminal-command-input" class="terminal-command-input" placeholder="Command or path — Tab complete, ↑↓ history" spellcheck="false" autocomplete="off" />
+          <button type="button" class="action-btn action-btn-sm" id="btn-terminal-run-cmd">Run</button>
+        </div>
+        <div id="terminal-placeholder" class="terminal-placeholder hidden" role="region" aria-live="polite"></div>
+        <div id="terminal-container" class="terminal-container"></div>
+      </div>
+    </main>
+  </div>
+
+  <footer id="statusbar" class="statusbar">
+    <button type="button" id="status-terminal" class="statusbar-btn" title="Toggle terminal">Terminal</button>
+    <span id="status-branch">● NexCode</span>
+    <span id="status-cwd" class="status-cwd" title="Terminal directory"></span>
+    <span id="status-file"></span>
+    <span class="status-spacer"></span>
+    <span id="status-position">Ln 1, Col 1</span>
+    <span id="status-language">Plain Text</span>
+    <span id="status-indent">Spaces: 2</span>
+    <span id="status-theme">Dark</span>
+  </footer>
+
+  <menu id="context-menu" class="context-menu hidden"></menu>
+
+  <script type="module" src="./app.ts"></script>
+</body>
+</html>

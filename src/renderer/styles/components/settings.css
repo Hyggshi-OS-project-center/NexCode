@@ -1,0 +1,133 @@
+/* Settings panel */
+
+.settings-panel {
+  padding: 12px;
+}
+
+.settings-expanded .settings-panel {
+  padding: 14px 16px 20px;
+}
+
+.settings-group {
+  margin-bottom: 20px;
+}
+
+.settings-group h3 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.setting-row label {
+  color: var(--text-primary);
+  font-size: 13px;
+  min-width: 0;
+}
+
+.setting-row input[type="number"],
+.setting-row select {
+  width: 120px;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.settings-expanded .setting-row input[type="number"],
+.settings-expanded .setting-row select {
+  width: 170px;
+}
+
+.setting-row input[type="text"],
+.setting-row input[type="password"] {
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: inherit;
+}
+
+.setting-row-field {
+  align-items: stretch;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.setting-row-field label {
+  width: 100%;
+}
+
+.setting-row-field > input[type="text"],
+.setting-row-field > input[type="password"] {
+  width: 100%;
+}
+
+.settings-provider-select {
+  width: 130px !important;
+}
+
+.settings-expanded .settings-provider-select {
+  width: 190px !important;
+}
+
+.setting-row input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.settings-about {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.settings-about p {
+  margin-bottom: 6px;
+}
+
+.settings-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: -4px 0 10px;
+  line-height: 1.4;
+}
+
+.settings-hint a {
+  color: var(--text-secondary);
+}
+
+.settings-key-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.settings-key-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-key-row .welcome-btn {
+  flex: 0 0 58px;
+  min-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+}

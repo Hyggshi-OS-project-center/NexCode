@@ -1,0 +1,25 @@
+name: Gemini AI Assistant
+
+on:
+  issues:
+    types: [opened]
+  pull_request:
+    types: [opened, synchronize]
+  issue_comment:
+    types: [created]
+
+jobs:
+  gemini_workflow:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+
+      - name: Run Gemini Agent
+        uses: google-github-actions/run-gemini-cli@v1
+        with:
+          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}

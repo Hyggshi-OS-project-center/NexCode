@@ -1,0 +1,39 @@
+/* Search & Chat sidebars */
+
+.search-sidebar {
+  padding: 12px;
+}
+
+.search-sidebar input {
+  width: 100%;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+  color: var(--text-primary);
+}
+
+.search-results {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.chat-sidebar {
+  padding: 12px;
+}
+
+.chat-sidebar h3 {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.chat-sidebar p {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 12px;
+}

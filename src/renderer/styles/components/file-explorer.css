@@ -1,0 +1,134 @@
+/* File explorer tree */
+
+.tree-root {
+  padding: 0 4px;
+}
+
+.tree-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 4px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 13px;
+  transition: background var(--transition);
+  white-space: nowrap;
+}
+
+.tree-item:hover {
+  background: var(--bg-hover);
+}
+
+.tree-item.active {
+  background: var(--bg-selected);
+  color: var(--text-primary);
+}
+
+.tree-item .chevron {
+  width: 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 10px;
+  flex-shrink: 0;
+  transition: transform var(--transition);
+}
+
+.tree-item.expanded .chevron {
+  transform: rotate(90deg);
+}
+
+.tree-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tree-icon-file svg,
+.tree-icon-file img {
+  width: 16px;
+  height: 16px;
+  display: block;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
+.tree-icon-ico img {
+  image-rendering: auto;
+}
+
+.tree-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-git-status {
+  margin-left: auto;
+  min-width: 14px;
+  flex: 0 0 auto;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.tree-git-folder-dot {
+  width: 9px;
+  height: 9px;
+  margin-left: auto;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  opacity: 0.9;
+}
+
+.tree-git-modified {
+  color: #d6a85f;
+}
+
+.tree-git-untracked,
+.tree-git-added {
+  color: #57c878;
+}
+
+.tree-git-deleted,
+.tree-git-conflict {
+  color: #f05d5d;
+}
+
+.tree-git-renamed,
+.tree-git-copied {
+  color: #6cb6ff;
+}
+
+.tree-git-folder-dot.tree-git-modified {
+  background-color: #8a744f;
+}
+
+.tree-git-folder-dot.tree-git-untracked,
+.tree-git-folder-dot.tree-git-added {
+  background-color: #4f8f62;
+}
+
+.tree-git-folder-dot.tree-git-deleted,
+.tree-git-folder-dot.tree-git-conflict {
+  background-color: #a84646;
+}
+
+.tree-git-folder-dot.tree-git-renamed,
+.tree-git-folder-dot.tree-git-copied {
+  background-color: #3f6f99;
+}
+
+.tree-children {
+  margin-left: 12px;
+}
+
+.tree-children.collapsed {
+  display: none;
+}

@@ -35,7 +35,7 @@ NexCode is designed to be fast, hackable, and deeply integrated with the Hyggshi
 
 ## Features
 
-- 🖥️ **Cross-platform** — runs on Windows, macOS, and Linux via Electron
+- 🖥️ **Cross-platform** — runs on Windows and Linux via Electron
 - ⚡ **Fast startup** — powered by Vite for near-instant dev builds
 - 🎨 **Monaco Editor core** — the same editor engine behind VS Code
 - 🧠 **HOSC/HOSC++ support** — syntax highlighting and language tooling for Hyggshi OS's custom language

@@ -253,13 +253,27 @@ export function registerIpcHandlers(
     await shell.openPath(filePath);
   });
   ipcMain.handle('releaseNotes:getLatest', async (): Promise<ReleaseNotesInfo> => {
-    const release = await fetchJson<GitHubRelease>(RELEASE_NOTES_URL);
-    return {
-      version: release.tag_name.trim().replace(/^v/i, ''),
-      title: release.name || release.tag_name,
-      body: release.body?.trim() || 'No release notes were published for this version.',
-      url: release.html_url ?? null,
-    };
+    try {
+      const release = await fetchJson<GitHubRelease>(RELEASE_NOTES_URL);
+      return {
+        version: release.tag_name.trim().replace(/^v/i, ''),
+        title: release.name || release.tag_name,
+        body: release.body?.trim() || 'No release notes were published for this version.',
+        url: release.html_url ?? null,
+      };
+    } catch (error) {
+      // Gracefully handle GitHub API errors (rate limiting, network issues, etc.)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.warn('Failed to fetch release notes:', errorMessage);
+      
+      // Return fallback release notes instead of crashing
+      return {
+        version: app.getVersion(),
+        title: 'NexCode IDE',
+        body: 'Release notes are currently unavailable. Please check the GitHub repository for the latest updates.',
+        url: 'https://github.com/Hyggshi-OS-project-center/NexCode/releases',
+      };
+    }
   });
   ipcMain.on('about:close', () => closeAboutWindow());
   ipcMain.handle('about:getInfo', async (): Promise<AboutInfo> => {
@@ -466,26 +480,40 @@ ipcMain.handle(
 
 function fetchJson<T>(url: string): Promise<T> {
   return new Promise((resolve, reject) => {
-    https
-      .get(url, { headers: { 'User-Agent': GITHUB_USER_AGENT, Accept: 'application/vnd.github+json' } }, (response) => {
-        if (response.statusCode !== 200) {
-          reject(new Error(`GitHub release notes request failed with HTTP ${response.statusCode ?? 'unknown'}.`));
-          response.resume();
-          return;
+    const options = {
+      headers: {
+        'User-Agent': GITHUB_USER_AGENT,
+        'Accept': 'application/vnd.github+json',
+        'Accept-Encoding': 'gzip, deflate',
+      },
+      timeout: 10000, // 10 second timeout
+    };
+
+    const request = https.get(url, options, (response) => {
+      if (response.statusCode !== 200) {
+        response.resume();
+        reject(new Error(`GitHub release notes request failed with HTTP ${response.statusCode ?? 'unknown'}.`));
+        return;
+      }
+
+      let body = '';
+      response.setEncoding('utf8');
+      response.on('data', (chunk) => {
+        body += chunk;
+      });
+      response.on('end', () => {
+        try {
+          resolve(JSON.parse(body) as T);
+        } catch (error) {
+          reject(error);
         }
-        let body = '';
-        response.setEncoding('utf8');
-        response.on('data', (chunk) => {
-          body += chunk;
-        });
-        response.on('end', () => {
-          try {
-            resolve(JSON.parse(body) as T);
-          } catch (error) {
-            reject(error);
-          }
-        });
-      })
-      .on('error', reject);
+      });
+    });
+
+    request.on('error', reject);
+    request.on('timeout', () => {
+      request.destroy();
+      reject(new Error('GitHub release notes request timed out.'));
+    });
   });
 }

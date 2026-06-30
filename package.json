@@ -20,9 +20,9 @@
     "dev:electron": "wait-on -t 60000 http://localhost:5173 && npm run build:main && cross-env VITE_DEV_SERVER=1 electron .",
     "dev:renderer": "cross-env NODE_ENV=development vite --config vite.config.ts",
     "icons": "node scripts/generate-icons.mjs && node scripts/ensure-default-win32-icon.mjs && node scripts/normalize-win32-icons.mjs && node scripts/copy-win32-icons.mjs",
-    "build": "npm run icons && npm run build:main && npm run build:renderer",
+    "build": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" npm run icons && npm run build:main && npm run build:renderer",
     "build:main": "tsc -p tsconfig.main.json",
-    "build:renderer": "vite build && npm run build:agent-renderer",
+    "build:renderer": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" VITE_NO_SOURCEMAP=1 vite build && npm run build:agent-renderer",
     "build:agent-renderer": "node scripts/copy-agent-renderer.mjs",
     "build:themes-hsixet": "node scripts/build-theme-hsixet.cjs",
     "build:renderer-web": "npm run build:renderer && npx vite --config vite.config.ts",
@@ -168,13 +168,6 @@
         },
         {
           "target": "zip",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
-        },
-        {
-          "target": "rpm",
           "arch": [
             "x64",
             "arm64"

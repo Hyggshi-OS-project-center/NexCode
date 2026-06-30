@@ -14,6 +14,16 @@
  * Mermaid:
  *  - ```mermaid fenced blocks are rendered as diagrams via mermaid.js@10 (CDN, lazy)
  *  - dark theme by default; falls back to error <pre> if load/parse fails
+ *
+ * Raw HTML blocks (GitHub-README style):
+ *  - Block-level HTML (<div>, <p>, <table>, <h1>-<h6>, <center>, <section>,
+ *    <details>, <summary>, <blockquote>, <ul>, <ol>, <picture>, <a>, <span>,
+ *    <img>, <br>) starting at the beginning of a line is passed through as
+ *    trusted local HTML instead of being escaped, so things like
+ *    `<div align="center"><img ...></div>` and badge rows
+ *    `[![label](badge-url)](link-url)` render exactly like on GitHub.
+ *  - Markdown image/link syntax found *inside* an HTML block is still
+ *    converted to <img>/<a> tags before the block is emitted.
  */
 
 export class MarkdownPreview {
@@ -153,10 +163,13 @@ export class MarkdownPreview {
   // ---------------------------------------------------------------------------
 
   private initImages(): void {
-    const imgs = this.bodyEl.querySelectorAll<HTMLImageElement>('img.md-img');
+    const imgs = this.bodyEl.querySelectorAll<HTMLImageElement>('img.md-img, .md-preview-body img');
 
     imgs.forEach(img => {
-      // Wrap in a container span if not already wrapped
+      // Don't double-wrap images that already sit inside a raw HTML block
+      // (e.g. <div align="center"><img></div>) — only auto-wrap bare <img>
+      // tags that came from markdown image syntax (class="md-img") or have
+      // no special layout container yet.
       if (!img.parentElement?.classList.contains('md-img-container')) {
         const wrapper = document.createElement('span');
         wrapper.className = 'md-img-container';
@@ -374,6 +387,67 @@ function escapeHtml(text: string): string {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * Block-level tags we recognize when they open a line. Used to detect the
+ * start of a "raw HTML block" (GitHub-flavored markdown behavior).
+ */
+const HTML_BLOCK_TAGS = new Set([
+  'div', 'p', 'table', 'thead', 'tbody', 'tr', 'td', 'th',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'center', 'section', 'article', 'details', 'summary',
+  'blockquote', 'ul', 'ol', 'li', 'figure', 'figcaption',
+  'picture', 'span', 'a', 'img', 'br', 'hr', 'kbd', 'sub', 'sup',
+]);
+
+const VOID_TAGS = new Set(['img', 'br', 'hr']);
+
+/**
+ * Converts markdown image/link syntax that appears *inside* a raw HTML block
+ * into HTML, without escaping the surrounding HTML itself. This lets things
+ * like `[![label](badge.svg)](https://...)` badge rows work inside
+ * `<div align="center">...</div>` exactly as on GitHub.
+ */
+function renderMarkdownInsideHtml(html: string): string {
+  // Linked images: [![alt](imgUrl "title")](linkUrl)
+  let result = html.replace(
+    /\[!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)\]\(([^)]+)\)/g,
+    (_m, alt: string, imgUrl: string, title: string | undefined, linkUrl: string) => {
+      const img =
+        `<img src="${escapeAttr(imgUrl.replace(/ /g, '%20'))}" alt="${escapeAttr(alt)}"` +
+        `${title ? ` title="${escapeAttr(title)}"` : ''}` +
+        ` class="md-img" referrerpolicy="no-referrer" crossorigin="anonymous" />`;
+      return `<a href="${escapeAttr(linkUrl)}" target="_blank" rel="noopener">${img}</a>`;
+    }
+  );
+
+  // Standalone images: ![alt](imgUrl "title")
+  result = result.replace(
+    /!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)/g,
+    (_m, alt: string, url: string, title: string | undefined) =>
+      `<img src="${escapeAttr(url.replace(/ /g, '%20'))}" alt="${escapeAttr(alt)}"` +
+      `${title ? ` title="${escapeAttr(title)}"` : ''}` +
+      ` class="md-img" referrerpolicy="no-referrer" crossorigin="anonymous" />`
+  );
+
+  // Plain links: [text](url)  (only outside already-built <a> tags above)
+  result = result.replace(
+    /\[([^\]]+)\]\(([^)]+)\)/g,
+    (_m, label: string, url: string) =>
+      `<a href="${escapeAttr(url)}" target="_blank" rel="noopener">${label}</a>`
+  );
+
+  // Bold / italic inside HTML text nodes (best-effort; HTML tags are left as-is)
+  result = result
+    .replace(/\*{2}([^*<>]+?)\*{2}/g, '<strong>$1</strong>')
+    .replace(/\*([^*<>]+?)\*/g, '<em>$1</em>');
+
+  return result;
+}
+
+function escapeAttr(text: string): string {
+  return text.replace(/"/g, '&quot;');
+}
+
 function renderInline(text: string): string {
   const placeholders: string[] = [];
 
@@ -480,6 +554,58 @@ function renderInline(text: string): string {
   return result;
 }
 
+/**
+ * Detects if `line` opens a recognized block-level HTML tag, e.g.
+ * `<div align="center">` or `<details>`. Returns the tag name (lowercase)
+ * if so, otherwise null. Comments (`<!--`) are ignored here.
+ */
+function openingHtmlBlockTag(line: string): string | null {
+  const m = /^<([a-zA-Z][a-zA-Z0-9-]*)\b[^>]*>/.exec(line.trim());
+  if (!m) return null;
+  const tag = m[1].toLowerCase();
+  return HTML_BLOCK_TAGS.has(tag) ? tag : null;
+}
+
+/**
+ * Given the full line array and starting index `i` (where an HTML block tag
+ * opens), consumes lines until the matching closing tag is found (tracking
+ * nested open/close counts of the *same* tag name), and returns the raw HTML
+ * source plus the next line index to resume parsing from.
+ */
+function consumeHtmlBlock(
+  lines: string[],
+  startIdx: number,
+  tag: string
+): { html: string; nextIdx: number } {
+  if (VOID_TAGS.has(tag)) {
+    // Self-contained on one line (e.g. a bare <img .../> or <br/>)
+    return { html: lines[startIdx], nextIdx: startIdx + 1 };
+  }
+
+  const openRe = new RegExp(`<${tag}\\b[^>]*>`, 'gi');
+  const closeRe = new RegExp(`</${tag}>`, 'gi');
+
+  const collected: string[] = [];
+  let depth = 0;
+  let i = startIdx;
+
+  for (; i < lines.length; i++) {
+    const line = lines[i];
+    collected.push(line);
+
+    const opens = (line.match(openRe) || []).length;
+    const closes = (line.match(closeRe) || []).length;
+    depth += opens - closes;
+
+    if (depth <= 0) {
+      i++; // move past this line
+      break;
+    }
+  }
+
+  return { html: collected.join('\n'), nextIdx: i };
+}
+
 export function renderMarkdown(md: string): string {
   const lines = md.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
   const out: string[] = [];
@@ -489,6 +615,15 @@ export function renderMarkdown(md: string): string {
 
   while (i < lines.length) {
     const line = lines[i];
+
+    // ── Raw HTML block (GitHub-README style: <div>, <h1>, <table>, <center>…) ─
+    const htmlTag = openingHtmlBlockTag(line);
+    if (htmlTag) {
+      const { html, nextIdx } = consumeHtmlBlock(lines, i, htmlTag);
+      out.push(renderMarkdownInsideHtml(html));
+      i = nextIdx;
+      continue;
+    }
 
     // ── Fenced code block (including mermaid) ───────────────────────────────
     if (/^```/.test(line)) {
@@ -502,7 +637,7 @@ export function renderMarkdown(md: string): string {
       i++; // consume closing ```
 
       if (lang === 'mermaid') {
-        // Encode with btoa(encodeURIComponent(...)) so Unicode is preserved
+        // Encoded as btoa(encodeURIComponent(...)) so Unicode is preserved
         const source = codeLines.join('\n');
         const encoded = btoa(encodeURIComponent(source));
         out.push(
@@ -603,7 +738,8 @@ export function renderMarkdown(md: string): string {
     while (
       i < lines.length &&
       lines[i].trim() &&
-      !/^(#{1,6}|>|[-*+]|\d+\.|```|[-*_]{3,})/.test(lines[i])
+      !/^(#{1,6}|>|[-*+]|\d+\.|```|[-*_]{3,})/.test(lines[i]) &&
+      !openingHtmlBlockTag(lines[i])
     ) {
       paraLines.push(lines[i]);
       i++;

@@ -64,16 +64,15 @@ echo
 echo "[build-app-all-linux] Step 4/4: Building .rpm package (Fedora/openSUSE)..."
 
 if [ "$BUILD_RPM" = true ]; then
-    # electron-builder đọc version thẳng từ package.json và tự convert - → ~
-    # trước khi pass cho fpm, nên --config.extraMetadata.version không có tác dụng.
-    # Fix: patch package.json tạm thời, build xong restore lại.
+    RPM_STATUS="⚠ Build failed"
+    RPM_VERSION="$VERSION"
     RPM_VERSION=$(echo "$VERSION" | sed 's/[-~]/./g' | tr '[:upper:]' '[:lower:]')
     echo "[build-app-all-linux] RPM version sanitized: $VERSION → $RPM_VERSION"
 
     # Backup package.json
     cp package.json package.json.rpm-bak
 
-    # Trap để đảm bảo luôn restore dù build lỗi/crash
+    # Ensure package.json is restored on exit, even if the script fails
     trap 'mv package.json.rpm-bak package.json 2>/dev/null || true' EXIT
 
     node -e "
@@ -106,8 +105,8 @@ echo " Output files:"
 echo "============================================"
 
 echo "  NexCode.IDE-$VERSION-x64.AppImage — Universal (AppImage)"
-echo "  nexcode-ide-$VERSION-x64.deb — Debian/Ubuntu/Linux Mint"
-echo "  NexCode.IDE-$VERSION-x64.rpm — Fedora/openSUSE ($RPM_STATUS)"
+echo "  Nexcode-ide-$VERSION-x64.deb — Debian/Ubuntu/Linux Mint"
+echo "  NexCode.IDE-$RPM_VERSION-x64.rpm — Fedora/openSUSE ($RPM_STATUS)"
 echo
 echo "============================================"
 echo "[build-app-all-linux] Build process completed"

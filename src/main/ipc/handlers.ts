@@ -108,6 +108,50 @@ export function registerIpcHandlers(
     return result.canceled ? null : result.filePath ?? null;
   });
 
+  // ── Extensions (global, per-user — same model as VSCode's ~/.vscode/extensions) ──
+  ipcMain.handle('dialog:openExtensionFile', async () => {
+    const win = getWindow();
+    const result = await dialog.showOpenDialog(win!, {
+      properties: ['openFile'],
+      filters: [
+        { name: 'NexCode Extensions', extensions: ['vsix', 'hsixet', 'hsiext'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    });
+    return result.canceled ? null : result.filePaths[0] ?? null;
+  });
+
+  ipcMain.handle('extensions:getExtensionsPath', async () => {
+    const dir = path.join(app.getPath('userData'), 'extensions');
+    await fs.mkdir(dir, { recursive: true });
+    return dir;
+  });
+
+  ipcMain.handle('extensions:install', async (_e, sourcePath: string) => {
+    const dir = path.join(app.getPath('userData'), 'extensions');
+    await fs.mkdir(dir, { recursive: true });
+
+    const base = path.basename(sourcePath);
+    const ext = path.extname(base);
+    const stem = base.slice(0, base.length - ext.length);
+
+    let destPath = path.join(dir, base);
+    let suffix = 1;
+    // Avoid clobbering an existing extension file with the same name.
+    while (
+      await fs
+        .access(destPath)
+        .then(() => true)
+        .catch(() => false)
+    ) {
+      destPath = path.join(dir, `${stem}-${suffix}${ext}`);
+      suffix += 1;
+    }
+
+    await fs.copyFile(sourcePath, destPath);
+    return destPath;
+  });
+
   ipcMain.handle(
     'fs:readDir',
     async (_e, dirPath: string, options?: { showHidden?: boolean }) =>

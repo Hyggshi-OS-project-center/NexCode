@@ -19,21 +19,23 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 20
-          cache: 'npm'
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      # `pack` đã bao gồm build bên trong: npm run build && node scripts/pack-installer.mjs
-      # Không cần chạy `npm run build` riêng nữa để tránh build 2 lần
-      - name: Package Electron app (NSIS installer)
-        run: npm run pack
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Windows app
+        shell: bash
+        run: |
+          ./scripts/build-app-all-Windows.bat
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: NexCode-IDE-Windows
+<<<<<<< HEAD
           path: dist/pack-out/*.exe   # ← output dir theo electron-builder.config
+=======
+          path: dist/pack-out/*.exe
+>>>>>>> a761327 (feat: add custom tab scrollbar with drag support and multi-platform build scripts)
           retention-days: 7

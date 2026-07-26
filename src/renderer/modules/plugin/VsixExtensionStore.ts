@@ -20,6 +20,7 @@ export class VsixExtensionStore {
   private themeStyleElements = new Map<string, HTMLStyleElement>();
   private activeThemeId: string | null = null;
   private onThemeApplied?: (themeId: string) => void;
+  private host: PluginHost | null = null;
 
   constructor(onThemeApplied?: (themeId: string) => void) {
     this.onThemeApplied = onThemeApplied;
@@ -29,24 +30,81 @@ export class VsixExtensionStore {
     return [...this.installed.values()];
   }
 
+  /**
+   * Load extensions from the global, per-user extensions directory.
+   * This mirrors VSCode's model: extensions are installed once for the
+   * user and stay active across every workspace — they are NOT tied to
+   * a project folder, and no `.nexcode/extensions` folder is required.
+   * Call this once at app startup.
+   */
+  async loadGlobalExtensions(host: PluginHost): Promise<void> {
+    this.host = host;
+    const dir = await window.electronAPI.getExtensionsPath();
+    await this.scanDir(dir, host);
+
+    // Back-compat: still pick up any extensions a user already dropped
+    // into a workspace-local `.nexcode/extensions` folder, if one is
+    // open, but this is opportunistic — not required for extensions
+    // to work, and never causes the section to show "no extensions".
+    if (this.workspacePath) {
+      await this.scanLegacyWorkspaceDirs(this.workspacePath, host);
+    }
+  }
+
+  private workspacePath: string | null = null;
+
+  /**
+   * Optional: also pick up extensions from legacy workspace-local folders
+   * for projects that pre-date the global extensions directory. This is
+   * additive only and never required.
+   */
   async scanWorkspace(workspacePath: string, host: PluginHost): Promise<void> {
-    await this.deactivateAll(host);
+    this.workspacePath = workspacePath;
+    this.host = host;
+    await this.scanLegacyWorkspaceDirs(workspacePath, host);
+  }
+
+  private async scanLegacyWorkspaceDirs(workspacePath: string, host: PluginHost): Promise<void> {
     for (const rel of EXTENSION_DIRS) {
       const dir = joinPath(workspacePath, rel);
       if (!(await window.electronAPI.exists(dir))) continue;
+      await this.scanDir(dir, host);
+    }
+  }
 
-      const entries = await window.electronAPI.readDir(dir, { showHidden: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory && isVsixFile(entry.name)) {
-          try {
-            await this.installFromPath(entry.path, host);
-          } catch (err) {
-            console.warn(`[VsixExtensionStore] Skipping "${entry.path}":`, err);
-          }
+  private async scanDir(dir: string, host: PluginHost): Promise<void> {
+    if (!(await window.electronAPI.exists(dir))) return;
+    const entries = await window.electronAPI.readDir(dir, { showHidden: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory && isVsixFile(entry.name)) {
+        try {
+          await this.installFromPath(entry.path, host);
+        } catch (err) {
+          console.warn(`[VsixExtensionStore] Skipping "${entry.path}":`, err);
         }
       }
     }
   }
+
+  /**
+   * Install flow used by the "Install Extension..." button: copies the
+   * chosen file into the global extensions directory and activates it
+   * immediately, without needing a workspace folder to be open at all.
+   */
+  async installExtension(sourcePath: string): Promise<InstalledVsixExtension> {
+    if (!this.host) {
+      throw new Error('Extension host is not ready yet');
+    }
+    const destPath = await window.electronAPI.installExtensionFile(sourcePath);
+    await this.installFromPath(destPath, this.host);
+    const installedId = [...this.installed.entries()].find(([, v]) => v.path === destPath)?.[0];
+    const result = installedId ? this.installed.get(installedId) : undefined;
+    if (!result) {
+      throw new Error('Extension installed but could not be found afterwards');
+    }
+    return result;
+  }
+
 
   async installFromPath(vsixPath: string, host: PluginHost): Promise<void> {
     const raw = await window.electronAPI.readFileBinary(vsixPath);
@@ -61,12 +119,6 @@ export class VsixExtensionStore {
     await host.register(plugin);
     this.installed.set(manifest.id, { path: vsixPath, manifest, plugin });
     await this.applyThemeManifest(manifest, raw, vsixPath);
-  }
-
-  private async deactivateAll(host: PluginHost): Promise<void> {
-    await host.unregisterAll();
-    this.installed.clear();
-    this.clearThemeStyles();
   }
 
   private async createPlugin(

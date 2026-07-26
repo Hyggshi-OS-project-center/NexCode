@@ -12,7 +12,8 @@
   "license": "MIT",
   "scripts": {
     "buildfast:Nocompile": "cross-env VITE_NO_SOURCEMAP=1 vite build",
-    "buildfast": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" VITE_NO_SOURCEMAP=1 vite build && npm run build:main",
+    "buildfast": "cross-env NODE_OPTIONS=\"--max-old-space-size=3072\" VITE_NO_SOURCEMAP=1 vite build && npm run build:main",
+    "clean": "rimraf dist cache .vite *.tsbuildinfo",
     "debug": "concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
     "Devtools": "concurrently \"npm run dev:renderer\" \"npm run dev:electron-devtools\"",
     "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",

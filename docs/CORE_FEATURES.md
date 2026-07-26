@@ -54,7 +54,7 @@ A dedicated crash handler that captures unhandled exceptions, logs diagnostics, 
 First-class editor support for the HOSC/HOSC++ programming language, including syntax highlighting, basic IntelliSense, and integration with the HOSC LSP server when available.
 
 ### CF-13 · Lightweight Resource Profile
-A designed-in target of ≤150 MB RAM usage under typical workloads, positioned explicitly as a lightweight alternative to heavier Electron-based editors.
+A designed-in target of ≤150 MB RAM usage under typical workloads, positioned explicitly as a lightweight alternative to heavier Electron-based editors. For fair performance comparisons, see [BENCHMARK.md](../BENCHMARK.md).
 
 ---
 

@@ -19,7 +19,7 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 20
-          cache: 'npm'
+          cache: npm
 
       - name: Install system dependencies
         run: |
@@ -33,29 +33,24 @@ jobs:
             xauth \
             xvfb \
             libgbm-dev \
-            libasound2-dev
+            libasound2-dev \
+            rpm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build (Vite + TypeScript)
-        run: npm run build
-
-      - name: Package Electron app (Linux)
-        run: npx electron-builder --linux --config.directories.output=dist/pack-out
+      - name: Build all Linux packages
+        run: bash scripts/build-app-all-linux-platform.sh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload AppImage artifact
+      - name: Upload Linux packages
         uses: actions/upload-artifact@v7
         with:
-          name: NexCode-IDE-Linux-AppImage
-          path: dist/pack-out/*.AppImage
+          name: NexCode-IDE-Linux-Packages
+          path: |
+            dist/pack-out/*.AppImage
+            dist/pack-out/*.deb
+            dist/pack-out/*.rpm
           retention-days: 7
-      - name: Upload .deb artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: NexCode-IDE-Linux-deb
-          path: dist/pack-out/*.deb
           
-          retention-days: 7

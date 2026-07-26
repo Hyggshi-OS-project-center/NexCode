@@ -81,6 +81,10 @@ export class Explorer {
     this.storeView.setHost(host);
   }
 
+  setOnInstallExtension(handler: () => void): void {
+    this.storeView.setInstallHandler(handler);
+  }
+
   getRootPath(): string | null {
     return this.rootPath;
   }

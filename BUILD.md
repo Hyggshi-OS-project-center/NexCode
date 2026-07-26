@@ -1,192 +1,312 @@
-# How to Build NexCode IDE (Windows .exe)
+# Build NexCode IDE
 
-This guide explains how to compile NexCode IDE and produce a Windows executable you can run or share.
+This guide explains how to install dependencies, run NexCode IDE from source, compile the app, and package Windows or Linux builds.
 
-> ⚠️ **Disk space warning:** First-time build requires **~7 GB free disk space** (12 GB recommended). The installed app itself is only ~150 MB.
+> Disk space: keep at least 7 GB free for a first full package build. Electron, Chromium, Monaco, package caches, and generated artifacts add up quickly.
 
-> 💡 **Low RAM?** If your machine has 8 GB RAM or less, close Chrome, VS Code, and other heavy apps before building. See [Build is slow / excessive disk activity](#build-is-slow--excessive-disk-activity).
+> Low RAM: on machines with 8 GB RAM or less, close browsers and other heavy apps before running `npm run build` or packaging commands.
 
 ---
 
 ## Requirements
 
-- **Windows 10 or 11** (64-bit)
-- **Node.js 20+** — [https://nodejs.org](https://nodejs.org)
-- **npm** (included with Node.js)
+- Node.js 20 or newer
+- npm
+- Git
+- Windows 10/11 for Windows `.exe` and NSIS installer builds
+- Linux for AppImage, `.deb`, `.tar.gz`, and `.zip` Linux builds
 
 Check versions:
 
-```powershell
+```bash
 node -v
 npm -v
 ```
 
----
+Install dependencies:
 
-## One-time setup
-
-Open PowerShell or Command Prompt in the project folder:
-
-```powershell
-cd "Downloads\IDE"
+```bash
 npm install
 ```
 
 ---
 
-## Build the app (compile only)
+## Run From Source
 
-### `buildfast` — lightweight development build (recommended for iteration)
+### Normal source run
 
-Runs only `build:main` (tsc) + `build:renderer` (vite). Everything else is skipped:
-
-| Skipped step | Effect |
-|---|---|
-| `npm run icons` (sharp) | No icon generation — saves ~200–400 MB RAM |
-| agent-renderer copy | No extra file copying |
-| `electron-builder` | No packaging |
-| NSIS packaging | No installer creation |
-| asar packing | No app.asar bundling |
-| artifact generation | No `.exe` output |
-
-```powershell
-npm run buildfast
-```
-
-| | RAM Peak | Output Size | Duration |
-|--|----------|-------------|----------|
-| `vite build` (renderer) | ~300–600 MB | ~10–15 MB | ~5–15 sec |
-| `tsc` (main process) | ~200–400 MB | ~1–2 MB | ~5–10 sec |
-| **Total** | **~500–700 MB** | **~15–20 MB** | **~10–25 sec** |
-
-> `buildfast` produces no `.exe` — use `npm start` after it to run the app from source.
-
-> 💡 Pre-compiled icons are included in the repo (`build/`).
-> `npm run icons` is only needed after changing `build/icon.svg`.
-
-### `build` — full compile
-
-Includes icon generation and agent-renderer copy. Required before packaging.
-
-```powershell
-npm run build
-```
-
-### Build variant comparison
-
-| Command | RAM Peak | Output Size | Notes |
-|---------|----------|-------------|-------|
-| `buildfast` | ~500–700 MB | ~15–20 MB | Skips `icons` — runs `build:main` + `build:renderer` only |
-| `build` | ~600–800 MB | ~39 MB | Complete build |
-| `pack` / `pack:portable` | ~2–2.5 GB | ~150–200 MB per artifact | Full Electron packaging |
-
-> Use `buildfast` during development and `build` + `pack` only when preparing a release.
-
-Run from source (for testing):
-
-```powershell
+```bash
 npm start
 ```
 
+`npm start` runs Electron from the local source tree. In development, the main process starts or uses a Vite renderer server and loads the UI from `http://127.0.0.1:5173` when available.
+
+Use this when you already have compiled main-process files in `dist/main`.
+
+### Live development
+
+```bash
+npm run dev
+```
+
+This runs the renderer Vite server and Electron together:
+
+- `npm run dev:renderer` starts Vite.
+- `npm run dev:electron` waits for Vite, builds the main process, then launches Electron with `VITE_DEV_SERVER=1`.
+
+Useful variants:
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Start Vite + Electron together |
+| `npm run dev:renderer` | Start only the Vite renderer server |
+| `npm run dev:electron` | Build main process and launch Electron against Vite |
+| `npm run dev:vite` | Start Vite with `NODE_ENV=development` |
+| `npm run debug` | Alias-style dev command using `concurrently` |
+| `npm run Devtools` | Dev command intended for Electron with devtools |
+
 ---
 
-## App icon
+## Compile Builds
 
-Icons are generated from `build/icon.svg` before each build:
+### Fast build
 
-```powershell
+```bash
+npm run buildfast
+```
+
+Runs:
+
+1. Vite renderer build with sourcemaps disabled.
+2. TypeScript main-process build.
+
+It skips icon generation and does not copy the AI Agent renderer. Use this for quick local iteration when you do not need a complete package-ready `dist`.
+
+There is also:
+
+```bash
+npm run buildfast:Nocompile
+```
+
+That runs only the Vite renderer build.
+
+### Full build
+
+```bash
+npm run build
+```
+
+Runs:
+
+1. `npm run icons`
+2. `npm run build:main`
+3. `npm run build:renderer`
+4. `npm run build:agent-renderer`
+
+Use this before release packaging.
+
+### Targeted build commands
+
+| Command | Output |
+|---|---|
+| `npm run build:main` | Compiles `src/main` and `src/shared` to `dist/main` and `dist/shared` |
+| `npm run build:renderer` | Builds Vite renderer entries to `dist/renderer`, then copies the AI Agent renderer |
+| `npm run build:agent-renderer` | Copies `src/agents/src/renderer` to `dist/agents/renderer` |
+| `npm run build:themes-hsixet` | Builds HSIXET theme assets |
+| `npm run build:renderer-web` | Builds renderer, then runs Vite config again for web output |
+| `npm run typecheck` | Type-checks main and renderer without writing build output |
+| `npm run check` | Runs typecheck, main build, and renderer build |
+
+The Vite renderer has multiple HTML entry points:
+
+- `src/renderer/index.html`
+- `src/renderer/about.html`
+- `src/renderer/easterEgg.html`
+
+These are emitted into `dist/renderer`.
+
+---
+
+## Icons
+
+Regenerate icons with:
+
+```bash
 npm run icons
 ```
 
-This creates `build/icon.ico` (for the `.exe`), `src/renderer/public/favicon.ico` (for the UI), and copies `src/icons/win32/*.ico` to `build/win32/` for Windows file-type icons.
+This runs:
 
-**Taskbar icon:** `scripts/after-pack.cjs` embeds `build/icon.ico` into `win-unpacked/NexCode IDE.exe` during the build (before NSIS/portable wrappers). After changing `build/icon.svg`, run `npm run icons` and **rebuild** with `npm run pack` or `npm run pack:portable`.
+1. `scripts/generate-icons.mjs`
+2. `scripts/ensure-default-win32-icon.mjs`
+3. `scripts/normalize-win32-icons.mjs`
+4. `scripts/copy-win32-icons.mjs`
 
-**Dev mode (`npm start`):** The taskbar still shows the generic **Electron** logo because the process is `electron.exe`. Use a packaged build to see your custom icon in the taskbar.
+Generated or copied outputs include:
+
+- `build/icon.ico`
+- `build/icon.png`
+- `src/renderer/public/favicon.ico`
+- `build/win32/*.ico`
+
+The packaged app also includes:
+
+- `icon.ico`
+- `insider-icon.ico`
+
+`scripts/after-pack.cjs` embeds the app icon into the unpacked Windows executable before NSIS or portable wrappers are created.
+
+In `npm start` or `npm run dev`, the taskbar may still show Electron-specific process behavior because the app is running through Electron's development binary. Packaged builds show the production executable name and icon.
 
 ---
 
-## Windows file associations
+## Package Windows
 
-The **NSIS installer** (`npm run pack`) registers NexCode IDE as the editor for common code file types (`.js`, `.py`, `.ts`, `.html`, etc.) using icons from `src/icons/win32/`. Association ProgIDs are unique (`NexCodeIDE.Python`, etc.) — see `scripts/file-associations.cjs` and `electron-builder.config.cjs`.
+### Portable `.exe`
 
-Generic text (`.txt`, `.log`, `.text`) uses **`src/icons/win32/default.ico`**. `npm run icons` normalizes all Win32 `.ico` files (transparent background, standard sizes).
-
-**Wrong icon in Explorer (e.g. app diamond on `.py` files)?** Uninstall the old NexCode IDE build, run `npm run icons`, then `npm run pack` and reinstall so Windows picks up the new `NexCodeIDE.*` ProgIDs and `resources\python.ico`.
-
-- Requires the setup installer (not the portable `.exe`).
-- `nsis.perMachine` is enabled so associations install correctly (may prompt for administrator approval).
-
----
-
-## Create the Windows .exe
-
-### Portable .exe (recommended)
-
-Single file, no installer — run directly:
-
-```powershell
+```bash
 npm run pack:portable
 ```
 
-**Output:**
+Runs a full build, then packages a Windows portable executable on Windows.
 
+Output goes to a fresh timestamped folder:
+
+```text
+dist/pack-YYYY-MM-DDTHH-MM-SS/NexCode IDE-<version>-portable.exe
 ```
-dist\pack-<timestamp>\NexCode IDE-1.0.0-portable.exe
+
+### Fast portable `.exe`
+
+```bash
+npm run packfast:portable
 ```
 
-Each `npm run pack:portable` writes to a new folder under `dist\` so a running app cannot lock `app.asar` from the previous build.
+Runs `buildfast`, then packages portable. Use this only when you know the current `dist` has everything needed. A normal release should use `npm run pack:portable`.
 
-Double-click that file to launch NexCode IDE. In Task Manager it appears as **NexCode IDE**, not "Electron".
+### NSIS installer
 
-> **Note:** `npm start` runs the Electron dev binary, so Task Manager may still list "Electron" until you set `process.title` (done in code) or use the packaged `.exe`. For the correct name and icon everywhere, use the portable or setup build.
-
-### Installer + portable
-
-Builds both a portable exe and an NSIS setup installer:
-
-```powershell
+```bash
 npm run pack
 ```
 
-**Output:**
+Runs a full build, then creates a Windows NSIS setup installer on Windows.
 
-| File | Description |
-|------|-------------|
-| `dist\pack-<timestamp>\NexCode IDE-1.0.0-portable.exe` | Portable app |
-| `dist\pack-<timestamp>\NexCode IDE-1.0.0-setup.exe` | Installer |
+Output goes to:
 
----
+```text
+dist/pack-YYYY-MM-DDTHH-MM-SS/NexCode IDE-<version>-setup.exe
+```
 
-## Build scripts (recommended on low-RAM machines)
+The installer is configured with:
 
-Use these instead of running `npm` commands manually on machines with 8 GB RAM or less. Each script closes unnecessary processes before building.
-
-| Script | What it builds | Minimum RAM |
-|--------|---------------|-------------|
-| `build-app-portable.bat` | Portable `.exe` (x64) — recommended | ~4 GB free |
-| `build-app-Windows.bat` | Standard Windows package (x64) | ~4 GB free |
-| `build-app-ARM.bat` | Windows ARM64 only | ~4 GB free |
-| `build-app-ia32.bat` | Windows 32-bit only | ~4 GB free |
-| `build-app-all-Windows.bat` | All Windows targets (x64, ARM, ia32) | **16 GB recommended** |
-
-> ⚠️ **Avoid `build-app-all-Windows.bat`** on machines with less than 16 GB RAM — building all three architectures simultaneously can peak at 3+ GB RAM usage and will rely heavily on the Windows page file, significantly slowing the build.
+- per-machine install
+- selectable install directory
+- `scripts/installer.nsh`
+- Windows file associations from `scripts/file-associations.cjs`
 
 ---
 
-## Quick reference
+## Package Linux
 
-| Command | What it does |
-|---------|--------------|
-| `npm install` | Install dependencies (first time) |
-| `npm run buildfast` | Fast compile — skips icons + agent copy (dev iteration) |
-| `npm run build` | Full compile to `dist\` (use before packaging) |
-| `npm start` | Run app from source |
-| `npm run pack:portable` | Build portable `.exe` |
-| `npm run pack` | Build portable + installer |
-| `npm run typecheck` | Type-check without building |
-| `npm run icons` | Regenerate icons from `build/icon.svg` |
-| `npm run dev` | Live rebuild + hot reload (development) |
+### Full Linux package set
+
+```bash
+npm run pack:linux
+```
+
+Runs a full build, then packages Linux targets configured in `package.json`:
+
+- AppImage
+- `.deb`
+- `.tar.gz`
+- `.zip`
+
+Output goes to a fresh timestamped folder under `dist/pack-*`.
+
+### Linux AppImage only
+
+```bash
+npm run pack:portable:linux
+```
+
+Runs a full build, then packages an AppImage using `scripts/pack-portable.mjs --linux`.
+
+### Helper shell scripts
+
+| Script | What it does |
+|---|---|
+| `scripts/build-app-linux.sh` | Full build + Linux package set |
+| `scripts/build-app-all-linux-platform.sh` | Builds AppImage, `.deb`, and optionally `.rpm` |
+| `scripts/build-app-rpm.sh` | RPM-oriented Linux packaging helper |
+| `scripts/build-app-portable.sh` | Portable packaging helper |
+| `scripts/build-app.sh` | Full build + platform packaging helper |
+
+For RPM builds, `rpmbuild` is required. The all-Linux script skips RPM if `rpmbuild` is unavailable.
+
+---
+
+## Windows File Associations
+
+Windows installer builds register common development file types such as `.js`, `.ts`, `.py`, `.html`, `.css`, `.md`, `.json`, `.cpp`, `.go`, `.rs`, `.lua`, `.vue`, `.yaml`, `.xml`, `.txt`, and others.
+
+The source of truth is:
+
+```text
+scripts/file-associations.cjs
+```
+
+Each association uses a unique `NexCodeIDE.*` ProgID and an icon from `build/win32`.
+
+Portable builds do not install file associations. Use the NSIS setup installer from `npm run pack` for associations.
+
+---
+
+## Output Layout
+
+Important generated paths:
+
+| Path | Purpose |
+|---|---|
+| `dist/main` | Electron main process build |
+| `dist/shared` | Shared TypeScript output used by main |
+| `dist/renderer` | Vite renderer output |
+| `dist/agents/renderer` | AI Agent renderer files copied for packaging |
+| `dist/pack-*` | Timestamped packaged artifacts |
+| `dist/pack-out` | Default electron-builder output directory |
+| `build` | Build resources such as app icons |
+
+Only these app files are included in packaged builds:
+
+- `dist/main/**/*`
+- `dist/agents/**/*`
+- `dist/renderer/**/*`
+- `dist/shared/**/*`
+- `package.json`
+
+This avoids accidentally bundling previous package output into `app.asar`.
+
+---
+
+## Quick Reference
+
+| Command | Use it for |
+|---|---|
+| `npm install` | Install dependencies |
+| `npm start` | Run Electron from source |
+| `npm run dev` | Live development with Vite + Electron |
+| `npm run buildfast` | Fast compile for iteration |
+| `npm run build` | Full package-ready build |
+| `npm run build:main` | Compile main process only |
+| `npm run build:renderer` | Build renderer + copy agent renderer |
+| `npm run typecheck` | Type-check without emitting |
+| `npm run check` | Typecheck + main build + renderer build |
+| `npm run icons` | Regenerate app and file-type icons |
+| `npm run pack:portable` | Build Windows portable exe on Windows |
+| `npm run packfast:portable` | Fast portable packaging |
+| `npm run pack` | Build Windows NSIS installer on Windows |
+| `npm run pack:linux` | Build Linux package set |
+| `npm run pack:portable:linux` | Build Linux AppImage |
 
 ---
 
@@ -195,90 +315,153 @@ Use these instead of running `npm` commands manually on machines with 8 GB RAM o
 ### `npm install` fails
 
 - Use Node.js 20 or newer.
-- Run the terminal as a normal user (not required to be Administrator for install).
+- Delete `node_modules` only if dependency state is corrupted, then run `npm install` again.
+- On Linux, ensure build tools and system libraries required by Electron are installed.
 
-### `npm run icons` fails on `build/icon.ico`
+### Vite or Electron dev server fails
 
-Another program may have the file open (Explorer preview, antivirus, a running NexCode build). The icons script writes via a temp file and retries; if it still fails, close NexCode IDE and any Explorer window on `build/`, then run `npm run icons` again.
+Try:
 
-### NSIS Error: "Installer integrity check has failed"
+```bash
+npm run build:main
+npm run dev
+```
 
-Do **not** run `rcedit` on `*-setup.exe` or `*-portable.exe` after build — that corrupts the NSIS wrapper. Icons are applied in `scripts/after-pack.cjs` on `win-unpacked/NexCode IDE.exe` only, before the installer is created.
+If port `5173` is already in use, stop the old Vite process or change the Vite server configuration in `vite.config.ts`.
 
-Rebuild the installer:
+### `npm start` opens an older built UI
+
+`npm start` uses compiled files in `dist/main`. Rebuild the main process after main-process changes:
+
+```bash
+npm run build:main
+npm start
+```
+
+For live renderer development, prefer:
+
+```bash
+npm run dev
+```
+
+### Build runs out of memory on an 8 GB machine
+
+Close browsers and other heavy apps before building:
+
+```bash
+pkill chrome
+```
+
+Check available RAM:
+
+```bash
+free -h
+```
+
+If swap is not already configured, add an 8 GB swap file:
+
+```bash
+sudo fallocate -l 8G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+```
+
+Then run the build with a Node memory limit:
+
+```bash
+NODE_OPTIONS="--max-old-space-size=4096" npm run build
+```
+
+### Linux `/dev/shm` or Chromium shared-memory errors
+
+Electron/Chromium may fail if `/dev/shm` permissions are broken. Check:
+
+```bash
+ls -ld /dev/shm
+```
+
+Expected permissions usually include `1777`. On a normal Linux install, this can be fixed with:
+
+```bash
+sudo chmod 1777 /dev/shm
+```
+
+Packaged Linux builds also pass `--no-sandbox` through the Electron builder config.
+
+### `npm run icons` fails
+
+Close any running NexCode build and any file manager previewing `build/icon.ico`, then run:
+
+```bash
+npm run icons
+```
+
+### Windows Explorer shows old file icons
+
+Windows caches file association icons aggressively. Rebuild icons and reinstall the NSIS build:
+
+```powershell
+npm run icons
+npm run pack
+```
+
+Then uninstall older NexCode builds if duplicate associations remain.
+
+### NSIS installer integrity check fails
+
+Do not run `rcedit` on the final `*-setup.exe` or `*-portable.exe`. Resource editing must happen before NSIS wraps the app. This repo handles app icon embedding in `scripts/after-pack.cjs`.
+
+Rebuild:
 
 ```powershell
 npm run pack
 ```
 
-Run the new `dist\pack-<timestamp>\NexCode IDE-1.0.0-setup.exe` (not an older build from `release\`).
+### `app.asar` or package output is locked
 
-### `electron-builder` — file in use / `app.asar` locked
+Close running NexCode instances. On Windows, also close Explorer windows opened inside `dist`.
 
-Close **NexCode IDE** and any portable build still running, then delete the output folder and rebuild:
+You can clean stale unpacked output with:
 
-```powershell
-Remove-Item -Recurse -Force release -ErrorAction SilentlyContinue
-npm run pack:portable
+```bash
+npm run prepack:clean
 ```
 
-### Installer shows ~1.5 GB "space required"
+Then package again.
 
-`electron-builder` was previously configured with `dist/**/*` as pack files, which caused it to bundle previous `dist/pack-*/win-unpacked` folders (full Electron apps) inside `app.asar`, inflating it to over 1 GB.
+### Installer reports huge required disk space
 
-The `build.files` list now only includes `dist/main`, `dist/renderer`, and `dist/shared`. After rebuilding, the installer should report a few hundred MB (Electron + Chromium + Monaco + UI), not gigabytes.
+Check that old package folders are not being included. The package file list should only include `dist/main`, `dist/agents`, `dist/renderer`, `dist/shared`, and `package.json`.
 
-Delete old `dist\pack-*` folders to reclaim disk space, then run `npm run pack` again.
+Remove old timestamped package folders if you need disk space:
 
-### `electron-builder` / winCodeSign / symlink errors
-
-Signing and resource editing are disabled in `package.json` (`signAndEditExecutable: false`). Icons are applied in `scripts/after-pack.cjs` on `win-unpacked/NexCode IDE.exe` before NSIS wraps the installer.
-
-### Taskbar still shows the Electron logo
-
-1. You are running **`npm start`** (dev) — use the latest `dist\pack-*\NexCode IDE-*-portable.exe` instead.
-2. You rebuilt before fixing icon embedding — run `npm run icons` then `npm run pack:portable` again.
-3. Windows cached the old icon — unpin the app from the taskbar, rebuild, launch the new `.exe`, then pin again.
-
-### App does not start after build
-
-1. Run `npm run build` and confirm it finishes without errors.
-2. Try `npm start` — if that works, rebuild the exe with `npm run pack:portable`.
-3. Check that `dist\main\main.js` and `dist\renderer\index.html` exist.
-
-### Change version or app name
-
-Edit `version` and `productName` in `package.json`. Rebuild with `npm run pack:portable`; the output filename will include the new version.
-
-### Build is slow / excessive disk activity
-
-Low available RAM (under 4 GB free) forces `electron-builder` to swap to the Windows page file, significantly slowing the build.
-
-**Before building:**
-- Close Chrome, VS Code, and other heavy apps
-- Ensure at least 3–4 GB RAM is free
-- Use the `.bat` scripts instead of running `npm` commands manually — they handle this automatically
-
-**Estimated peak RAM by phase:**
-
-| Phase | Peak RAM |
-|-------|----------|
-| `npm install` | ~300–500 MB |
-| `npm run icons` | ~200–400 MB |
-| `tsc` (TypeScript) | ~200–400 MB |
-| `vite build` (renderer) | ~300–600 MB |
-| `electron-builder` (packaging) | ~1–2 GB ← heaviest |
-| Single-platform build total | ~2–2.5 GB |
-| All-platform build total | ~2.5–3 GB |
-
----
-
-## Development mode
-
-Live rebuild while developing:
-
-```powershell
-npm run dev
+```bash
+rm -rf dist/pack-*
 ```
 
-This watches the renderer and restarts Electron when files change.
+On Windows PowerShell:
+
+```powershell
+Remove-Item -Recurse -Force dist\pack-* -ErrorAction SilentlyContinue
+```
+
+### App does not start after packaging
+
+Verify a full build first:
+
+```bash
+npm run build
+```
+
+Check that these files exist:
+
+- `dist/main/main.js`
+- `dist/renderer/index.html`
+- `dist/agents/renderer/index.html`
+
+Then rebuild the package for your platform.
+
+### Change version or product name
+
+Edit `version` and `productName` in `package.json`, then rebuild. Artifact names use the package version automatically.

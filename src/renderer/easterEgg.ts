@@ -10,6 +10,7 @@ import shiroko2Url from '@icons/Easter_Egg/shiroko2.jpg?url';
 import arisuUrl from '@icons/Easter_Egg/Arisu.jpg?url';
 import hoshino_UheeeeUrl from '@icons/Easter_Egg/Hoshino_Uheeee.png?url';
 import hoshino_UheeeeAudioUrl from '@icons/Easter_Egg/hoshino-uhee.mp3?url';
+import shiroko3Url from '@icons/Easter_Egg/shiroko-catoon-meo.png?url'
 
 interface EggCharacter {
   image: string;
@@ -22,6 +23,7 @@ const characters: EggCharacter[] = [
   { image: shiroko1Url },
   { image: shiroko2Url },
   { image: arisuUrl },
+  { image: shiroko3Url},
   { image: hoshino_UheeeeUrl, audio: hoshino_UheeeeAudioUrl }
 ];
 

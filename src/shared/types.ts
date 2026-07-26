@@ -104,6 +104,14 @@ export interface AppSettings {
   claudeModel: string;
   /** Enable Chromium sandbox (requires restart) — off by default for memory savings */
   sandbox: boolean;
+  /** Enable Monaco large-file optimizations (virtual scrolling, reduced tokenization) */
+  largeFileOptimizations: boolean;
+  /** Max line length for tokenization (lines longer than this skip syntax highlighting) */
+  maxTokenizationLineLength: number;
+  /** Stop rendering lines after this length (prevents DOM blowup on mega-lines) */
+  stopRenderingLineAfter: number;
+  /** Word-based suggestions mode */
+  wordBasedSuggestions: 'off' | 'matchingDocuments' | 'currentDocument' | 'allDocuments';
 }
 
 /** One turn in the Gemini chat history */
@@ -195,6 +203,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   claudeApiKey: '',
   claudeModel: 'claude-sonnet-4-20250514',
   sandbox: false,
+  largeFileOptimizations: true,
+  maxTokenizationLineLength: 20000,
+  stopRenderingLineAfter: 50000,
+  wordBasedSuggestions: 'matchingDocuments',
 };
 
 export type IpcChannel =
@@ -359,6 +371,13 @@ export interface ElectronAPI {
   toggleDevtools: () => void;
   getCrashAudio: () => Promise<string | null>;
   openFile: () => Promise<string | null>;
+  /** Open a file picker filtered to .vsix/.hsixet/.hsiext manifests. */
+  openExtensionFile: () => Promise<string | null>;
+  /** Path to the per-user global extensions directory (created on demand). */
+  getExtensionsPath: () => Promise<string>;
+  /** Copy a chosen extension file into the global extensions directory. Returns the new path. */
+  installExtensionFile: (sourcePath: string) => Promise<string>;
+
   saveFile: (defaultPath?: string) => Promise<string | null>;
   readDir: (dirPath: string, options?: { showHidden?: boolean }) => Promise<FileEntry[]>;
   readFile: (filePath: string) => Promise<string>;

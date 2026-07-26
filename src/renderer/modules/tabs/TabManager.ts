@@ -15,12 +15,19 @@ type TabEvent = 'select' | 'close';
 
 export class TabManager {
   private bar: HTMLElement;
+  private scrollFrame: HTMLElement | null;
+  private scrollThumb: HTMLElement | null;
   private tabs: OpenTab[] = [];
   private activePath: string | null = null;
   private listeners = new Map<TabEvent, Set<(path: string) => void>>();
   private onTabContextMenu: ((path: string, x: number, y: number) => void) | null;
   private onTabRename: ((path: string, newName: string) => void) | null;
   private onBeforeTabClose: ((path: string) => boolean | Promise<boolean>) | null;
+  private scrollbarTimer: number | null = null;
+  private draggingScrollbar = false;
+  private scrollbarDragStartX = 0;
+  private scrollbarDragStartLeft = 0;
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor(
     barId: string,
@@ -29,9 +36,12 @@ export class TabManager {
     onBeforeTabClose?: (path: string) => boolean | Promise<boolean>,
   ) {
     this.bar = document.getElementById(barId)!;
+    this.scrollFrame = this.bar.closest('.tab-scroll-frame') as HTMLElement | null;
+    this.scrollThumb = this.scrollFrame?.querySelector('.tab-scroll-thumb') as HTMLElement | null;
     this.onTabContextMenu = onTabContextMenu ?? null;
     this.onTabRename = onTabRename ?? null;
     this.onBeforeTabClose = onBeforeTabClose ?? null;
+    this.initTabScrollbar();
   }
 
   on(event: TabEvent, handler: (path: string) => void): void {
@@ -106,6 +116,121 @@ export class TabManager {
 
   getTabs(): OpenTab[] {
     return [...this.tabs];
+  }
+
+  private initTabScrollbar(): void {
+    this.bar.addEventListener('scroll', () => {
+      this.updateTabScrollbar();
+      this.showTabScrollbar();
+    });
+
+    this.bar.addEventListener(
+      'wheel',
+      (e) => {
+        if (this.bar.scrollWidth <= this.bar.clientWidth) return;
+        e.preventDefault();
+        this.bar.scrollLeft += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        this.updateTabScrollbar();
+        this.showTabScrollbar();
+      },
+      { passive: false },
+    );
+
+    this.scrollFrame?.addEventListener('mouseenter', () => {
+      this.showTabScrollbar(false);
+    });
+
+    this.scrollFrame?.addEventListener('mouseleave', () => {
+      if (this.draggingScrollbar) return;
+      this.hideTabScrollbarSoon(600);
+    });
+
+    this.scrollThumb?.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      this.draggingScrollbar = true;
+      this.scrollThumb?.classList.add('dragging');
+      this.scrollbarDragStartX = e.clientX;
+      this.scrollbarDragStartLeft = this.scrollThumb?.offsetLeft ?? 0;
+      document.body.style.userSelect = 'none';
+      this.showTabScrollbar(false);
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!this.draggingScrollbar || !this.scrollThumb) return;
+
+      const maxMove = this.getTabScrollbarMaxMove();
+      if (maxMove <= 0) return;
+
+      const delta = e.clientX - this.scrollbarDragStartX;
+      const nextLeft = Math.min(Math.max(this.scrollbarDragStartLeft + delta, 0), maxMove);
+      this.scrollThumb.style.left = `${nextLeft}px`;
+      this.bar.scrollLeft = (nextLeft / maxMove) * (this.bar.scrollWidth - this.bar.clientWidth);
+      this.showTabScrollbar(false);
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!this.draggingScrollbar) return;
+      this.draggingScrollbar = false;
+      this.scrollThumb?.classList.remove('dragging');
+      document.body.style.userSelect = '';
+      this.hideTabScrollbarSoon(700);
+    });
+
+    if (typeof ResizeObserver !== 'undefined') {
+      this.resizeObserver = new ResizeObserver(() => this.updateTabScrollbar());
+      this.resizeObserver.observe(this.bar);
+    } else {
+      window.addEventListener('resize', () => this.updateTabScrollbar());
+    }
+  }
+
+  private updateTabScrollbar(): void {
+    if (!this.scrollFrame || !this.scrollThumb) return;
+
+    const hasOverflow = this.bar.scrollWidth > this.bar.clientWidth + 1;
+    this.scrollFrame.classList.toggle('has-overflow', hasOverflow);
+    this.scrollThumb.hidden = !hasOverflow;
+
+    if (!hasOverflow) {
+      this.scrollFrame.classList.remove('show-scrollbar');
+      return;
+    }
+
+    const trackWidth = this.getTabScrollbarTrackWidth();
+    const ratio = this.bar.clientWidth / this.bar.scrollWidth;
+    const thumbWidth = Math.max(ratio * trackWidth, 30);
+    const maxScroll = this.bar.scrollWidth - this.bar.clientWidth;
+    const maxMove = Math.max(trackWidth - thumbWidth, 0);
+    const position = maxScroll > 0 ? this.bar.scrollLeft / maxScroll : 0;
+
+    this.scrollThumb.style.width = `${thumbWidth}px`;
+    this.scrollThumb.style.left = `${position * maxMove}px`;
+  }
+
+  private showTabScrollbar(autoHide = true): void {
+    if (!this.scrollFrame || this.bar.scrollWidth <= this.bar.clientWidth + 1) return;
+
+    this.scrollFrame.classList.add('show-scrollbar');
+    if (this.scrollbarTimer !== null) window.clearTimeout(this.scrollbarTimer);
+    if (autoHide) this.hideTabScrollbarSoon(900);
+  }
+
+  private hideTabScrollbarSoon(delay: number): void {
+    if (!this.scrollFrame) return;
+    if (this.scrollbarTimer !== null) window.clearTimeout(this.scrollbarTimer);
+    this.scrollbarTimer = window.setTimeout(() => {
+      if (!this.draggingScrollbar) this.scrollFrame?.classList.remove('show-scrollbar');
+    }, delay);
+  }
+
+  private getTabScrollbarTrackWidth(): number {
+    const track = this.scrollFrame?.querySelector('.tab-scrollbar') as HTMLElement | null;
+    return track?.clientWidth ?? this.bar.clientWidth;
+  }
+
+  private getTabScrollbarMaxMove(): number {
+    if (!this.scrollThumb) return 0;
+    return Math.max(this.getTabScrollbarTrackWidth() - this.scrollThumb.offsetWidth, 0);
   }
 
     /** Start inline rename on a specific tab by path. Replaces the name span with an input field. */
@@ -265,5 +390,15 @@ export class TabManager {
 
       this.bar.appendChild(el);
     });
+
+    this.keepActiveTabVisible();
+    requestAnimationFrame(() => this.updateTabScrollbar());
+  }
+
+  private keepActiveTabVisible(): void {
+    if (!this.activePath) return;
+
+    const activeTab = this.bar.querySelector(`.editor-tab[data-path="${CSS.escape(this.activePath)}"]`) as HTMLElement | null;
+    activeTab?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 }

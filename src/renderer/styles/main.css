@@ -173,13 +173,13 @@ body {
 .app-shell {
   flex: 1;
   display: grid;
-  grid-template-columns: 48px minmax(200px, 280px) 1fr;
+  grid-template-columns: 48px var(--sidebar-width, 280px) 6px 1fr;
   min-height: 0;
   overflow: hidden;
 }
 
 .app-shell.sidebar-collapsed {
-  grid-template-columns: 48px 0 minmax(0, 1fr);
+  grid-template-columns: 48px 0 0 minmax(0, 1fr);
 }
 
 .app-shell.sidebar-collapsed .sidebar {
@@ -189,8 +189,13 @@ body {
   visibility: hidden;
 }
 
+.app-shell.sidebar-collapsed .sidebar-resizer {
+  width: 0;
+  cursor: default;
+}
+
 .app-shell.settings-expanded {
-  grid-template-columns: 48px minmax(360px, 440px) 1fr;
+  --sidebar-width: clamp(360px, 30vw, 440px);
 }
 
 /* Activity bar */
@@ -257,6 +262,21 @@ body {
 
 #activity-bar-agent {
   color: var(--text-primary);
+}
+
+.sidebar-resizer {
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+  position: relative;
+  z-index: 2;
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer.dragging {
+  background: var(--accent-primary, #4c8bf5);
 }
 
 /* Side bar */
@@ -544,17 +564,11 @@ body {
   flex-shrink: 0;
 }
 
-.tab-bar {
-  display: flex;
+.tab-scroll-frame {
+  position: relative;
   flex: 1;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: thin;
-}
-
-.tab-bar:empty {
-  min-width: 0;
-  flex: 0;
+  overflow: hidden;
 }
 
 .editor-toolbar-actions {

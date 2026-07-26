@@ -369,6 +369,10 @@ export class EditorManager {
       find: { addExtraSpaceOnTop: false },
       colorDecorators: true,
       colorDecoratorsActivatedOn: 'clickAndHover',
+      // Performance optimizations for large files
+      largeFileOptimizations: this.settings.largeFileOptimizations,
+      maxTokenizationLineLength: this.settings.maxTokenizationLineLength,
+      stopRenderingLineAfter: this.settings.stopRenderingLineAfter,
     };
   }
 
@@ -381,6 +385,10 @@ export class EditorManager {
       tabSize: settings.tabSize,
       wordWrap: settings.wordWrap ? ('on' as const) : ('off' as const),
       minimap: { enabled: settings.minimap },
+      // Performance settings
+      largeFileOptimizations: settings.largeFileOptimizations,
+      maxTokenizationLineLength: settings.maxTokenizationLineLength,
+      stopRenderingLineAfter: settings.stopRenderingLineAfter,
     };
     this.editor?.updateOptions(options);
     this.editorSecondary?.updateOptions(options);
@@ -391,6 +399,9 @@ export class EditorManager {
   async openFile(path: string, content: string): Promise<void> {
     this.createEditorIfNeeded();
     if (!this.editor) return;
+
+    // Restore normal options before switching files (in case previous file was large)
+    this.restoreNormalOptions();
 
     let instance = this.models.get(path);
     if (!instance) {
@@ -420,6 +431,9 @@ export class EditorManager {
     this.getFocusedEditor()?.focus() ?? this.editor.focus();
     this.notifyCursor();
     this.syncBreakpointDecorations();
+
+    // Apply large-file performance tweaks if needed
+    this.applyLargeFileOptimizations(path, content.length);
   }
 
   private pathForModel(model: monaco.editor.ITextModel): string | null {
@@ -427,6 +441,51 @@ export class EditorManager {
       if (inst.model === model) return path;
     }
     return null;
+  }
+
+  /** Apply additional performance options for very large files (>10 MB) */
+  private applyLargeFileOptimizations(path: string, contentLength: number): void {
+    const LARGE_FILE_THRESHOLD = 10 * 1024 * 1024; // 10 MB
+    if (contentLength < LARGE_FILE_THRESHOLD) return;
+
+    const editor = this.getFocusedEditor();
+    if (!editor) return;
+
+    // For very large files, reduce memory footprint by disabling non-essential features
+    editor.updateOptions({
+      // Disable word-based suggestions for huge files
+      wordBasedSuggestions: 'off',
+      // Disable quick suggestions to reduce tokenization pressure
+      quickSuggestions: false,
+      // Disable minimap for very large files
+      minimap: { enabled: false },
+      // Disable bracket pair colorization
+      bracketPairColorization: { enabled: false },
+      // Disable color decorators
+      colorDecorators: false,
+      // Disable folding for very large files
+      folding: false,
+      // Disable smooth scrolling
+      smoothScrolling: false,
+      // Disable cursor smooth animation
+      cursorSmoothCaretAnimation: 'off',
+    });
+  }
+
+  /** Restore normal editor options when switching away from a large file */
+  private restoreNormalOptions(): void {
+    const options = {
+      wordBasedSuggestions: this.settings.wordBasedSuggestions ?? 'matchingDocuments',
+      quickSuggestions: true,
+      minimap: { enabled: this.settings.minimap },
+      bracketPairColorization: { enabled: true },
+      colorDecorators: true,
+      folding: true,
+      smoothScrolling: true,
+      cursorSmoothCaretAnimation: 'on' as const,
+    };
+    this.editor?.updateOptions(options);
+    this.editorSecondary?.updateOptions(options);
   }
 
   toggleBreakpoint(path: string, line: number): void {

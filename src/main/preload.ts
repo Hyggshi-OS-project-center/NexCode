@@ -24,6 +24,11 @@ const api: ElectronAPI = {
   toggleDevtools: () => ipcRenderer.send('window:toggleDevtools'),
   getCrashAudio: () => ipcRenderer.invoke('app:getCrashAudio') as Promise<string | null>,
   openFile: () => ipcRenderer.invoke('dialog:openFile'),
+  openExtensionFile: () => ipcRenderer.invoke('dialog:openExtensionFile') as Promise<string | null>,
+  getExtensionsPath: () => ipcRenderer.invoke('extensions:getExtensionsPath') as Promise<string>,
+  installExtensionFile: (sourcePath: string) =>
+    ipcRenderer.invoke('extensions:install', sourcePath) as Promise<string>,
+
   saveFile: (defaultPath?: string) => ipcRenderer.invoke('dialog:saveFile', defaultPath),
   readDir: (dirPath, options) => ipcRenderer.invoke('fs:readDir', dirPath, options),
   readFile: (filePath) => ipcRenderer.invoke('fs:readFile', filePath),

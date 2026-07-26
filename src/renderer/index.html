@@ -122,10 +122,16 @@
         <div id="panel-settings" class="sidebar-panel hidden"></div>
       </div>
     </aside>
+    <div id="sidebar-resizer" class="sidebar-resizer" aria-hidden="true"></div>
 
     <main class="editor-area">
       <div class="editor-tabs-row">
-        <div id="tab-bar" class="tab-bar"></div>
+        <div id="tab-scroll-frame" class="tab-scroll-frame">
+          <div id="tab-bar" class="tab-bar"></div>
+          <div class="tab-scrollbar" aria-hidden="true">
+            <div id="tab-scroll-thumb" class="tab-scroll-thumb"></div>
+          </div>
+        </div>
         <div class="editor-toolbar-actions">
           <button type="button" id="btn-md-preview" class="icon-btn icon-btn-labeled" title="Toggle Markdown preview" style="display:none">Preview</button>
           <button type="button" id="btn-extensions" class="icon-btn" title="Extension Marketplace" aria-label="Extension Marketplace">

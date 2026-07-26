@@ -42,6 +42,44 @@ function resolveAppIcon(): NativeImage | undefined {
   return image.isEmpty() ? undefined : image;
 }
 
+function getDevRendererOrigin(parent: BrowserWindow | null): string {
+  if (parent && !parent.isDestroyed()) {
+    try {
+      const url = new URL(parent.webContents.getURL());
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        return url.origin;
+      }
+    } catch {
+      // Fall back to the Vite default below.
+    }
+  }
+  return 'http://127.0.0.1:5173';
+}
+
+async function loadEasterEggContent(window: BrowserWindow, parent: BrowserWindow | null): Promise<void> {
+  if (isDev) {
+    await window.loadURL(`${getDevRendererOrigin(parent)}/easterEgg.html`);
+    return;
+  }
+
+  const htmlPath = path.join(__dirname, '../../renderer/easterEgg.html');
+  if (fs.existsSync(htmlPath)) {
+    await window.loadFile(htmlPath);
+    return;
+  }
+
+  throw new Error(`Easter egg renderer not found: ${htmlPath}`);
+}
+
+function showLoadedWindow(icon: NativeImage | undefined): void {
+  if (!easterEggWindow || easterEggWindow.isDestroyed()) return;
+  if (icon && process.platform === 'win32') {
+    easterEggWindow.setIcon(icon);
+  }
+  easterEggWindow.show();
+  easterEggWindow.focus();
+}
+
 function getWindowBounds(parent: BrowserWindow | null): Rectangle {
   const width = 500;
   const height = 580;
@@ -64,7 +102,8 @@ export function showEasterEggWindow(parent: BrowserWindow | null): void {
   if (easterEggWindow && !easterEggWindow.isDestroyed()) {
     const bounds = getWindowBounds(parent);
     easterEggWindow.setBounds(bounds);
-    easterEggWindow.showInactive();
+    easterEggWindow.show();
+    easterEggWindow.focus();
     return;
   }
 
@@ -86,18 +125,17 @@ export function showEasterEggWindow(parent: BrowserWindow | null): void {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true, // Switched to true for better security alignment
+      sandbox: false,
     },
   });
 
-  const htmlPath = path.join(__dirname, '../../renderer/easterEgg.html');
-  void easterEggWindow.loadFile(htmlPath);
-
   easterEggWindow.once('ready-to-show', () => {
-    if (icon && process.platform === 'win32') {
-      easterEggWindow?.setIcon(icon);
-    }
-    easterEggWindow?.showInactive();
+    showLoadedWindow(icon);
+  });
+
+  void loadEasterEggContent(easterEggWindow, parent).catch((error) => {
+    console.error('[EasterEgg] Failed to load renderer:', error);
+    showLoadedWindow(icon);
   });
 
   easterEggWindow.on('closed', () => {

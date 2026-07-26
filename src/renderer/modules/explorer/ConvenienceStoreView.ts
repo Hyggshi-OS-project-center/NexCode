@@ -7,9 +7,11 @@ import type { PluginHost } from '../plugin/PluginHost';
 export class ConvenienceStoreView {
   private listEl: HTMLElement;
   private host: PluginHost | null = null;
+  private onInstallRequested?: () => void;
 
-  constructor(listEl: HTMLElement) {
+  constructor(listEl: HTMLElement, onInstallRequested?: () => void) {
     this.listEl = listEl;
+    this.onInstallRequested = onInstallRequested;
     this.render([]);
   }
 
@@ -17,25 +19,46 @@ export class ConvenienceStoreView {
     this.host = host;
   }
 
+  setInstallHandler(handler: () => void): void {
+    this.onInstallRequested = handler;
+  }
+
   render(extensions: InstalledVsixExtension[]): void {
+    const installButtonHtml = `
+      <button type="button" class="store-install-btn" data-action="install-extension">
+        + Install Extension...
+      </button>
+    `;
+
     if (extensions.length === 0) {
       this.listEl.innerHTML = `
-        <p class="sidebar-section-empty">No theme extensions installed</p>
-        <p class="sidebar-section-hint">Add manifests to <code>.nexcode/extensions/*.hsixet</code> or <code>*.hsiext</code></p>
+        ${installButtonHtml}
+        <p class="sidebar-section-empty">No extensions installed</p>
+        <p class="sidebar-section-hint">Install a <code>.hsixet</code> or <code>.hsiext</code> file to get started.</p>
       `;
+      this.bindInstallButton();
       return;
     }
 
-    this.listEl.innerHTML = '';
+    this.listEl.innerHTML = installButtonHtml;
+    this.bindInstallButton();
     extensions.forEach((ext) => {
       const row = document.createElement('div');
       row.className = 'store-item';
       row.setAttribute('tabindex', '0');
+      
+      const isTheme = Boolean(ext.manifest.theme);
+      const icon = isTheme ? '🎨' : '📦';
+      const typeLabel = isTheme ? 'theme' : 'extension';
+      const author = ext.manifest.author ? ` by ${escapeHtml(ext.manifest.author)}` : '';
+      const desc = ext.manifest.description ? ` — ${escapeHtml(ext.manifest.description)}` : '';
+      
       row.innerHTML = `
-        <span class="store-icon">📦</span>
+        <span class="store-icon">${icon}</span>
         <span class="store-meta">
           <span class="store-name">${escapeHtml(ext.manifest.name)}</span>
-          <span class="store-version">v${escapeHtml(ext.manifest.version)} · theme manifest</span>
+          <span class="store-id">${escapeHtml(ext.manifest.id)}${author}</span>
+          <span class="store-version">v${escapeHtml(ext.manifest.version)} · ${typeLabel}${desc}</span>
         </span>
       `;
       row.title = ext.path;
@@ -56,6 +79,12 @@ export class ConvenienceStoreView {
 
       this.listEl.appendChild(row);
     });
+  }
+
+  private bindInstallButton(): void {
+    this.listEl
+      .querySelector('[data-action="install-extension"]')
+      ?.addEventListener('click', () => this.onInstallRequested?.());
   }
 
   private showCommandMenu(

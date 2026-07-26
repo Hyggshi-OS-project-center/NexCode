@@ -356,6 +356,66 @@ class NexusApp {
     }
   }
 
+  private getSidebarWidth(): number {
+    const shell = document.querySelector('.app-shell') as HTMLElement | null;
+    if (!shell) return 280;
+    const raw = getComputedStyle(shell).getPropertyValue('--sidebar-width').trim();
+    const parsed = Number.parseFloat(raw);
+    return Number.isFinite(parsed) ? parsed : 280;
+  }
+
+  private setSidebarWidth(width: number): void {
+    const shell = document.querySelector('.app-shell') as HTMLElement | null;
+    if (!shell) return;
+    const clamped = Math.max(200, Math.min(width, 520));
+    shell.style.setProperty('--sidebar-width', `${clamped}px`);
+    requestAnimationFrame(() => this.editor.layout());
+  }
+
+  private syncSidebarResizer(): void {
+    const shell = document.querySelector('.app-shell');
+    const resizer = document.getElementById('sidebar-resizer');
+    const collapsed = shell?.classList.contains('sidebar-collapsed') ?? false;
+    resizer?.classList.toggle('hidden', collapsed);
+  }
+
+  private bindSidebarResizer(): void {
+    const resizer = document.getElementById('sidebar-resizer');
+    const shell = document.querySelector('.app-shell') as HTMLElement | null;
+    if (!resizer || !shell) return;
+
+    let dragging = false;
+    let lastX = 0;
+
+    const stopDragging = (): void => {
+      if (!dragging) return;
+      dragging = false;
+      resizer.classList.remove('dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    resizer.addEventListener('mousedown', (e: MouseEvent) => {
+      if (shell.classList.contains('sidebar-collapsed')) return;
+      dragging = true;
+      lastX = e.clientX;
+      resizer.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e: MouseEvent) => {
+      if (!dragging) return;
+      const nextWidth = this.getSidebarWidth() + (e.clientX - lastX);
+      lastX = e.clientX;
+      this.setSidebarWidth(nextWidth);
+    });
+
+    document.addEventListener('mouseup', stopDragging);
+    window.addEventListener('blur', stopDragging);
+  }
+
   private isLegacySplash2025Enabled(): boolean {
     try {
       return localStorage.getItem('nexcode.legacySplash2025') === '1';
@@ -433,6 +493,10 @@ class NexusApp {
       (oldPath, newPath, isDirectory) => this.handleRenamedPath(oldPath, newPath, isDirectory),
     );
     this.explorer.setExtensionHost(this.pluginHost);
+    this.explorer.setOnInstallExtension(() => void this.installExtensionFromDialog());
+    void this.vsixStore.loadGlobalExtensions(this.pluginHost).then(() => {
+      this.explorer.updateConvenienceStore(this.vsixStore.getExtensions());
+    });
     this.pluginHost.configure({
       getWorkspacePath: () => this.workspacePath,
       getSettings: () => this.settings,
@@ -539,6 +603,8 @@ class NexusApp {
     this.bindCrashMoments();
     this.bindUI();
     this.bindTitlebarMenus();
+    this.bindSidebarResizer();
+    this.syncSidebarResizer();
     this.bindContextMenus();
     this.updates.init();
     void this.showSidebarPanel('explorer');
@@ -584,6 +650,7 @@ class NexusApp {
 
     document.getElementById('titlebar-btn-sidebar')?.addEventListener('click', () => {
       document.querySelector('.app-shell')?.classList.toggle('sidebar-collapsed');
+      this.syncSidebarResizer();
       requestAnimationFrame(() => this.editor.layout());
     });
 
@@ -868,6 +935,7 @@ class NexusApp {
     shell?.classList.remove('sidebar-collapsed');
     shell?.classList.toggle('settings-expanded', panel === 'settings');
     this.syncActivityPanel(panel);
+    this.syncSidebarResizer();
 
     const title = document.getElementById('sidebar-title')!;
     (['explorer', 'search', 'git', 'chat', 'settings'] as const).forEach((id) => {
@@ -1217,6 +1285,9 @@ class NexusApp {
     document.getElementById('titlebar-path')!.textContent = folder;
     await this.explorer.loadFolder(folder);
     if (updateTerminalShell) await this.terminal.changeDirectory(folder, false);
+    // Extensions are global (per-user), like VSCode — not re-scanned per
+    // workspace. We still opportunistically pick up legacy
+    // `.nexcode/extensions` folders inside the opened workspace, additively.
     await this.vsixStore.scanWorkspace(folder, this.pluginHost);
     this.explorer.updateConvenienceStore(this.vsixStore.getExtensions());
     this.explorer.getTimeline().clear();
@@ -1224,6 +1295,18 @@ class NexusApp {
     this.gitPanel.setWorkspace(folder);
     void this.refreshGitBranch();
     this.updateViewState();
+  }
+
+  private async installExtensionFromDialog(): Promise<void> {
+    const sourcePath = await window.electronAPI.openExtensionFile();
+    if (!sourcePath) return;
+    try {
+      await this.vsixStore.installExtension(sourcePath);
+      this.explorer.updateConvenienceStore(this.vsixStore.getExtensions());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      window.alert(`Failed to install extension:\n\n${message}`);
+    }
   }
 
   private async refreshGitBranch(): Promise<void> {

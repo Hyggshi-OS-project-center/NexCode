@@ -1,20 +1,30 @@
 #!/usr/bin/env bash
 # ============================================
 # build-app-all-linux-platform.sh — Build all Linux packages
-# AppImage, .deb, and .rpm for universal Linux support
+# AppImage, .deb, and .rpm — for x64, arm64, and armv7l (32-bit ARM)
+#
+# NOTE: ia32 (x86 32-bit) is intentionally NOT built here.
+# Electron dropped official Linux ia32 builds years ago
+# (last available around Electron 19). If you need 32-bit x86
+# Linux support you'll have to build Electron from source —
+# not something electron-builder can do out of the box.
 # ============================================
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export NODE_OPTIONS=--max-old-space-size=4096
 
-# Check for required dependencies
+# Architectures and package targets to build.
+# arm64  = 64-bit ARM (Raspberry Pi 4/5, most modern ARM SBCs, Apple Silicon-via-Linux VMs)
+# armv7l = 32-bit ARM (older Raspberry Pi, some embedded boards)
+ARCHS=("x64" "arm64" "armv7l")
+TARGETS=("AppImage" "deb" "rpm")
+
 echo "[build-app-all-linux] Checking dependencies..."
 if ! command -v rpmbuild &> /dev/null; then
-    echo "WARNING: rpmbuild is not installed. RPM package build will be skipped."
+    echo "WARNING: rpmbuild is not installed. RPM package builds will be skipped."
     echo
     echo "On Fedora/openSUSE, install with:"
-    echo "  sudo dnf install rpm-build"
-    echo "  sudo dnf install redhat-rpm-config"
+    echo "  sudo dnf install rpm-build redhat-rpm-config"
     echo
     echo "On Ubuntu/Debian (for testing), install with:"
     echo "  sudo apt-get install rpm"
@@ -33,59 +43,89 @@ echo "[build-app-all-linux] Dependencies check passed ✔"
 echo
 echo "============================================"
 echo " Building NexCode IDE for all Linux platforms"
+echo " Architectures: ${ARCHS[*]}"
 echo "============================================"
 echo
 
 VERSION=$(node -e "const p=require('./package.json'); console.log(p.version)")
 echo "[build-app-all-linux] Version: $VERSION"
 
-echo "[build-app-all-linux] Step 1/4: Build source..."
+echo "[build-app-all-linux] Build source..."
 npm run build
 echo
 
-echo "[build-app-all-linux] Step 2/4: Building AppImage (universal, works on most distros)..."
-npx electron-builder --linux --x64 \
-  --publish never \
-  --config.npmRebuild=false \
-  --config.linux.target="AppImage" \
-  --config.linux.artifactName="NexCode.IDE-\${version}-\${arch}.AppImage"
-echo
+# Track results for the final summary table
+declare -A RESULTS
 
-echo "[build-app-all-linux] Step 3/4: Building .deb package (Debian/Ubuntu/Linux Mint)..."
-npx electron-builder --linux --x64 \
-  --publish never \
-  --config.npmRebuild=false \
-  --config.linux.target="deb" \
-  --config.linux.artifactName="nexcode-ide-\${version}-\${arch}.deb"
-echo
+TOTAL_STEPS=0
+for target in "${TARGETS[@]}"; do
+  for arch in "${ARCHS[@]}"; do
+    if [ "$target" = "rpm" ] && [ "$BUILD_RPM" != true ]; then
+      continue
+    fi
+    TOTAL_STEPS=$((TOTAL_STEPS + 1))
+  done
+done
 
-echo "[build-app-all-linux] Step 4/4: Building .rpm package (Fedora/openSUSE)..."
-if [ "$BUILD_RPM" = true ]; then
-    # NOTE: do NOT manually rewrite package.json's version here.
-    # electron-builder has its own internal sanitizer that converts
-    # the semver version (e.g. 3.5.7-Insider.6) into a valid RPM
-    # version string when the "rpm" target is built. Overwriting
-    # package.json ourselves breaks semver parsing and causes
-    # "Invalid version" errors in app-builder-lib.
-    npx electron-builder --linux --x64 \
-      --publish never \
-      --config.npmRebuild=false \
-      --config.linux.target="rpm" \
-      --config.linux.artifactName="NexCode.IDE-\${version}-\${arch}.rpm"
-    RPM_STATUS="✔ Built successfully"
-else
-    echo "[build-app-all-linux] SKIPPED — rpmbuild not available"
-    RPM_STATUS="⚠ Skipped (rpmbuild not installed)"
-fi
-echo
+STEP=0
+for target in "${TARGETS[@]}"; do
+  for arch in "${ARCHS[@]}"; do
+    key="${target}-${arch}"
+
+    if [ "$target" = "rpm" ] && [ "$BUILD_RPM" != true ]; then
+      RESULTS["$key"]="⚠ Skipped (rpmbuild not installed)"
+      continue
+    fi
+
+    STEP=$((STEP + 1))
+    echo "[build-app-all-linux] Step $STEP/$TOTAL_STEPS: Building $target for $arch..."
+
+    # artifactName pattern includes \${arch} so files for different
+    # architectures don't overwrite each other in dist/pack-out/
+    case "$target" in
+      AppImage)
+        artifact_name="NexCode.IDE-\${version}-\${arch}.AppImage"
+        ;;
+      deb)
+        artifact_name="nexcode-ide-\${version}-\${arch}.deb"
+        ;;
+      rpm)
+        artifact_name="NexCode.IDE-\${version}-\${arch}.rpm"
+        ;;
+    esac
+
+    if npx electron-builder --linux --"$arch" \
+        --publish never \
+        --config.npmRebuild=false \
+        --config.linux.target="$target" \
+        --config.linux.artifactName="$artifact_name"; then
+      RESULTS["$key"]="✔ Built successfully"
+    else
+      RESULTS["$key"]="✗ Failed"
+    fi
+    echo
+  done
+done
 
 echo "============================================"
-echo " Output files:"
+echo " Output summary:"
 echo "============================================"
-echo "  NexCode.IDE-$VERSION-x64.AppImage — Universal (AppImage)"
-echo "  nexcode-ide-$VERSION-x64.deb — Debian/Ubuntu/Linux Mint"
-echo "  NexCode.IDE-$VERSION-x64.rpm — Fedora/openSUSE ($RPM_STATUS)"
+for target in "${TARGETS[@]}"; do
+  for arch in "${ARCHS[@]}"; do
+    key="${target}-${arch}"
+    printf "  %-10s %-8s %s\n" "$target" "$arch" "${RESULTS[$key]:-⚠ Unknown}"
+  done
+done
+echo
+echo "  Files are in: dist/pack-out/"
 echo
 echo "============================================"
 echo "[build-app-all-linux] Build process completed"
 echo "============================================"
+
+# Fail the overall script if anything actually failed (not just skipped)
+for status in "${RESULTS[@]}"; do
+  if [[ "$status" == "✗ Failed"* ]]; then
+    exit 1
+  fi
+done

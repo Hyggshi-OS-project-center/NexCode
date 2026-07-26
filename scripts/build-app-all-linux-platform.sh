@@ -45,6 +45,7 @@ echo
 
 echo "[build-app-all-linux] Step 2/4: Building AppImage (universal, works on most distros)..."
 npx electron-builder --linux --x64 \
+  --publish never \
   --config.npmRebuild=false \
   --config.linux.target="AppImage" \
   --config.linux.artifactName="NexCode.IDE-\${version}-\${arch}.AppImage"
@@ -52,6 +53,7 @@ echo
 
 echo "[build-app-all-linux] Step 3/4: Building .deb package (Debian/Ubuntu/Linux Mint)..."
 npx electron-builder --linux --x64 \
+  --publish never \
   --config.npmRebuild=false \
   --config.linux.target="deb" \
   --config.linux.artifactName="nexcode-ide-\${version}-\${arch}.deb"
@@ -66,6 +68,7 @@ if [ "$BUILD_RPM" = true ]; then
     # package.json ourselves breaks semver parsing and causes
     # "Invalid version" errors in app-builder-lib.
     npx electron-builder --linux --x64 \
+      --publish never \
       --config.npmRebuild=false \
       --config.linux.target="rpm" \
       --config.linux.artifactName="NexCode.IDE-\${version}-\${arch}.rpm"

@@ -80,20 +80,36 @@ jobs:
       - name: Install apt-repo tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y reprepro gnupg pinentry-tty
+          sudo apt-get install -y \
+            reprepro \
+            gnupg \
+            pinentry-tty
 
       - name: Import fixed GPG signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
         run: |
           mkdir -p ~/.gnupg
           chmod 700 ~/.gnupg
-          echo "pinentry-program $(which pinentry-tty)" > ~/.gnupg/gpg-agent.conf
-          echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
-          echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
-          echo "batch" >> ~/.gnupg/gpg.conf
-          echo "no-tty" >> ~/.gnupg/gpg.conf
-          gpgconf --kill gpg-agent
-          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
-          gpgconf --reload gpg-agent
+
+          cat > ~/.gnupg/gpg-agent.conf <<'EOF'
+          allow-loopback-pinentry
+          EOF
+
+          cat > ~/.gnupg/gpg.conf <<'EOF'
+          pinentry-mode loopback
+          batch
+          no-tty
+          EOF
+
+          gpgconf --kill gpg-agent || true
+
+          printf '%s\n' "$GPG_PRIVATE_KEY" | gpg --batch --import
+
+          gpgconf --launch gpg-agent
+
+          echo "Imported GPG keys:"
+          gpg --list-secret-keys --keyid-format LONG
 
       - name: Checkout central apt-repo (gh-pages)
         uses: actions/checkout@v4
@@ -106,32 +122,71 @@ jobs:
       - name: Include all .deb into central repo
         run: |
           cd apt-repo
+
           shopt -s nullglob
           debs=(../debs/*.deb)
+
           if [ ${#debs[@]} -eq 0 ]; then
             echo "No .deb files found to publish!"
             exit 1
           fi
+
           for deb in "${debs[@]}"; do
             echo "Including $deb ..."
             reprepro includedeb stable "$deb"
           done
 
-      - name: Manually sign Release file with gpg
+      - name: Sign Release file with GPG
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
+          set -euo pipefail
+
           cd apt-repo/dists/stable
-          gpg --batch --yes --pinentry-mode loopback --passphrase '' \
+
+          if [ -z "${GPG_PASSPHRASE:-}" ]; then
+            echo "ERROR: GPG_PASSPHRASE secret is empty or missing."
+            exit 1
+          fi
+
+          echo "Signing Release..."
+
+          gpg \
+            --batch \
+            --yes \
+            --pinentry-mode loopback \
+            --passphrase "$GPG_PASSPHRASE" \
             --default-key 33F527C35036B510FFD10A1078517E50002AC314 \
-            --armor --detach-sign -o Release.gpg Release
-          gpg --batch --yes --pinentry-mode loopback --passphrase '' \
+            --armor \
+            --detach-sign \
+            -o Release.gpg \
+            Release
+
+          gpg \
+            --batch \
+            --yes \
+            --pinentry-mode loopback \
+            --passphrase "$GPG_PASSPHRASE" \
             --default-key 33F527C35036B510FFD10A1078517E50002AC314 \
-            --armor --clearsign -o InRelease Release
+            --armor \
+            --clearsign \
+            -o InRelease \
+            Release
+
+          echo "GPG signing completed successfully."
 
       - name: Commit and push to central apt-repo
         run: |
           cd apt-repo
+
           git config user.name "Hyggshi CI Bot"
           git config user.email "ci@hyggshi.os"
+
           git add dists pool
-          git diff --cached --quiet && echo "No changes to commit" || \
-            (git commit -m "Publish NexCode IDE ${{ github.ref_name }} via CI" && git push origin gh-pages)
+
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Publish NexCode IDE ${{ github.ref_name }} via CI"
+            git push origin gh-pages
+          fi

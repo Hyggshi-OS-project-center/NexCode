@@ -30,6 +30,7 @@ import { validateWrittenFile } from '../ai/agentWorkflow';
 import type { AboutInfo, AiChatMessage, AiEditorContext } from '../../shared/types';
 import type { GitHubRelease, ReleaseNotesInfo } from '../../shared/types';
 import { UpdateService } from '../update/UpdateService';
+import { setupHoscIpcHandlers } from './hoscHandler';
 
 const terminals = new TerminalManager();
 let currentWorkspacePath: string | null = null;
@@ -520,6 +521,9 @@ ipcMain.handle(
     removeRecentFile(filePath);
     return getRecentFiles();
   });
+
+  // HOSC execution bridge handlers
+  setupHoscIpcHandlers();
 }
 
 function fetchJson<T>(url: string): Promise<T> {

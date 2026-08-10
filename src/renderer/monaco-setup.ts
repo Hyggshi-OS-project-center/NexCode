@@ -17,6 +17,13 @@ import 'monaco-editor/esm/vs/language/html/monaco.contribution';
 import 'monaco-editor/esm/vs/language/typescript/monaco.contribution';
 import 'monaco-editor/esm/vs/language/json/monaco.contribution';
 
+import { hoscLanguageDef, hoscMonarchTokens } from './utils/hoscMonarch';
+
+// Register HOSC language & syntax highlighter
+monaco.languages.register({ id: 'hosc', extensions: ['.hosc'] });
+monaco.languages.setLanguageConfiguration('hosc', hoscLanguageDef);
+monaco.languages.setMonarchTokensProvider('hosc', hoscMonarchTokens);
+
 /** NexCode uses #editor-toolbar for find/replace - unbind Monaco's floating find widget. */
 const unbindFindKeybindings: Array<{ key: number; command: string }> = [
   { key: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, command: 'actions.find' },

@@ -1,7 +1,7 @@
 {
   "name": "NexCode-ide",
   "productName": "NexCode IDE",
-  "version": "3.5.7-Insider.6",
+  "version": "3.5.7-Insider.7",
   "description": "NexCode IDE — desktop code editor",
   "main": "dist/main/main.js",
   "author": {
@@ -18,7 +18,7 @@
     "Devtools": "concurrently \"npm run dev:renderer\" \"npm run dev:electron-devtools\"",
     "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
     "dev:vite": "cross-env NODE_ENV=development vite --config vite.config.ts",
-    "dev:electron": "wait-on -t 60000 http://localhost:5173 && npm run build:main && cross-env VITE_DEV_SERVER=1 electron .",
+    "dev:electron": "wait-on -t 60000 http://localhost:5173 && npm run build:main && cross-env VITE_DEV_SERVER=1 electron . --no-sandbox",
     "dev:renderer": "cross-env NODE_ENV=development vite --config vite.config.ts",
     "icons": "node scripts/generate-icons.mjs && node scripts/ensure-default-win32-icon.mjs && node scripts/normalize-win32-icons.mjs && node scripts/copy-win32-icons.mjs",
     "build": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" npm run icons && npm run build:main && npm run build:renderer",
@@ -34,7 +34,7 @@
     "packfast:portable": "npm run buildfast && node scripts/pack-portable.mjs",
     "pack:linux": "npm run build && node scripts/pack-linux.mjs",
     "pack:portable:linux": "npm run build && node scripts/pack-portable.mjs --linux",
-    "start": "electron .",
+    "start": "electron . --no-sandbox",
     "check": "npm run typecheck && npm run build:main && npm run build:renderer",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit"
   },

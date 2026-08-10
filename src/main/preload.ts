@@ -119,6 +119,15 @@ const api: ElectronAPI = {
   pushRecentFile: (filePath) => ipcRenderer.invoke('recentFiles:push', filePath) as Promise<string[]>,
   removeRecentFile: (filePath) => ipcRenderer.invoke('recentFiles:remove', filePath) as Promise<string[]>,
   clearRecentFiles: () => ipcRenderer.invoke('recentFiles:clear') as Promise<string[]>,
+  runHosc: (filePath, cwd, hoscExecutable) =>
+    ipcRenderer.invoke('hosc:run', filePath, cwd, hoscExecutable) as Promise<{ success: boolean; error?: string }>,
+  stopHosc: () => ipcRenderer.invoke('hosc:stop') as Promise<void>,
+  onHoscOutput: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, payload: import('../shared/types').HoscOutputPayload) =>
+      callback(payload);
+    ipcRenderer.on('hosc:output', handler);
+    return () => ipcRenderer.removeListener('hosc:output', handler);
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api);

@@ -3,6 +3,8 @@ name: Build NexCode IDE (Linux)
 on:
   push:
     branches: [main]
+    tags:
+      - 'v*'
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -53,4 +55,83 @@ jobs:
             dist/pack-out/*.deb
             dist/pack-out/*.rpm
           retention-days: 7
-          
+
+      - name: Upload .deb only (for apt-repo publish step)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v7
+        with:
+          name: nexcode-deb-only
+          path: dist/pack-out/*.deb
+          retention-days: 1
+
+  publish-apt-repo:
+    name: Publish to central Hyggshi APT repository
+    needs: build-linux
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Download .deb artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: nexcode-deb-only
+          path: debs
+
+      - name: Install apt-repo tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y reprepro gnupg pinentry-tty
+
+      - name: Import fixed GPG signing key
+        run: |
+          mkdir -p ~/.gnupg
+          chmod 700 ~/.gnupg
+          echo "pinentry-program $(which pinentry-tty)" > ~/.gnupg/gpg-agent.conf
+          echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
+          echo "pinentry-mode loopback" >> ~/.gnupg/gpg.conf
+          echo "batch" >> ~/.gnupg/gpg.conf
+          echo "no-tty" >> ~/.gnupg/gpg.conf
+          gpgconf --kill gpg-agent
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+          gpgconf --reload gpg-agent
+
+      - name: Checkout central apt-repo (gh-pages)
+        uses: actions/checkout@v4
+        with:
+          repository: Hyggshi-OS-Foundation/apt-repo
+          ref: gh-pages
+          token: ${{ secrets.APT_REPO_TOKEN }}
+          path: apt-repo
+
+      - name: Include all .deb into central repo
+        run: |
+          cd apt-repo
+          shopt -s nullglob
+          debs=(../debs/*.deb)
+          if [ ${#debs[@]} -eq 0 ]; then
+            echo "No .deb files found to publish!"
+            exit 1
+          fi
+          for deb in "${debs[@]}"; do
+            echo "Including $deb ..."
+            reprepro includedeb stable "$deb"
+          done
+
+      - name: Manually sign Release file with gpg
+        run: |
+          cd apt-repo/dists/stable
+          gpg --batch --yes --pinentry-mode loopback --passphrase '' \
+            --default-key 33F527C35036B510FFD10A1078517E50002AC314 \
+            --armor --detach-sign -o Release.gpg Release
+          gpg --batch --yes --pinentry-mode loopback --passphrase '' \
+            --default-key 33F527C35036B510FFD10A1078517E50002AC314 \
+            --armor --clearsign -o InRelease Release
+
+      - name: Commit and push to central apt-repo
+        run: |
+          cd apt-repo
+          git config user.name "Hyggshi CI Bot"
+          git config user.email "ci@hyggshi.os"
+          git add dists pool
+          git diff --cached --quiet && echo "No changes to commit" || \
+            (git commit -m "Publish NexCode IDE ${{ github.ref_name }} via CI" && git push origin gh-pages)

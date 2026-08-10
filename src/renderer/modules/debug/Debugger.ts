@@ -20,6 +20,7 @@ export class Debugger {
   private currentStepIndex = -1;
   private variables: Record<string, string> = {};
   private callStack: string[] = [];
+  private hoscUnsubscribe?: () => void;
 
   // DOM elements
   private variablesListEl!: HTMLElement;
@@ -134,6 +135,11 @@ export class Debugger {
     const activePath = this.editor.getActivePath();
     if (!activePath) {
       this.logToConsole('System', 'No active file in the editor to debug.', 'error');
+      return;
+    }
+
+    if (activePath.toLowerCase().endsWith('.hosc')) {
+      this.startHoscSession(activePath);
       return;
     }
 
@@ -457,12 +463,77 @@ export class Debugger {
     setTimeout(() => this.start(), 200);
   }
 
+  private async startHoscSession(activePath: string): Promise<void> {
+    this.activePath = activePath;
+    this.isDebugging = true;
+    this.isPaused = false;
+
+    // Toggle landing and debug sidebar panels
+    document.getElementById('dbg-landing-container')?.classList.add('hidden');
+    this.debugContainerEl.classList.remove('hidden');
+
+    // Update toolbar button style to 'Stop'
+    const startBtn = document.getElementById('dbg-btn-start');
+    if (startBtn) {
+      startBtn.title = 'Stop Program Execution (Shift+F5)';
+      startBtn.innerHTML = `
+        <svg viewBox="0 0 16 16" width="16" height="16" style="color: var(--danger);"><rect fill="currentColor" x="3" y="3" width="10" height="10" rx="1"/></svg>
+      `;
+    }
+
+    // Open and focus Debug Console view in bottom panel
+    const debugTab = document.querySelector('[data-terminal-view="debug"]') as HTMLElement | null;
+    debugTab?.click();
+
+    const panel = document.getElementById('terminal-panel');
+    const btnQuick = document.getElementById('btn-terminal-quick');
+    if (panel?.classList.contains('hidden')) {
+      btnQuick?.click();
+    }
+
+    if (this.hoscUnsubscribe) {
+      this.hoscUnsubscribe();
+      this.hoscUnsubscribe = undefined;
+    }
+
+    if (window.electronAPI?.onHoscOutput) {
+      this.hoscUnsubscribe = window.electronAPI.onHoscOutput((payload) => {
+        if (payload.type === 'stdout') {
+          this.logToConsole('Debugger', payload.data, 'stdout');
+        } else if (payload.type === 'stderr') {
+          this.logToConsole('Debugger', payload.data, 'error');
+        } else {
+          this.logToConsole('System', payload.data, 'system');
+        }
+      });
+    }
+
+    if (window.electronAPI?.runHosc) {
+      const res = await window.electronAPI.runHosc(activePath);
+      if (!res.success) {
+        this.logToConsole('System', `Failed to launch HOSC process: ${res.error}`, 'error');
+        this.stop();
+      }
+    } else {
+      this.logToConsole('System', 'HOSC execution bridge unavailable.', 'error');
+    }
+  }
+
   public stop(keepLogs = false): void {
     if (!this.isDebugging) return;
 
     this.isDebugging = false;
     this.isPaused = false;
-    
+
+    if (this.hoscUnsubscribe) {
+      this.hoscUnsubscribe();
+      this.hoscUnsubscribe = undefined;
+    }
+
+    if (window.electronAPI?.stopHosc) {
+      window.electronAPI.stopHosc();
+    }
+
     // Clear highlight decoration in editor
     if (this.activePath) {
       this.editor.setDebugLineDecoration(this.activePath, null);

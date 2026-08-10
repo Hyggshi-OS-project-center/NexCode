@@ -444,6 +444,17 @@ export interface ElectronAPI {
   listOpenRouterModels: () => Promise<{ value: string; label: string; supportsImages: boolean }[]>;
   /** Fetch available Claude models from the API dynamically. */
   listClaudeModels: () => Promise<{ value: string; label: string; supportsImages: boolean }[]>;
+  /** Run a .hosc file using child_process (hosc run) */
+  runHosc: (filePath: string, cwd?: string, hoscExecutable?: string) => Promise<{ success: boolean; error?: string }>;
+  /** Terminate the currently running hosc process */
+  stopHosc: () => Promise<void>;
+  /** Subscribe to live output events from running hosc process */
+  onHoscOutput: (callback: (payload: HoscOutputPayload) => void) => () => void;
+}
+
+export interface HoscOutputPayload {
+  type: 'stdout' | 'stderr' | 'system';
+  data: string;
 }
 
 declare global {

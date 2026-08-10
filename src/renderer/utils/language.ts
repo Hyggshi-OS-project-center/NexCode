@@ -157,6 +157,7 @@ const EXT_TO_LANG: Record<string, string> = {
   nunjucks: 'html',
 
   // Other
+  hosc: 'hosc',
   dart: 'dart',
   coffee: 'coffee',
   litcoffee: 'coffee',

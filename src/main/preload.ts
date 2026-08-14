@@ -99,6 +99,7 @@ const api: ElectronAPI = {
   listGeminiModels: () => ipcRenderer.invoke('models:list-gemini') as Promise<{ value: string; label: string; supportsImages: boolean }[]>,
   listOpenRouterModels: () => ipcRenderer.invoke('models:list-openrouter') as Promise<{ value: string; label: string; supportsImages: boolean }[]>,
   listClaudeModels: () => ipcRenderer.invoke('models:list-claude') as Promise<{ value: string; label: string; supportsImages: boolean }[]>,
+  setEditorContext: (ctx) => ipcRenderer.send('ai:set-editor-context', ctx),
   openAgent: () => ipcRenderer.send('agent:open'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   startUpdate: () => ipcRenderer.invoke('update:start'),

@@ -281,7 +281,11 @@ export function registerIpcHandlers(
   });
   ipcMain.on('window:close', () => getWindow()?.close());
   ipcMain.handle('window:isMaximized', () => getWindow()?.isMaximized() ?? false);
-  ipcMain.handle('ai:get-editor-context', async () => null);
+  let currentEditorContext: import('../../shared/types').AiEditorContext | null = null;
+  ipcMain.handle('ai:get-editor-context', async () => currentEditorContext);
+  ipcMain.on('ai:set-editor-context', (_e, ctx: import('../../shared/types').AiEditorContext | null) => {
+    currentEditorContext = ctx;
+  });
   ipcMain.handle('ai:get-workspace-path', async () => currentWorkspacePath);
   ipcMain.handle('ai:set-workspace-path', async (_e, workspacePath?: string | null) => {
     currentWorkspacePath = workspacePath ? path.resolve(workspacePath) : null;

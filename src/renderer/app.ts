@@ -50,6 +50,7 @@ import { BrowserView } from './modules/editor/BrowserView';
 import { SplashScreen } from './modules/ui/SplashScreen';
 import { NexCodeMoments } from './modules/ui/NexCodeMoments';
 import { UpdateController } from './modules/update/UpdateController';
+import { Debugger as NexDebugger } from './modules/debug/Debugger';
 import {
   RELEASE_NOTES_STORAGE_KEY,
   RELEASE_NOTES_TAB_PATH,
@@ -337,6 +338,7 @@ class NexusApp {
   private diffEditor!: DiffEditor;
   private tabBrowser!: TabBrowser;
   private browserView!: BrowserView;
+  private debuggerModule!: NexDebugger;
   /** Set while the diff editor is reviewing AI changes — suppresses file watcher reloads */
   private diffEditorActive = false;
   /** Trimmed terminal output sample for moment detection — capped to reduce memory */
@@ -595,7 +597,10 @@ class NexusApp {
 
     // Initialize BrowserView for HTML file preview
     this.browserView = new BrowserView('editor-container');
-    
+
+    // Initialize integrated debugger
+    this.debuggerModule = new NexDebugger('panel-debug', this.editor, this.terminal);
+
     this.tabs.on('select', (path) => { void this.switchToFile(path); });
     this.tabs.on('close', (path) => this.onTabClose(path));
 
@@ -606,6 +611,8 @@ class NexusApp {
     this.bindSidebarResizer();
     this.syncSidebarResizer();
     this.bindContextMenus();
+    this.bindCommandPalette();
+    this.bindTerminalPanelTabs();
     this.updates.init();
     void this.showSidebarPanel('explorer');
     this.updateViewState();
@@ -622,6 +629,9 @@ class NexusApp {
     document.getElementById('btn-close')?.addEventListener('click', () => window.electronAPI.closeWindow());
     window.addEventListener('resize', () => void this.syncWindowControlState());
     void this.syncWindowControlState();
+
+    // Sync terminal prompt label with selected shell
+    this.syncTerminalPromptLabel();
 
     document.getElementById('btn-open-folder')?.addEventListener('click', () => void this.openFolder());
     document.getElementById('btn-run')?.addEventListener('click', () => void this.runActiveFile());
@@ -644,7 +654,8 @@ class NexusApp {
     document.querySelectorAll('.activity-item').forEach((btn) => {
       btn.addEventListener('click', () => {
         const panel = (btn as HTMLElement).dataset.panel;
-        void this.showSidebarPanel(panel ?? 'explorer');
+        if (!panel) return;
+        void this.showSidebarPanel(panel);
       });
     });
 
@@ -801,7 +812,7 @@ class NexusApp {
   }
 
   private syncActivityPanel(panel: string): void {
-    const known = new Set(['explorer', 'search', 'git', 'chat', 'settings']);
+    const known = new Set(['explorer', 'search', 'git', 'chat', 'debug', 'settings']);
     if (!known.has(panel)) return;
     document.querySelectorAll('.activity-item').forEach((b) => {
       b.classList.toggle('active', (b as HTMLElement).dataset.panel === panel);
@@ -938,12 +949,12 @@ class NexusApp {
     this.syncSidebarResizer();
 
     const title = document.getElementById('sidebar-title')!;
-    (['explorer', 'search', 'git', 'chat', 'settings'] as const).forEach((id) => {
+    (['explorer', 'search', 'git', 'chat', 'debug', 'settings'] as const).forEach((id) => {
       document.getElementById(`panel-${id}`)?.classList.toggle('hidden', id !== panel);
     });
 
     const openFolderBtn = document.getElementById('btn-open-folder');
-    openFolderBtn?.classList.toggle('hidden', panel === 'git');
+    openFolderBtn?.classList.toggle('hidden', panel === 'git' || panel === 'debug');
 
     if (panel === 'explorer') {
       title.textContent = 'EXPLORER';
@@ -971,6 +982,10 @@ class NexusApp {
       title.textContent = 'CHAT AI';
       this.explorer.hide();
       this.chatPanel.show();
+    } else if (panel === 'debug') {
+      title.textContent = 'RUN AND DEBUG';
+      this.explorer.hide();
+      this.debuggerModule.syncBreakpointsUI();
     } else if (panel === 'settings') {
       title.textContent = 'SETTINGS';
       this.explorer.hide();
@@ -1201,6 +1216,244 @@ class NexusApp {
     }
   }
 
+  /** Update the terminal prompt label (PS> / $) based on the configured shell. */
+  private syncTerminalPromptLabel(): void {
+    const label = document.getElementById('terminal-prompt-label');
+    if (!label) return;
+    if (this.settings.terminalShell === 'powershell') {
+      label.textContent = 'PS>';
+    } else if (this.settings.terminalShell === 'cmd') {
+      label.textContent = '>';
+    } else {
+      label.textContent = '$>';
+    }
+  }
+
+  /**
+   * Bind the terminal panel tab buttons (PROBLEMS / OUTPUT / TERMINAL / DEBUG CONSOLE).
+   * Manages `.hidden` on view content divs and populates the Problems panel.
+   */
+  private bindTerminalPanelTabs(): void {
+    const tabButtons = document.querySelectorAll<HTMLElement>('[data-terminal-view]');
+    const views: Record<string, string> = {
+      problems: 'problems-container',
+      terminal: 'terminal-container',
+      debug: 'debug-console',
+    };
+
+    tabButtons.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        // Update active tab style
+        tabButtons.forEach((b) => {
+          b.classList.toggle('active', b === btn);
+          b.setAttribute('aria-selected', b === btn ? 'true' : 'false');
+        });
+
+        const view = btn.dataset.terminalView!;
+
+        // Show/hide view content
+        Object.entries(views).forEach(([key, id]) => {
+          const el = document.getElementById(id);
+          el?.classList.toggle('hidden', key !== view);
+        });
+
+        if (view === 'problems') {
+          this.refreshProblemsPanel();
+        }
+      });
+    });
+  }
+
+  /** Populate the PROBLEMS panel from Monaco's model markers. */
+  private refreshProblemsPanel(): void {
+    const container = document.getElementById('problems-container');
+    if (!container) return;
+
+    // Import monaco lazily via dynamic reference on window global set by monaco-setup
+    const monaco = (window as any).monaco as typeof import('monaco-editor') | undefined;
+    if (!monaco) {
+      container.innerHTML = '<div class="problems-empty">Monaco not loaded.</div>';
+      return;
+    }
+
+    const allMarkers = monaco.editor.getModelMarkers({});
+    if (allMarkers.length === 0) {
+      container.innerHTML = '<div class="problems-empty">No problems detected in the workspace.</div>';
+      return;
+    }
+
+    // Group by resource
+    const byFile = new Map<string, typeof allMarkers>();
+    allMarkers.forEach((m) => {
+      const uri = m.resource.toString();
+      if (!byFile.has(uri)) byFile.set(uri, []);
+      byFile.get(uri)!.push(m);
+    });
+
+    let html = '';
+    byFile.forEach((markers, uri) => {
+      const filename = uri.split('/').pop() ?? uri;
+      html += `<div class="problems-file-label">${filename}</div>`;
+      markers.forEach((m) => {
+        const severity = m.severity === 8 ? 'error' : m.severity === 4 ? 'warning' : 'info';
+        const icon = severity === 'error' ? '✖' : severity === 'warning' ? '⚠' : 'ℹ';
+        html += `<div class="problem-row" data-uri="${uri}" data-line="${m.startLineNumber}">
+          <span class="problem-icon ${severity}">${icon}</span>
+          <span class="problem-message">${this.escapeHtml(m.message)}</span>
+          <span class="problem-location">${m.startLineNumber}:${m.startColumn}</span>
+        </div>`;
+      });
+    });
+
+    container.innerHTML = html;
+
+    // Click to jump to location
+    container.querySelectorAll<HTMLElement>('.problem-row').forEach((row) => {
+      row.addEventListener('click', () => {
+        const line = Number(row.dataset.line ?? 1);
+        this.editor.revealLine(line);
+      });
+    });
+  }
+
+  private escapeHtml(s: string): string {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /**
+   * Command Palette — Ctrl+Shift+P
+   * Searchable list of all IDE actions.
+   */
+  private bindCommandPalette(): void {
+    const overlay = document.getElementById('command-palette')!;
+    const input = document.getElementById('command-palette-input') as HTMLInputElement;
+    const list = document.getElementById('command-palette-list')!;
+
+    if (!overlay || !input || !list) return;
+
+    const commands: { label: string; shortcut?: string; action: () => void }[] = [
+      { label: 'Open File…',             shortcut: 'Ctrl+O',         action: () => void this.pickFile() },
+      { label: 'Open Folder…',           shortcut: 'Ctrl+Shift+O',   action: () => void this.openFolder() },
+      { label: 'New File',               shortcut: 'Ctrl+N',         action: () => void this.newUntitledFile() },
+      { label: 'Save',                   shortcut: 'Ctrl+S',         action: () => void this.saveActiveFile() },
+      { label: 'Save As…',              shortcut: 'Ctrl+Shift+S',   action: () => void this.saveActiveFileAs() },
+      { label: 'Revert File',                                         action: () => void this.revertActiveFile() },
+      { label: 'Close Tab',              shortcut: 'Ctrl+W',         action: () => { const p = this.tabs.getActivePath(); if (p) this.tabs.closeTab(p); } },
+      { label: 'Run Active File',        shortcut: 'F5',             action: () => void this.runActiveFile() },
+      { label: 'Toggle Terminal',        shortcut: 'Ctrl+`',         action: () => this.terminal.toggle() },
+      { label: 'New Terminal',                                        action: () => void this.terminal.createTerminal() },
+      { label: 'Find',                   shortcut: 'Ctrl+F',         action: () => this.search.show(false) },
+      { label: 'Find and Replace',       shortcut: 'Ctrl+H',         action: () => this.search.show(true) },
+      { label: 'Go to Line…',           shortcut: 'Ctrl+G',         action: () => void this.editor.runEditorAction('editor.action.gotoLine') },
+      { label: 'Go to Symbol…',         shortcut: 'Ctrl+Shift+O',   action: () => void this.editor.runEditorAction('editor.action.quickOutline') },
+      { label: 'Toggle Comment',         shortcut: 'Ctrl+/',         action: () => void this.editor.runEditorAction('editor.action.commentLine') },
+      { label: 'Format Document',        shortcut: 'Shift+Alt+F',    action: () => void this.editor.runEditorAction('editor.action.formatDocument') },
+      { label: 'Explorer',                                            action: () => void this.showSidebarPanel('explorer') },
+      { label: 'Source Control',                                      action: () => void this.showSidebarPanel('git') },
+      { label: 'Chat AI',                                             action: () => void this.showSidebarPanel('chat') },
+      { label: 'Run and Debug',                                       action: () => void this.showSidebarPanel('debug') },
+      { label: 'Settings',               shortcut: 'Ctrl+,',         action: () => void this.showSidebarPanel('settings') },
+      { label: 'Toggle Sidebar',                                      action: () => { document.querySelector('.app-shell')?.classList.toggle('sidebar-collapsed'); requestAnimationFrame(() => this.editor.layout()); } },
+      { label: 'Toggle Markdown Preview',                             action: () => { const p = this.tabs.getActivePath(); if (p) { const c = this.editor.getContent(p) ?? ''; const f = p.split(/[\/\\]/).pop() ?? ''; this.mdPreview.toggle(c, f); } } },
+      { label: 'Extension Marketplace',                               action: () => void this.openExtensionMarketplace() },
+      { label: "What's New",                                          action: () => void this.openReleaseNotes() },
+      { label: 'About NexCode IDE',                                   action: () => window.electronAPI.showAboutWindow() },
+      { label: 'Toggle Developer Tools', shortcut: 'F12',            action: () => window.electronAPI.toggleDevtools() },
+      { label: 'Zoom In',                                             action: () => void this.editor.runEditorAction('editor.action.fontZoomIn') },
+      { label: 'Zoom Out',                                            action: () => void this.editor.runEditorAction('editor.action.fontZoomOut') },
+      { label: 'Reset Zoom',                                          action: () => void this.editor.runEditorAction('editor.action.fontZoomReset') },
+      { label: 'Select All',             shortcut: 'Ctrl+A',         action: () => void this.editor.runEditorAction('editor.action.selectAll') },
+      { label: 'Start Debugging',        shortcut: 'F5',             action: () => this.debuggerModule.start() },
+      { label: 'Stop Debugging',         shortcut: 'Shift+F5',       action: () => this.debuggerModule.stop() },
+      { label: 'Step Over',              shortcut: 'F10',            action: () => this.debuggerModule.stepOver() },
+    ];
+
+    let activeIdx = -1;
+    let filtered = commands;
+
+    const close = () => {
+      overlay.classList.add('hidden');
+      input.value = '';
+      activeIdx = -1;
+    };
+
+    const open = () => {
+      overlay.classList.remove('hidden');
+      input.value = '';
+      activeIdx = -1;
+      renderList(commands);
+      requestAnimationFrame(() => input.focus());
+    };
+
+    const renderList = (items: typeof commands) => {
+      filtered = items;
+      activeIdx = items.length > 0 ? 0 : -1;
+      list.innerHTML = items.length === 0
+        ? '<div class="command-palette-no-results">No commands match</div>'
+        : items.map((cmd, i) => `
+          <div class="command-palette-item${i === 0 ? ' active' : ''}" data-index="${i}">
+            <span class="command-palette-item-label">${this.escapeHtml(cmd.label)}</span>
+            ${cmd.shortcut ? `<span class="command-palette-item-shortcut">${cmd.shortcut}</span>` : ''}
+          </div>`).join('');
+
+      list.querySelectorAll<HTMLElement>('.command-palette-item').forEach((el) => {
+        el.addEventListener('mouseenter', () => {
+          const idx = Number(el.dataset.index);
+          setActive(idx);
+        });
+        el.addEventListener('click', () => {
+          const idx = Number(el.dataset.index);
+          close();
+          filtered[idx]?.action();
+        });
+      });
+    };
+
+    const setActive = (idx: number) => {
+      const items = list.querySelectorAll<HTMLElement>('.command-palette-item');
+      items.forEach((el, i) => el.classList.toggle('active', i === idx));
+      activeIdx = idx;
+      const active = items[idx];
+      active?.scrollIntoView({ block: 'nearest' });
+    };
+
+    input.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase();
+      const matches = q ? commands.filter((c) => c.label.toLowerCase().includes(q)) : commands;
+      renderList(matches);
+    });
+
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { close(); e.preventDefault(); return; }
+      if (e.key === 'Enter') {
+        if (activeIdx >= 0 && filtered[activeIdx]) {
+          const action = filtered[activeIdx].action;
+          close();
+          action();
+        }
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'ArrowDown') { setActive(Math.min(activeIdx + 1, filtered.length - 1)); e.preventDefault(); }
+      if (e.key === 'ArrowUp')   { setActive(Math.max(activeIdx - 1, 0)); e.preventDefault(); }
+    });
+
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+    // Ctrl+Shift+P / Ctrl+P to open
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'P') {
+        e.preventDefault();
+        e.stopPropagation();
+        overlay.classList.contains('hidden') ? open() : close();
+      }
+      if (e.key === 'Escape' && !overlay.classList.contains('hidden')) {
+        close();
+        e.preventDefault();
+      }
+    });
+  }
+
   /** Shell-safe user message (Write-Host breaks in CMD). */
   private formatTerminalMessage(message: string): string {
     const text = message.replace(/"/g, '""');
@@ -1220,6 +1473,9 @@ class NexusApp {
       this.chatPanel.updateSettings();
       if (partial.terminalShell !== undefined && this.terminal.isVisible()) {
         await this.terminal.recreateForShellChange();
+      }
+      if (partial.terminalShell !== undefined) {
+        this.syncTerminalPromptLabel();
       }
       this.statusBar.applySettings(this.settings);
     };
@@ -1375,6 +1631,19 @@ class NexusApp {
     this.explorer.getTimeline().push(path, 'Opened');
     void this.refreshOutline();
     this.pluginHost.emit('fileOpened', path);
+    // Send updated editor context to main so AI has current file/cursor
+    this.pushEditorContext();
+  }
+
+  /** Push current editor context (file, cursor, selection) to main process for AI. */
+  private pushEditorContext(): void {
+    if (!window.electronAPI.setEditorContext) return;
+    try {
+      const ctx = this.editor.getAiContext();
+      window.electronAPI.setEditorContext(ctx);
+    } catch {
+      // Non-fatal — editor may not be initialised yet
+    }
   }
 
   private async refreshOutline(): Promise<void> {
@@ -2252,9 +2521,30 @@ window.addEventListener('unhandledrejection', (event) => {
           ? reason.message
           : '';
 
-  // Monaco and related disposables can reject with a cancellation error during
-  // normal editor churn. These are expected and should not surface as fatal.
-  if (message === 'Canceled' || message === 'Canceled: Canceled') {
+  // Monaco and related disposables can reject with known internal errors during
+  // normal editor churn (tab switches, splits, IntelliSense cancellation).
+  // These are expected and must not surface as fatal crashes.
+  if (
+    message === 'Canceled' ||
+    message === 'Canceled: Canceled' ||
+    message.includes('InstantiationService has been disposed') ||
+    message.includes('Object is disposed') ||
+    message.includes('editor has been disposed')
+  ) {
     event.preventDefault();
   }
 });
+
+// Suppress synchronous Monaco-internal errors thrown when a context menu or
+// hover widget fires on an editor that was just torn down (e.g. split view closed).
+window.addEventListener('error', (event) => {
+  const msg = event.message ?? '';
+  if (
+    msg.includes('InstantiationService has been disposed') ||
+    msg.includes('Object is disposed') ||
+    msg.includes('editor has been disposed')
+  ) {
+    event.preventDefault();
+  }
+});
+

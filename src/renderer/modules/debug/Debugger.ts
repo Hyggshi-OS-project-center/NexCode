@@ -102,15 +102,18 @@ export class Debugger {
 
     // Bind evaluation input
     const evalInput = document.getElementById('debug-eval-input') as HTMLInputElement | null;
-    evalInput?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        const expression = evalInput.value.trim();
-        if (expression) {
-          this.evaluateExpression(expression);
-          evalInput.value = '';
-        }
+    const evalBtn = document.getElementById('btn-debug-eval') as HTMLButtonElement | null;
+    const handleEval = () => {
+      const expression = evalInput?.value.trim();
+      if (expression) {
+        this.evaluateExpression(expression);
+        if (evalInput) evalInput.value = '';
       }
+    };
+    evalInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleEval();
     });
+    evalBtn?.addEventListener('click', () => handleEval());
   }
 
   private bindGlobalEvents(): void {
@@ -332,6 +335,7 @@ export class Debugger {
   public syncBreakpointsUI(): void {
     const activePath = this.editor.getActivePath();
     const emptyEl = document.getElementById('dbg-breakpoints-empty');
+    if (!this.breakpointsListEl) return;
     if (!activePath) {
       emptyEl?.classList.remove('hidden');
       this.breakpointsListEl.innerHTML = '';
@@ -349,7 +353,7 @@ export class Debugger {
     }
 
     emptyEl?.classList.add('hidden');
-    const filename = activePath.split(/[\\/]/).pop()!;
+    const filename = activePath.split(/[\\/]/).pop() ?? activePath;
 
     this.breakpointsListEl.innerHTML = activeBreakpoints
       .map(
@@ -593,19 +597,24 @@ export class Debugger {
     const logsEl = document.getElementById('debug-console-logs');
     if (!logsEl) return;
 
+    // Show the debug console panel if hidden
+    const debugConsoleEl = document.getElementById('debug-console');
+    if (debugConsoleEl?.classList.contains('hidden')) {
+      const debugTab = document.querySelector('[data-terminal-view="debug"]') as HTMLElement | null;
+      debugTab?.click();
+    }
+
     const logRow = document.createElement('div');
     logRow.className = `debug-console-log debug-log-${type}`;
-    
+
+    const now = new Date();
+    const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
+
     let prefix = '';
-    if (category === 'System') {
-      prefix = '[System] ';
-    } else if (category === 'In') {
-      prefix = '⚡ ';
-    } else if (category === 'Out') {
-      prefix = '◀ ';
-    } else if (category === 'Debugger') {
-      prefix = '[Debug] ';
-    }
+    if (category === 'System') prefix = `[System ${ts}] `;
+    else if (category === 'In') prefix = '';
+    else if (category === 'Out') prefix = '';
+    else if (category === 'Debugger') prefix = `[Debug ${ts}] `;
 
     logRow.textContent = `${prefix}${message}`;
     logsEl.appendChild(logRow);

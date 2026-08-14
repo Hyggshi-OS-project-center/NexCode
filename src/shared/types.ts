@@ -265,6 +265,7 @@ export type IpcChannel =
   | 'models:list-gemini'
   | 'models:list-openrouter'
   | 'models:list-claude'
+  | 'ai:set-editor-context'
 
 /** Paths to open from OS file association or second-instance launch */
 export interface OpenPathsPayload {
@@ -444,6 +445,8 @@ export interface ElectronAPI {
   listOpenRouterModels: () => Promise<{ value: string; label: string; supportsImages: boolean }[]>;
   /** Fetch available Claude models from the API dynamically. */
   listClaudeModels: () => Promise<{ value: string; label: string; supportsImages: boolean }[]>;
+  /** Send the current editor context to main so AI can access it. */
+  setEditorContext: (ctx: AiEditorContext | null) => void;
   /** Run a .hosc file using child_process (hosc run) */
   runHosc: (filePath: string, cwd?: string, hoscExecutable?: string) => Promise<{ success: boolean; error?: string }>;
   /** Terminate the currently running hosc process */

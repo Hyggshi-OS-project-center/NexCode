@@ -421,6 +421,19 @@ export class EditorManager {
         this.onChange?.(path);
         this.scheduleAutoSave(path);
       });
+    } else {
+      // Model already cached — sync content if it has changed (e.g. after an AI
+      // write was approved or the file was modified externally). Suppress the
+      // change event so this programmatic update is not treated as a user edit.
+      const currentValue = instance.model.getValue();
+      if (currentValue !== content) {
+        this.suppressChangeFor.add(path);
+        try {
+          instance.model.setValue(content);
+        } finally {
+          this.suppressChangeFor.delete(path);
+        }
+      }
     }
 
     this.activePath = path;

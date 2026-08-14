@@ -36,18 +36,6 @@ for (const { key, command } of unbindFindKeybindings) {
   monaco.editor.addKeybindingRule({ keybinding: key, command: `-${command}` });
 }
 
-const workerCache = new Map<string, Worker>();
-let workerInitPromise: Promise<void> | null = null;
-
-function ensureEditorWorker(): void {
-  if (workerInitPromise) return;
-  workerInitPromise = new Promise<void>((resolve) => {
-    const worker = new editorWorker();
-    workerCache.set('editor', worker);
-    resolve();
-  });
-}
-
 function getWorkerKey(label: string): string {
   if (label === 'json') return 'json';
   if (label === 'css' || label === 'scss' || label === 'less') return 'css';
@@ -71,18 +59,22 @@ function createWorker(key: string): Worker {
   }
 }
 
+/**
+ * Monaco requires a STABLE worker per language label for the entire session.
+ * The TypeScript worker handles all TS/JS models simultaneously — this is by design.
+ * Creating a new worker on every getWorker() call disposes the old language service
+ * mid-session, leading to "InstantiationService has been disposed" errors on right-click
+ * or autocomplete. Cache once per key, reuse forever.
+ */
+const workerCache = new Map<string, Worker>();
+
 self.MonacoEnvironment = {
   getWorker(_: unknown, label: string) {
-    ensureEditorWorker();
-
     const key = getWorkerKey(label);
     const cached = workerCache.get(key);
     if (cached) return cached;
-
     const worker = createWorker(key);
     workerCache.set(key, worker);
     return worker;
   },
 };
-
-ensureEditorWorker();

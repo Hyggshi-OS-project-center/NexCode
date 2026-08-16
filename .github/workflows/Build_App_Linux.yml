@@ -112,7 +112,7 @@ jobs:
           gpg --list-secret-keys --keyid-format LONG
 
       - name: Checkout central apt-repo (gh-pages)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: Hyggshi-OS-Foundation/apt-repo
           ref: gh-pages

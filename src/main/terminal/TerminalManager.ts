@@ -1,106 +1,144 @@
 /**
- * Integrated terminal — spawns cmd.exe, PowerShell, or bash via child_process.
+ * Integrated Terminal Manager — Native pseudo-terminal (node-pty) engine.
+ * Provides standard VT100 / xterm-256color ANSI emulation, real-time PTY resizing,
+ * multi-session lifecycle, and graceful fallback.
  */
 import { type BrowserWindow } from 'electron';
-import { execSync, spawn, type ChildProcessWithoutNullStreams } from 'child_process';
+import * as pty from 'node-pty';
 import { existsSync, statSync } from 'fs';
-import type { TerminalShell } from '../../shared/types';
+import os from 'os';
+import path from 'path';
+import type { TerminalCreateOptions, TerminalShell, TerminalShellInfo } from '../../shared/types';
 import { getSettings } from '../settings/store';
-import {
-  parseCmdPromptCwd,
-  parsePowerShellPromptCwd,
-  stripCwdOsc,
-} from './cwdProtocol';
-import { resolveShellProfile } from './shellConfig';
-import {
-  createTerminalDecoder,
-  decodeTerminalChunk,
-  encodeTerminalInput,
-  flushTerminalDecoder,
-  type TerminalStreamDecoder,
-} from './terminalEncoding';
+import { getAvailableShells, resolveShellProfile } from './shellConfig';
 
 interface TerminalSession {
   id: number;
-  process: ChildProcessWithoutNullStreams;
+  ptyProcess: pty.IPty;
   shell: TerminalShell;
-  decoder: TerminalStreamDecoder;
+  shellName: string;
+  title: string;
+  cwd: string;
 }
 
 export class TerminalManager {
   private sessions = new Map<number, TerminalSession>();
-  private lastCwd = new Map<number, string>();
   private nextId = 1;
 
-  create(window: BrowserWindow, cwd?: string): number {
+  create(window: BrowserWindow, options?: TerminalCreateOptions | string): number {
     const id = this.nextId++;
-    const shell = getSettings().terminalShell;
-    const profile = resolveShellProfile(shell);
+    const opts: TerminalCreateOptions =
+      typeof options === 'string'
+        ? { cwd: options }
+        : options || {};
 
-    const proc = spawn(profile.exe, profile.args, {
-      cwd: cwd || process.cwd(),
-      env: {
-        ...process.env,
-        PYTHONUTF8: '1',
-        PYTHONIOENCODING: 'utf-8',
-        LANG: 'en_US.UTF-8',
-        LC_ALL: 'en_US.UTF-8',
-        ...profile.env,
-      },
-      windowsHide: true,
-    });
+    const requestedShell = opts.shell || getSettings().terminalShell;
+    const profile = resolveShellProfile(requestedShell);
 
-    const decoder = createTerminalDecoder(profile.stdioEncoding);
-    this.sessions.set(id, { id, process: proc, shell, decoder });
+    let startCwd = opts.cwd || process.cwd();
+    if (!this.isValidDirectory(startCwd)) {
+      startCwd = os.homedir();
+    }
 
-    const emitCwd = (cwdPath: string) => {
-      const hostCwd = normalizeShellCwdForHost(cwdPath);
-      if (window.isDestroyed() || !hostCwd) return;
-      if (!isExistingDirectory(hostCwd)) return;
-      if (this.lastCwd.get(id) === hostCwd) return;
-      this.lastCwd.set(id, hostCwd);
-      window.webContents.send('terminal:cwd', { id, cwd: hostCwd });
+    const cols = Math.max(10, opts.cols || 80);
+    const rows = Math.max(5, opts.rows || 24);
+
+    const env: Record<string, string> = {
+      ...process.env,
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      TERM_PROGRAM: 'NexCode-IDE',
+      TERM_PROGRAM_VERSION: '3.5.7',
+      LANG: process.env.LANG || 'en_US.UTF-8',
+      LC_ALL: process.env.LC_ALL || 'en_US.UTF-8',
+      ...profile.env,
     };
 
-    const sendOutput = (chunk: string) => {
+    let ptyProc: pty.IPty;
+    try {
+      ptyProc = pty.spawn(profile.exe, profile.args, {
+        name: 'xterm-256color',
+        cols,
+        rows,
+        cwd: startCwd,
+        env,
+      });
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      // Fallback attempt with bash or default system shell
+      try {
+        const fallbackExe = process.platform === 'win32' ? 'powershell.exe' : (process.env.SHELL || '/bin/sh');
+        ptyProc = pty.spawn(fallbackExe, [], {
+          name: 'xterm-256color',
+          cols,
+          rows,
+          cwd: os.homedir(),
+          env,
+        });
+      } catch (fallbackErr: unknown) {
+        const finalMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+        if (!window.isDestroyed()) {
+          window.webContents.send('terminal:data', {
+            id,
+            data: `\r\n\x1b[31;1m[Failed to spawn terminal: ${errMsg} | Fallback failed: ${finalMsg}]\x1b[0m\r\n`,
+          });
+        }
+        return -1;
+      }
+    }
+
+    const session: TerminalSession = {
+      id,
+      ptyProcess: ptyProc,
+      shell: profile.kind,
+      shellName: profile.name,
+      title: profile.name,
+      cwd: startCwd,
+    };
+    this.sessions.set(id, session);
+
+    ptyProc.onData((data: string) => {
       if (window.isDestroyed()) return;
-      const stripped = stripCwdOsc(chunk);
-      const cwd = stripped.cwd;
-      const output = profile.kind === 'bash'
-        ? stripBashNonPtyStartupNoise(stripped.output)
-        : stripped.output;
-      if (cwd) emitCwd(cwd);
 
-      let promptCwd: string | null = null;
-      if (profile.kind === 'powershell') promptCwd = parsePowerShellPromptCwd(output);
-      else if (profile.kind === 'cmd') promptCwd = parseCmdPromptCwd(output);
+      // Extract CWD from OSC 7 escape sequence if emitted by modern shells
+      const osc7Match = data.match(/\x1b\]7;file:\/\/[^/]*([^\x1b\x07]+)(?:\x1b\\|\x07)/);
+      if (osc7Match && osc7Match[1]) {
+        try {
+          const rawPath = decodeURIComponent(osc7Match[1]);
+          const normalized = process.platform === 'win32' && rawPath.startsWith('/') ? rawPath.slice(1) : rawPath;
+          if (this.isValidDirectory(normalized) && session.cwd !== normalized) {
+            session.cwd = normalized;
+            window.webContents.send('terminal:cwd', { id, cwd: normalized });
+          }
+        } catch {
+          /* ignore decoding errors */
+        }
+      }
 
-      if (promptCwd) emitCwd(promptCwd);
-      if (output) window.webContents.send('terminal:data', { id, data: output });
-    };
+      // Extract title from OSC 0 or OSC 2
+      const titleMatch = data.match(/\x1b\](?:0|2);([^\x1b\x07]+)(?:\x1b\\|\x07)/);
+      if (titleMatch && titleMatch[1]) {
+        let raw = titleMatch[1].trim();
+        if (raw.includes('@') && raw.includes(':')) {
+          const colon = raw.lastIndexOf(':');
+          const p = raw.slice(colon + 1).trim();
+          const folder = p.replace(/^~[\\/]?/, '').split(/[\\/]/).filter(Boolean).pop();
+          raw = folder ? `${session.shell}: ${folder}` : session.shell;
+        }
+        if (raw && session.title !== raw) {
+          session.title = raw;
+          window.webContents.send('terminal:title', { id, title: raw });
+        }
+      }
 
-    const onChunk = (buf: Buffer) => {
-      const text = decodeTerminalChunk(decoder, buf);
-      if (text) sendOutput(text);
-    };
-
-    proc.stdout.on('data', onChunk);
-    proc.stderr.on('data', onChunk);
-
-    if (profile.init) proc.stdin.write(encodeTerminalInput(shell, profile.init));
-
-    proc.on('error', (err) => {
-      sendOutput(`\r\n[Failed to start ${profile.exe}: ${err.message}]\r\n`);
-      this.sessions.delete(id);
-      this.lastCwd.delete(id);
+      window.webContents.send('terminal:data', { id, data });
     });
 
-    proc.on('exit', () => {
-      const tail = flushTerminalDecoder(decoder);
-      if (tail) sendOutput(tail);
-      sendOutput('\r\n[Process exited]\r\n');
+    ptyProc.onExit(({ exitCode, signal }) => {
+      if (!window.isDestroyed()) {
+        window.webContents.send('terminal:exit', { id, exitCode, signal });
+      }
       this.sessions.delete(id);
-      this.lastCwd.delete(id);
     });
 
     return id;
@@ -109,79 +147,55 @@ export class TerminalManager {
   write(id: number, data: string): void {
     const session = this.sessions.get(id);
     if (!session) return;
-    session.process.stdin.write(encodeTerminalInput(session.shell, data));
+    try {
+      session.ptyProcess.write(data);
+    } catch {
+      /* process may already be closed */
+    }
   }
 
-  resize(_id: number, _cols: number, _rows: number): void {
-    // Resize not supported without node-pty; placeholder for future extension
+  resize(id: number, cols: number, rows: number): void {
+    const session = this.sessions.get(id);
+    if (!session) return;
+    if (cols <= 0 || rows <= 0) return;
+    try {
+      session.ptyProcess.resize(Math.max(1, cols), Math.max(1, rows));
+    } catch {
+      /* process may already be closed */
+    }
   }
 
   kill(id: number): void {
     const session = this.sessions.get(id);
     if (!session) return;
-    this.terminateProcess(session.process);
+    try {
+      session.ptyProcess.kill();
+    } catch {
+      /* already terminated */
+    }
     this.sessions.delete(id);
-    this.lastCwd.delete(id);
   }
 
-  /** Terminate every shell session (cmd.exe, PowerShell, bash) — call on app quit. */
   killAll(): void {
     for (const session of this.sessions.values()) {
-      this.terminateProcess(session.process);
+      try {
+        session.ptyProcess.kill();
+      } catch {
+        /* already terminated */
+      }
     }
     this.sessions.clear();
-    this.lastCwd.clear();
   }
 
-  private terminateProcess(proc: ChildProcessWithoutNullStreams): void {
-    const pid = proc.pid;
-    if (pid == null) return;
+  listAvailableShells(): TerminalShellInfo[] {
+    return getAvailableShells();
+  }
 
+  private isValidDirectory(dirPath: string): boolean {
     try {
-      if (process.platform === 'win32') {
-        // /T kills child processes (e.g. programs started from CMD)
-        execSync(`taskkill /PID ${pid} /T /F`, { stdio: 'ignore', windowsHide: true });
-      } else {
-        proc.kill('SIGTERM');
-      }
+      return existsSync(dirPath) && statSync(dirPath).isDirectory();
     } catch {
-      try {
-        proc.kill('SIGKILL');
-      } catch {
-        /* already exited */
-      }
+      return false;
     }
   }
-}
-
-function isExistingDirectory(filePath: string): boolean {
-  try {
-    return existsSync(filePath) && statSync(filePath).isDirectory();
-  } catch {
-    return false;
-  }
-}
-
-function normalizeShellCwdForHost(cwdPath: string): string {
-  const trimmed = cwdPath.trim();
-  if (process.platform !== 'win32') return trimmed;
-
-  const msys = trimmed.match(/^\/([a-zA-Z])(?:\/(.*))?$/);
-  if (msys) return toWindowsDrivePath(msys[1]!, msys[2] ?? '');
-
-  const wsl = trimmed.match(/^\/mnt\/([a-zA-Z])(?:\/(.*))?$/);
-  if (wsl) return toWindowsDrivePath(wsl[1]!, wsl[2] ?? '');
-
-  return trimmed;
-}
-
-function toWindowsDrivePath(drive: string, rest: string): string {
-  const suffix = rest.replace(/\//g, '\\');
-  return suffix ? `${drive.toUpperCase()}:\\${suffix}` : `${drive.toUpperCase()}:\\`;
-}
-
-function stripBashNonPtyStartupNoise(output: string): string {
-  return output
-    .replace(/^bash: cannot set terminal process group[^\r\n]*(?:\r?\n)?/g, '')
-    .replace(/^bash: no job control in this shell(?:\r?\n)?/g, '');
 }

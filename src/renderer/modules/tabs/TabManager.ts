@@ -5,6 +5,16 @@ import { renderFileIconHtml } from '../../utils/fileIcons';
 import { RELEASE_NOTES_TAB_PATH } from '../releaseNotes/ReleaseNotesView';
 import { WELCOME_TAB_PATH } from '../welcome/WelcomeScreen';
 
+/** Escape HTML to prevent XSS in innerHTML tab labels. */
+function escHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export interface OpenTab {
   path: string;
   name: string;
@@ -316,7 +326,7 @@ export class TabManager {
       el.dataset.path = tab.path;
       el.innerHTML = `
         ${renderFileIconHtml(tab.name, false)}
-        <span class="tab-name">${tab.name}</span>
+        <span class="tab-name">${escHtml(tab.name)}</span>
         <button class="tab-close" title="Close">×</button>
       `;
 

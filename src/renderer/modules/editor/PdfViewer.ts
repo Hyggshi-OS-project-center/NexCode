@@ -16,6 +16,15 @@ async function ensurePdfjs(): Promise<any> {
   return pdfjsLib;
 }
 
+function escHtml(s: string): string {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export class PdfViewer {
   private root: HTMLElement;
   private container: HTMLElement;
@@ -149,7 +158,7 @@ export class PdfViewer {
       this.updatePageInfo();
       await this.renderPage(this.currentPage);
     } catch (err) {
-      this.container.innerHTML = `<div class="pdf-viewer-error">Failed to load PDF: ${(err as Error).message}</div>`;
+      this.container.innerHTML = `<div class="pdf-viewer-error">Failed to load PDF: ${escHtml((err as Error).message)}</div>`;
     } finally {
       this.loader.classList.add('hidden');
     }
@@ -188,7 +197,7 @@ export class PdfViewer {
       this.textLayer.style.height = `${vp.height}px`;
     } catch (err) {
       console.error('[PdfViewer] Render error:', err);
-      this.container.innerHTML = `<div class="pdf-viewer-error">Failed to render page ${pageNum}: ${(err as Error).message}</div>`;
+      this.container.innerHTML = `<div class="pdf-viewer-error">Failed to render page ${pageNum}: ${escHtml((err as Error).message)}</div>`;
     } finally {
       this.rendering = false;
       this.loader.classList.add('hidden');

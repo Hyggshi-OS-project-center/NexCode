@@ -170,42 +170,40 @@ svg {
 }
 
 .titlebar-controls-right {
-    margin-left: 8px;
-}
-
-.win-btn {
-    width: 46px;
-    height: 40px;
-    color: #d0d0d0;
-    background: transparent;
-    cursor: pointer;
-    position: relative;
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    height: 100%;
     -webkit-app-region: no-drag;
 }
 
-.win-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
+.titlebar-controls-right .titlebar-btn {
+    width: 46px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary, #cccccc);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+    -webkit-app-region: no-drag;
 }
 
-.win-btn::before {
-    content: "";
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
+.titlebar-controls-right .titlebar-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
 }
 
-.win-btn-minimize::before {
-    width: 12px;
-    height: 1px;
-    background: currentColor;
+.titlebar-controls-right .titlebar-btn-close:hover {
+    background: #e81123 !important;
+    color: #ffffff !important;
 }
 
-.win-btn-maximize::before {
-    width: 12px;
-    height: 12px;
-    border: 1.5px solid currentColor;
-    border-radius: 2px;
+.titlebar-controls-right .titlebar-btn svg {
+    width: 16px;
+    height: 16px;
 }
 
 .win-btn-close::before,

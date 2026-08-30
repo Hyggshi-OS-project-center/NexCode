@@ -123,15 +123,21 @@ function getElectronAPI() {
 
 async function syncAgentWindowControls() {
     if (!dom.maximizeBtn) return;
+    const maxIcon = document.getElementById('agent-icon-maximize');
+    const restoreIcon = document.getElementById('agent-icon-restore');
     const api = getElectronAPI();
     if (!api || !api.isMaximized) return;
     try {
         const isMax = await api.isMaximized();
         dom.maximizeBtn.classList.toggle('is-maximized', Boolean(isMax));
         dom.maximizeBtn.title = isMax ? 'Restore' : 'Maximize';
+        if (maxIcon) maxIcon.style.display = isMax ? 'none' : 'block';
+        if (restoreIcon) restoreIcon.style.display = isMax ? 'block' : 'none';
     } catch {
         dom.maximizeBtn.classList.remove('is-maximized');
         dom.maximizeBtn.title = 'Maximize';
+        if (maxIcon) maxIcon.style.display = 'block';
+        if (restoreIcon) restoreIcon.style.display = 'none';
     }
 }
 
@@ -159,8 +165,17 @@ function formatRelativeTime(date) {
 
 function escapeHtml(str) {
     const div = document.createElement('div');
-    div.textContent = str;
+    div.textContent = str ?? '';
     return div.innerHTML;
+}
+
+function sanitizeUrl(url) {
+    if (!url) return '#';
+    const trimmed = String(url).trim();
+    if (/^(https?:\/\/|mailto:|file:\/\/|\/|\.\/|#)/i.test(trimmed)) {
+        return escapeHtml(trimmed);
+    }
+    return '#';
 }
 
 function generateId() {
@@ -306,8 +321,11 @@ function renderMarkdown(text) {
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
     html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
 
-    // Links
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    // Links (sanitized to block javascript: and other dangerous schemes)
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_match, linkText, url) => {
+        const safeUrl = sanitizeUrl(url);
+        return `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${linkText}</a>`;
+    });
 
     // Unordered lists
     html = html.replace(/^[\*\-]\s(.+)$/gm, '<li>$1</li>');
@@ -799,10 +817,11 @@ function renderAttachments() {
     state.attachments.forEach((att) => {
         const chip = document.createElement('div');
         chip.className = 'attachment-chip';
+        const isImg = att.kind === 'image' && att.dataUrl && att.dataUrl.startsWith('data:image/');
         chip.innerHTML = `
-            ${att.kind === 'image' ? `<img src="${att.dataUrl}" class="attachment-thumb" alt="" />` : '<span>File</span>'}
+            ${isImg ? `<img src="${escapeHtml(att.dataUrl)}" class="attachment-thumb" alt="" />` : '<span>File</span>'}
             <span>${escapeHtml(att.name)}</span>
-            <button class="remove-attachment" data-id="${att.id}">x</button>
+            <button class="remove-attachment" data-id="${escapeHtml(att.id)}">x</button>
         `;
         chip.querySelector('.remove-attachment').addEventListener('click', () => {
             removeAttachment(att.id);

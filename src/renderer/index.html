@@ -66,18 +66,25 @@
     </div>
     <div class="titlebar-controls">
       <button class="titlebar-btn" id="btn-minimize" title="Minimize" aria-label="Minimize">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-          <rect x="2" y="5.5" width="8" height="1" fill="currentColor"/>
+        <!-- codicon_ chrome minimize.svg -->
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M3 7.5C3 7.22386 3.22386 7 3.5 7H12.5C12.7761 7 13 7.22386 13 7.5C13 7.77614 12.7761 8 12.5 8H3.5C3.22386 8 3 7.77614 3 7.5Z" fill="currentColor"/>
         </svg>
       </button>
-      <button class="titlebar-btn" id="btn-maximize" title="Maximize" aria-label="Maximize">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-          <rect x="2" y="2.5" width="8" height="7" rx="1" stroke="currentColor" stroke-width="1" fill="none"/>
+      <button class="titlebar-btn" id="btn-maximize" title="Maximize / Restore" aria-label="Maximize">
+        <!-- codicon_ chrome maximize.svg -->
+        <svg id="icon-maximize" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M2 4.5C2 3.11929 3.11929 2 4.5 2H11.5C12.8807 2 14 3.11929 14 4.5V11.5C14 12.8807 12.8807 14 11.5 14H4.5C3.11929 14 2 12.8807 2 11.5V4.5ZM4.5 3C3.67157 3 3 3.67157 3 4.5V11.5C3 12.3284 3.67157 13 4.5 13H11.5C12.3284 13 13 12.3284 13 11.5V4.5C13 3.67157 12.3284 3 11.5 3H4.5Z" fill="currentColor"/>
+        </svg>
+        <!-- codicon_ chrome restore.svg — shown when maximized -->
+        <svg id="icon-restore" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="display:none">
+          <path d="M5.08496 4C5.29088 3.4174 5.8465 3 6.49961 3H9.99961C11.6565 3 12.9996 4.34315 12.9996 6V9.5C12.9996 10.1531 12.5822 10.7087 11.9996 10.9146V6C11.9996 4.89543 11.1042 4 9.99961 4H5.08496ZM4.5 5H9.5C10.3284 5 11 5.67157 11 6.5V11.5C11 12.3284 10.3284 13 9.5 13H4.5C3.67157 13 3 12.3284 3 11.5V6.5C3 5.67157 3.67157 5 4.5 5ZM4.5 6C4.22386 6 4 6.22386 4 6.5V11.5C4 11.7761 4.22386 12 4.5 12H9.5C9.77614 12 10 11.7761 10 11.5V6.5C10 6.22386 9.77614 6 9.5 6H4.5Z" fill="currentColor"/>
         </svg>
       </button>
       <button class="titlebar-btn titlebar-btn-close" id="btn-close" title="Close" aria-label="Close">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-          <path d="M3 3L9 9M9 3L3 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <!-- codicon_ chrome close.svg -->
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M2.58859 2.71569L2.64645 2.64645C2.82001 2.47288 3.08944 2.4536 3.28431 2.58859L3.35355 2.64645L8 7.293L12.6464 2.64645C12.8417 2.45118 13.1583 2.45118 13.3536 2.64645C13.5488 2.84171 13.5488 3.15829 13.3536 3.35355L8.707 8L13.3536 12.6464C13.5271 12.82 13.5464 13.0894 13.4114 13.2843L13.3536 13.3536C13.18 13.5271 12.9106 13.5464 12.7157 13.4114L12.6464 13.3536L8 8.707L3.35355 13.3536C3.15829 13.5488 2.84171 13.5488 2.64645 13.3536C2.45118 13.1583 2.45118 12.8417 2.64645 12.6464L7.293 8L2.64645 3.35355C2.47288 3.17999 2.4536 2.91056 2.58859 2.71569Z" fill="currentColor"/>
         </svg>
       </button>
     </div>
@@ -85,31 +92,45 @@
 
   <div class="app-shell">
     <nav class="activity-bar" aria-label="Primary sidebar">
+      <!-- Explorer: seti_ folder.svg -->
       <button class="activity-item active" data-panel="explorer" title="Explorer" aria-label="Explorer">
-        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M14.5 3H7.71l-.85-.85L6.51 2h-5a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5z"/></svg>
+        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M14.4 3.45601C14.752 3.45601 15.0453 3.57868 15.28 3.82401C15.5146 4.05868 15.6213 4.35201 15.6 4.70401V14.4H0.303955V1.60001H6.79996C7.15196 1.60001 7.44529 1.72268 7.67996 1.96801C7.92529 2.20268 8.04796 2.49601 8.04796 2.84801V3.45601H14.4Z" fill="currentColor"/>
+        </svg>
       </button>
+      <!-- Search: seti_ search.svg -->
       <button class="activity-item" data-panel="search" title="Search" aria-label="Search">
-        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg>
+        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M3.00806 7.29603V6.89603C3.00806 6.6187 3.05606 6.35203 3.15206 6.09603C3.30139 5.54136 3.55739 5.04003 3.92006 4.59203C4.29339 4.13336 4.73606 3.7707 5.24806 3.50403C5.77072 3.23736 6.32006 3.08803 6.89606 3.05603H7.40806C7.68539 3.05603 7.95206 3.10403 8.20806 3.20003C8.75206 3.34936 9.24272 3.60536 9.68006 3.96803C10.1281 4.32003 10.4854 4.75203 10.7521 5.26403C11.0187 5.76536 11.1681 6.30936 11.2001 6.89603C11.2001 7.33336 11.1841 7.65336 11.1521 7.85603C11.0454 8.36803 10.8801 8.83203 10.6561 9.24803L10.6401 9.28003C10.6294 9.2907 10.6187 9.29603 10.6081 9.29603L10.6241 9.31203C10.6454 9.31203 10.6561 9.3227 10.6561 9.34403L13.0561 11.744V11.904C13.0561 11.9147 13.0454 11.9414 13.0241 11.984C13.0027 12.016 12.9921 12.0374 12.9921 12.048C12.9281 12.1867 12.8641 12.288 12.8001 12.352L12.4001 12.752L12.3041 12.816C12.1761 12.912 12.0587 12.976 11.9521 13.008H11.8561C11.8241 13.008 11.7707 12.9707 11.6961 12.896L9.39206 10.608H9.34406C8.61872 11.088 7.78672 11.3014 6.84806 11.248C6.64539 11.248 6.41072 11.216 6.14406 11.152C5.56806 11.0027 5.04539 10.7414 4.57606 10.368C4.10672 9.98403 3.74406 9.52536 3.48806 8.99203C3.23206 8.4587 3.00806 7.8507 3.00806 7.36003C3.00806 7.34936 3.00806 7.32803 3.00806 7.29603ZM4.35206 7.15203C4.35206 7.6427 4.46939 8.10136 4.70406 8.52803C4.94939 8.94403 5.28006 9.28003 5.69606 9.53603C6.12272 9.78136 6.58672 9.90403 7.08806 9.90403C7.58939 9.90403 8.04806 9.78136 8.46406 9.53603C8.89072 9.2907 9.22672 8.96003 9.47206 8.54403C9.72806 8.11736 9.85606 7.6587 9.85606 7.16803C9.85606 6.6667 9.73339 6.20803 9.48806 5.79203C9.24272 5.36536 8.90672 5.02936 8.48006 4.78403C8.06406 4.52803 7.60539 4.40003 7.10406 4.40003C6.60272 4.40003 6.13872 4.5227 5.71206 4.76803C5.29606 5.01336 4.96539 5.34403 4.72006 5.76003C4.47472 6.17603 4.35206 6.64003 4.35206 7.15203Z" fill="currentColor"/>
+        </svg>
       </button>
-      <!-- FIXED: git-branch icon (GitHub Primer git-branch-16) -->
+      <!-- Source Control: codicon_git.svg -->
       <button class="activity-item" data-panel="git" title="Source Control" aria-label="Source Control">
-        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true">
-          <path fill="currentColor" d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V9.5A2.5 2.5 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25zm-5 8.25a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zm9.25-.75a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5zM3.75 2.5a.75.75 0 1 0 0 1.5.75.75 0 0 0 0-1.5z"/>
+        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" aria-hidden="true">
+          <path d="M258.5 58C338.857 58 404 123.143 404 203.5C404 283.857 338.857 349 258.5 349C178.143 349 113 283.857 113 203.5C113 123.143 178.143 58 258.5 58ZM258.5 107C205.205 107 162 150.205 162 203.5C162 256.795 205.205 300 258.5 300C311.795 300 355 256.795 355 203.5C355 150.205 311.795 107 258.5 107Z" fill="currentColor"/>
+          <path d="M268.5 733C348.857 733 414 798.143 414 878.5C414 958.857 348.857 1024 268.5 1024C188.143 1024 123 958.857 123 878.5C123 798.143 188.143 733 268.5 733ZM268.5 782C215.205 782 172 825.205 172 878.5C172 931.795 215.205 975 268.5 975C321.795 975 365 931.795 365 878.5C365 825.205 321.795 782 268.5 782Z" fill="currentColor"/>
+          <path d="M719 232C783.617 232 836 284.383 836 349C836 413.617 783.617 466 719 466C654.383 466 602 413.617 602 349C602 284.383 654.383 232 719 232ZM718.5 277C679.012 277 647 309.012 647 348.5C647 387.988 679.012 420 718.5 420C757.988 420 790 387.988 790 348.5C790 309.012 757.988 277 718.5 277Z" fill="currentColor"/>
+          <line x1="258" y1="318" x2="258" y2="758" stroke="currentColor" stroke-width="50"/>
+          <path d="M259 677.5C353 509 711.5 660.5 711.5 446" stroke="currentColor" stroke-width="50"/>
         </svg>
       </button>
+      <!-- Chat AI: kept, with cleaner modern path -->
       <button class="activity-item" data-panel="chat" title="Chat AI" aria-label="Chat AI">
-        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M2 2.75A1.75 1.75 0 0 1 3.75 1h8.5A1.75 1.75 0 0 1 14 2.75v6.5A1.75 1.75 0 0 1 12.25 11H7.9l-3.2 2.6a.5.5 0 0 1-.82-.39V11H3.75A1.75 1.75 0 0 1 2 9.25v-6.5z"/></svg>
-      </button>
-      <button class="activity-item" id="activity-bar-agent" title="AI IDE Agent" aria-label="AI IDE Agent">
-        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 1.5a.75.75 0 0 1 .75.75V3h.75a2.5 2.5 0 0 1 2.5 2.5V8a2.5 2.5 0 0 1-2.5 2.5H6.5A2.5 2.5 0 0 1 4 8V5.5A2.5 2.5 0 0 1 6.5 3h.75v-.75A.75.75 0 0 1 8 1.5ZM5.5 6a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm5 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2ZM6 11.5h4a2.5 2.5 0 0 1-4 0ZM2.75 5a.75.75 0 0 1 .75.75V8A4.75 4.75 0 0 0 8.25 12.75h1.5A4.75 4.75 0 0 0 14.5 8V5.75a.75.75 0 0 1 1.5 0V8A6.25 6.25 0 0 1 9.75 14.25h-1.5A6.25 6.25 0 0 1 2 8V5.75A.75.75 0 0 1 2.75 5Z"/></svg>
-      </button>
-      <button class="activity-item" data-panel="debug" title="Run and Debug" aria-label="Run and Debug">
         <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true">
-          <path fill="currentColor" d="M6 1.5l.75 1.5H9.25L10 1.5h1l-.5 2H13a1 1 0 0 1 1 1v1a3 3 0 0 1-2.25 2.9V10a4 4 0 0 1-3.75 3.995V15h-1v-1.005A4 4 0 0 1 3.25 10V8.4A3 3 0 0 1 1 5.5v-1a1 1 0 0 1 1-1h2.5L4 1.5h2zm1 3.5a3 3 0 0 0-2.99 2.8L4 8v2a3 3 0 0 0 2.824 2.995L7 13h2a3 3 0 0 0 2.995-2.824L12 10V8l-.01-.2A3 3 0 0 0 9 5H7zM2.5 5.5a2 2 0 0 0 1.415 1.9A4.007 4.007 0 0 1 7 5H3a.5.5 0 0 1-.5-.5V5h.001L2.5 5.5zm11 0v-.001L13.5 5H9a4.007 4.007 0 0 1 3.085 2.4A2 2 0 0 0 13.5 5.5z"/>
+          <path fill="currentColor" d="M2 2.75A1.75 1.75 0 0 1 3.75 1h8.5A1.75 1.75 0 0 1 14 2.75v6.5A1.75 1.75 0 0 1 12.25 11H7.9l-3.2 2.6a.5.5 0 0 1-.82-.39V11H3.75A1.75 1.75 0 0 1 2 9.25v-6.5z"/>
         </svg>
       </button>
+      <!-- Debug: codicon_ bug.svg -->
+      <button class="activity-item" data-panel="debug" title="Run and Debug" aria-label="Run and Debug">
+        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M14.5 8H13V6C13 5.63 12.898 5.283 12.722 4.985L13.853 3.854C14.048 3.659 14.048 3.342 13.853 3.147C13.658 2.952 13.341 2.952 13.146 3.147L12.015 4.278C11.717 4.102 11.37 4 11 4C11 2.346 9.654 1 8 1C6.346 1 5 2.346 5 4C4.63 4 4.283 4.102 3.985 4.278L2.854 3.147C2.659 2.952 2.342 2.952 2.147 3.147C1.952 3.342 1.952 3.659 2.147 3.854L3.278 4.985C3.102 5.283 3 5.63 3 6V8H1.5C1.224 8 1 8.224 1 8.5C1 8.776 1.224 9 1.5 9H3C3 10.199 3.424 11.3 4.13 12.163L2.396 13.897C2.201 14.092 2.201 14.409 2.396 14.604C2.494 14.702 2.622 14.75 2.75 14.75C2.878 14.75 3.006 14.701 3.104 14.604L4.838 12.87C5.7 13.576 6.802 14 8.001 14C9.2 14 10.301 13.576 11.164 12.87L12.898 14.604C12.996 14.702 13.124 14.75 13.252 14.75C13.38 14.75 13.508 14.701 13.606 14.604C13.801 14.409 13.801 14.092 13.606 13.897L11.872 12.163C12.578 11.301 13.002 10.199 13.002 9H14.502C14.778 9 15.002 8.776 15.002 8.5C15.002 8.224 14.778 8 14.502 8H14.5ZM8 2C9.103 2 10 2.897 10 4H6C6 2.897 6.897 2 8 2ZM12 9C12 11.206 10.206 13 8 13C5.794 13 4 11.206 4 9V6C4 5.449 4.448 5 5 5H11C11.552 5 12 5.449 12 6V9Z" fill="currentColor"/>
+        </svg>
+      </button>
+      <!-- Settings: codicon_ gear.svg -->
       <button class="activity-item" data-panel="settings" title="Settings" aria-label="Settings">
-        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M7.429 1.525a6.593 6.593 0 0 1 1.142 0c.036.003.108.036.137.146l.289 1.105c.147.56.55.967.997 1.189.174.086.341.183.501.29.435.283.956.37 1.424.144l1.01-.483a.145.145 0 0 1 .187.04c.196.273.373.562.528.862a6.57 6.57 0 0 1 .44 1.011.144.144 0 0 1-.083.167l-.966.4c-.456.188-.724.62-.72 1.067.002.176 0 .352-.005.527-.013.449.258.878.72 1.063l.966.396a.144.144 0 0 1 .082.168 6.53 6.53 0 0 1-.97 1.869.145.145 0 0 1-.187.04l-1.01-.482c-.468-.226-.989-.14-1.424.143a5.08 5.08 0 0 1-.502.29c-.446.222-.85.629-.997 1.188l-.289 1.106c-.029.11-.1.143-.137.146a6.63 6.63 0 0 1-1.142 0c-.036-.003-.108-.036-.137-.146l-.289-1.106c-.147-.56-.55-.966-.997-1.188a5.085 5.085 0 0 1-.501-.29c-.435-.283-.956-.37-1.424-.144l-1.01.483a.145.145 0 0 1-.187-.04 6.53 6.53 0 0 1-.97-1.868.144.144 0 0 1 .083-.168l.966-.396c.462-.185.733-.614.72-1.063a6.16 6.16 0 0 1-.005-.527c.004-.447-.264-.879-.72-1.067l-.966-.4a.144.144 0 0 1-.082-.167 6.57 6.57 0 0 1 .968-1.873.145.145 0 0 1 .187-.04l1.01.483c.468.226.989.14 1.424-.144.16-.107.327-.204.5-.29.447-.222.85-.629.998-1.189l.289-1.105c.029-.11.1-.143.137-.146zM8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg>
+        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M7.99997 6C6.89497 6 5.99997 6.895 5.99997 8C5.99997 9.105 6.89497 10 7.99997 10C9.10497 10 9.99997 9.105 9.99997 8C9.99997 6.895 9.10497 6 7.99997 6ZM7.99997 9C7.44797 9 6.99997 8.552 6.99997 8C6.99997 7.448 7.44797 7 7.99997 7C8.55197 7 8.99997 7.448 8.99997 8C8.99997 8.552 8.55197 9 7.99997 9ZM14.565 9.715L13.279 8.628C13.245 8.599 13.213 8.567 13.184 8.533C12.888 8.186 12.931 7.667 13.279 7.372L14.565 6.285C14.693 6.177 14.742 6.003 14.691 5.844C14.386 4.903 13.882 4.04 13.219 3.308C13.139 3.22 13.027 3.172 12.912 3.172C12.865 3.172 12.818 3.18 12.773 3.196L11.186 3.761C11.144 3.776 11.1 3.788 11.056 3.796C11.006 3.805 10.956 3.81 10.907 3.81C10.515 3.81 10.167 3.532 10.094 3.134L9.79097 1.482C9.76097 1.318 9.63397 1.188 9.46997 1.153C8.98997 1.051 8.49897 1 8.00097 1C7.50297 1 7.01097 1.052 6.53097 1.153C6.36697 1.188 6.23997 1.318 6.20997 1.482L5.90797 3.134C5.89997 3.178 5.88797 3.221 5.87297 3.263C5.75197 3.6 5.43397 3.81 5.09397 3.81C5.00197 3.81 4.90797 3.794 4.81597 3.762L3.22897 3.197C3.18397 3.181 3.13597 3.173 3.08997 3.173C2.97497 3.173 2.86297 3.221 2.78297 3.309C2.11897 4.041 1.61597 4.904 1.30997 5.845C1.25797 6.004 1.30797 6.178 1.43597 6.286L2.72197 7.373C2.75597 7.402 2.78797 7.434 2.81697 7.468C3.11297 7.815 3.06997 8.334 2.72197 8.629L1.43597 9.716C1.30797 9.824 1.25897 9.998 1.30997 10.157C1.61497 11.098 2.11897 11.961 2.78297 12.693C2.86297 12.781 2.97497 12.829 3.08997 12.829C3.13697 12.829 3.18397 12.821 3.22897 12.805L4.81597 12.24C4.85797 12.225 4.90197 12.213 4.94597 12.205C4.99597 12.196 5.04597 12.192 5.09497 12.192C5.48697 12.192 5.83497 12.47 5.90797 12.868L6.20997 14.52C6.23997 14.684 6.36697 14.814 6.53097 14.849C7.01097 14.951 7.50297 15.002 8.00097 15.002C8.49897 15.002 8.99097 14.95 9.46997 14.849C9.63397 14.814 9.76097 14.684 9.79097 14.52L10.094 12.868C10.102 12.824 10.114 12.781 10.129 12.739C10.25 12.402 10.568 12.192 10.908 12.192C11 12.192 11.094 12.208 11.186 12.24L12.772 12.805C12.818 12.821 12.865 12.829 12.911 12.829C13.026 12.829 13.138 12.781 13.218 12.693C13.882 11.961 14.385 11.098 14.69 10.157C14.742 9.998 14.692 9.824 14.564 9.716L14.565 9.715ZM12.728 11.726L11.521 11.296C11.323 11.226 11.117 11.19 10.908 11.19C10.139 11.19 9.44697 11.676 9.18797 12.399C9.15397 12.492 9.12897 12.588 9.11097 12.686L8.88097 13.937C8.59097 13.979 8.29597 14 8.00097 14C7.70597 14 7.41097 13.979 7.11997 13.936L6.89097 12.685C6.73197 11.818 5.97697 11.189 5.09497 11.189C4.98697 11.189 4.87697 11.199 4.76597 11.219C4.66897 11.237 4.57397 11.262 4.47997 11.295L3.27297 11.725C2.90497 11.264 2.61097 10.759 2.39397 10.214L3.36797 9.391C3.74097 9.076 3.96797 8.634 4.00797 8.148C4.04797 7.662 3.89497 7.19 3.57797 6.818C3.51397 6.743 3.44297 6.672 3.36797 6.608L2.39397 5.785C2.61097 5.24 2.90497 4.734 3.27297 4.274L4.47997 4.704C4.67797 4.774 4.88397 4.81 5.09397 4.81C5.86297 4.81 6.55497 4.324 6.81397 3.601C6.84797 3.507 6.87297 3.411 6.89097 3.314L7.11997 2.063C7.41097 2.021 7.70597 1.999 8.00097 1.999C8.29597 1.999 8.59097 2.02 8.88097 2.062L9.10997 3.313C9.26897 4.18 10.024 4.809 10.906 4.809C11.014 4.809 11.124 4.799 11.234 4.779C11.331 4.761 11.427 4.736 11.521 4.703L12.728 4.273C13.096 4.733 13.39 5.239 13.607 5.784L12.634 6.607C12.261 6.922 12.033 7.364 11.994 7.85C11.954 8.336 12.107 8.809 12.424 9.18C12.489 9.256 12.559 9.326 12.635 9.39L13.609 10.213C13.392 10.758 13.098 11.264 12.73 11.724L12.728 11.726Z" fill="currentColor"/>
+        </svg>
       </button>
     </nav>
 
@@ -170,20 +191,40 @@
           <div id="monaco-host-secondary" class="monaco-pane monaco-pane-secondary hidden"></div>
         </div>
       </div>
+      <div id="terminal-resizer" class="terminal-resizer hidden" aria-hidden="true"></div>
       <div id="terminal-panel" class="terminal-panel hidden">
         <div class="panel-header panel-header-terminal">
           <div class="terminal-view-tabs" role="tablist" aria-label="Panel views">
             <button type="button" class="terminal-view-tab" id="tab-problems" data-terminal-view="problems" aria-selected="false" tabindex="-1">PROBLEMS</button>
             <button type="button" class="terminal-view-tab" data-terminal-view="output" aria-selected="false" tabindex="-1">OUTPUT</button>
-            <span id="terminal-tab-label" class="terminal-view-tab active" data-terminal-view="terminal" role="tab" aria-selected="true">TERMINAL</span>
+            <button type="button" id="terminal-tab-label" class="terminal-view-tab active" data-terminal-view="terminal" role="tab" aria-selected="true">TERMINAL</button>
             <button type="button" class="terminal-view-tab" data-terminal-view="debug" aria-selected="false" tabindex="-1">DEBUG CONSOLE</button>
           </div>
+          <div id="terminal-instance-tabs-wrapper" class="terminal-instance-tabs-wrapper">
+            <div id="terminal-instance-tabs" class="terminal-instance-tabs"></div>
+          </div>
           <div class="panel-header-actions">
-            <button type="button" class="icon-btn icon-btn-labeled" id="btn-terminal-paste" title="Paste (Ctrl+V)">Paste</button>
-            <button type="button" class="icon-btn icon-btn-labeled" id="btn-terminal-copy" title="Copy selection">Copy</button>
-            <button type="button" class="icon-btn icon-btn-labeled" id="btn-terminal-clear" title="Clear terminal">Clear</button>
-            <button class="icon-btn" id="btn-new-terminal" title="New Terminal">+</button>
-            <button class="icon-btn" id="btn-toggle-terminal" title="Close panel">×</button>
+            <div class="terminal-new-group">
+              <button class="icon-btn" id="btn-new-terminal" title="New Terminal (Default Shell)">
+                <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M8 2a.75.75 0 01.75.75v4.5h4.5a.75.75 0 010 1.5h-4.5v4.5a.75.75 0 01-1.5 0v-4.5h-4.5a.75.75 0 010-1.5h4.5v-4.5A.75.75 0 018 2z"/></svg>
+              </button>
+              <button class="icon-btn icon-btn-dropdown" id="btn-terminal-shell-menu" title="Select Default Shell">
+                <svg viewBox="0 0 16 16" width="10" height="10"><path fill="currentColor" d="M4.427 6.427l3.396 3.396a.25.25 0 00.354 0l3.396-3.396A.25.25 0 0011.396 6H4.604a.25.25 0 00-.177.427z"/></svg>
+              </button>
+              <div id="terminal-shell-dropdown" class="terminal-shell-dropdown hidden"></div>
+            </div>
+            <button class="icon-btn" id="btn-terminal-clear" title="Clear Terminal (Ctrl+L)">
+              <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+            </button>
+            <button class="icon-btn" id="btn-terminal-kill" title="Kill Terminal Session">
+              <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M11 1.75V3h2.25a.75.75 0 010 1.5H2.75a.75.75 0 010-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75zM6.5 1.5h3a.25.25 0 00-.25-.25h-2.5a.25.25 0 00-.25.25zm5.75 4h-8.5l.628 8.796A1.75 1.75 0 006.12 16h3.76a1.75 1.75 0 001.742-1.704l.628-8.796z"/></svg>
+            </button>
+            <button class="icon-btn" id="btn-terminal-maximize" title="Toggle Maximize Panel">
+              <svg id="icon-terminal-max" viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M2.5 2.5h4v1.5h-2.5v2.5h-1.5v-4zm7 0h4v4h-1.5v-2.5h-2.5v-1.5zm-7 7h1.5v2.5h2.5v1.5h-4v-4zm11 0v4h-4v-1.5h2.5v-2.5h1.5z"/></svg>
+            </button>
+            <button class="icon-btn" id="btn-toggle-terminal" title="Close Panel">
+              <svg viewBox="0 0 16 16" width="14" height="14"><path fill="currentColor" d="M3.72 3.72a.75.75 0 011.06 0L8 6.94l3.22-3.22a.75.75 0 111.06 1.06L9.06 8l3.22 3.22a.75.75 0 11-1.06 1.06L8 9.06l-3.22 3.22a.75.75 0 01-1.06-1.06L6.94 8 3.72 4.78a.75.75 0 010-1.06z"/></svg>
+            </button>
           </div>
         </div>
         <div id="problems-container" class="terminal-view-content hidden"></div>
@@ -195,11 +236,6 @@
             <button type="button" class="debug-eval-btn" id="btn-debug-eval">Eval</button>
           </div>
         </div>
-        <div class="terminal-command-row">
-          <span class="terminal-prompt-label" id="terminal-prompt-label">$&gt;</span>
-          <input type="text" id="terminal-command-input" class="terminal-command-input" placeholder="Command or path — Tab complete, ↑↓ history" spellcheck="false" autocomplete="off" />
-          <button type="button" class="action-btn action-btn-sm" id="btn-terminal-run-cmd">Run</button>
-        </div>
         <div id="terminal-placeholder" class="terminal-placeholder hidden" role="region" aria-live="polite"></div>
         <div id="terminal-container" class="terminal-view-content terminal-container"></div>
       </div>
@@ -208,6 +244,7 @@
 
   <footer id="statusbar" class="statusbar">
     <button type="button" id="status-terminal" class="statusbar-btn" title="Toggle terminal">Terminal</button>
+    <button type="button" id="status-trust" class="statusbar-btn" title="Manage Workspace Trust" style="display:none;"></button>
     <span id="status-branch">● NexCode</span>
     <span id="status-cwd" class="status-cwd" title="Terminal directory"></span>
     <span id="status-file"></span>

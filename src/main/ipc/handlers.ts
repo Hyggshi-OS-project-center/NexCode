@@ -18,7 +18,20 @@ import {
   isBinaryBuffer,
   isKnownBinaryExtension,
 } from '../utils/fileKind';
-import { getGitStatus, gitExec } from '../git/gitService';
+import {
+  getGitStatus,
+  gitExec,
+  gitStage,
+  gitUnstage,
+  gitDiscard,
+  gitCommit,
+  gitLog,
+  gitDiff,
+  gitFileAtHead,
+  gitPull,
+  gitPush,
+  gitFetch,
+} from '../git/gitService';
 import { searchMarketplaceExtensions } from '../extensions/marketplaceService';
 import { clearRecentFiles, getRecentFiles, pushRecentFile, removeRecentFile } from '../recentFiles';
 import { closeAboutWindow, showAboutWindow } from '../about/aboutWindow';
@@ -34,7 +47,7 @@ import { setupHoscIpcHandlers } from './hoscHandler';
 
 const terminals = new TerminalManager();
 let currentWorkspacePath: string | null = null;
-const RELEASE_NOTES_URL = 'https://api.github.com/repos/Hyggshi-OS-project-center/NexCode/releases/latest';
+const RELEASE_NOTES_URL = 'https://api.github.com/repos/Hyggshi-OS-project-center/NexCode/releases';
 const GITHUB_USER_AGENT = 'NexCode-IDE';
 
 export function shutdownTerminals(): void {
@@ -302,24 +315,69 @@ export function registerIpcHandlers(
     await shell.openPath(filePath);
   });
   ipcMain.handle('releaseNotes:getLatest', async (): Promise<ReleaseNotesInfo> => {
+    const currentVersion = app.getVersion();
+    const isInsider = currentVersion.toLowerCase().includes('insider');
+    const isDev = !app.isPackaged || currentVersion.toLowerCase().includes('dev');
+
     try {
-      const release = await fetchJson<GitHubRelease>(RELEASE_NOTES_URL);
-      return {
-        version: release.tag_name.trim().replace(/^v/i, ''),
-        title: release.name || release.tag_name,
-        body: release.body?.trim() || 'No release notes were published for this version.',
-        url: release.html_url ?? null,
-      };
+      const releases = await fetchJson<GitHubRelease[]>(RELEASE_NOTES_URL);
+      if (Array.isArray(releases) && releases.length > 0) {
+        const cleanCurrent = currentVersion.trim().replace(/^v/i, '').toLowerCase();
+
+        // 1. Try matching the exact version
+        let release = releases.find((r) => r.tag_name?.trim().replace(/^v/i, '').toLowerCase() === cleanCurrent);
+
+        // 2. If no exact match and running Insider/Dev, find the latest release (including pre-releases)
+        if (!release && (isInsider || isDev)) {
+          release = releases.find((r) => !r.draft);
+        }
+
+        // 3. Fallback to latest non-draft release
+        if (!release) {
+          release = releases.find((r) => !r.draft && !r.prerelease) ?? releases[0];
+        }
+
+        if (release) {
+          const isPrerelease = Boolean(release.prerelease || isInsider || isDev);
+          const channelTag = isDev ? 'Dev Channel' : isInsider ? 'Insider Channel' : 'Pre-release';
+          const badgePrefix = isPrerelease ? `> [!NOTE]\n> **${channelTag} — Pre-release Build (v${release.tag_name.replace(/^v/i, '')})**\n\n` : '';
+
+          return {
+            version: release.tag_name.trim().replace(/^v/i, ''),
+            title: release.name || `NexCode IDE ${release.tag_name}`,
+            body: `${badgePrefix}${release.body?.trim() || 'No release notes were published for this version.'}`,
+            url: release.html_url ?? null,
+          };
+        }
+      }
+      throw new Error('No valid release found from GitHub API.');
     } catch (error) {
-      // Gracefully handle GitHub API errors (rate limiting, network issues, etc.)
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.warn('Failed to fetch release notes:', errorMessage);
-      
-      // Return fallback release notes instead of crashing
+      console.warn('Failed to fetch release notes from GitHub:', errorMessage);
+
+      // Return rich local release notes for Insider/Dev/Current build
+      const channelLabel = isDev ? 'Dev Channel' : isInsider ? 'Insider' : 'Release';
       return {
-        version: app.getVersion(),
-        title: 'NexCode IDE',
-        body: 'Release notes are currently unavailable. Please check the GitHub repository for the latest updates.',
+        version: currentVersion,
+        title: `NexCode IDE v${currentVersion} (${channelLabel})`,
+        body: [
+          `# NexCode IDE v${currentVersion}`,
+          '',
+          `> [!NOTE]`,
+          `> **${channelLabel} Build** — Pre-release build for testing and evaluation.`,
+          '',
+          '## 🛡️ Highlights & Key Improvements',
+          '',
+          '- **🛡️ Workspace Trust**: Added standard security prompt when opening project folders (VS Code Standard).',
+          '- **🌿 Source Control (Git Panel)**: Rebuilt complete Git Panel with Staged/Unstaged changes, inline diff review, AI commit message generator, and visual commit graph.',
+          '- **🎨 Official System Icons**: Standardized Activity Bar, Window controls, and Explorer toolbar with authentic Codicon and Seti SVG icons.',
+          '- **💻 Modern Terminal**: Draggable resizer, multi-session tabs, default shell selector dropdown (Bash / CMD / PowerShell).',
+          '- **⚡ Performance & Fixes**: Optimized bundle size, improved text input reliability, and refined dark UI theme.',
+          '',
+          '## 🔗 Full Changelog',
+          '',
+          '[View GitHub Releases & Changelog](https://github.com/Hyggshi-OS-project-center/NexCode/releases)',
+        ].join('\n'),
         url: 'https://github.com/Hyggshi-OS-project-center/NexCode/releases',
       };
     }
@@ -420,19 +478,36 @@ export function registerIpcHandlers(
     return true;
   });
 
-  ipcMain.handle('terminal:create', async (_e, cwd?: string) => {
+  ipcMain.handle('terminal:create', async (_e, options?: import('../../shared/types').TerminalCreateOptions | string) => {
     const win = getWindow();
     if (!win) return -1;
-    return terminals.create(win, cwd);
+    return terminals.create(win, options);
   });
   ipcMain.on('terminal:write', (_e, id: number, data: string) => terminals.write(id, data));
   ipcMain.on('terminal:resize', (_e, id: number, cols: number, rows: number) => {
     terminals.resize(id, cols, rows);
   });
   ipcMain.on('terminal:kill', (_e, id: number) => terminals.kill(id));
+  ipcMain.handle('terminal:listShells', async () => terminals.listAvailableShells());
 
   ipcMain.handle('git:status', async (_e, cwd: string) => getGitStatus(cwd));
   ipcMain.handle('git:exec', async (_e, cwd: string, args: string[]) => gitExec(cwd, args));
+  ipcMain.handle('git:stage', async (_e, cwd: string, filePaths?: string[]) => gitStage(cwd, filePaths));
+  ipcMain.handle('git:unstage', async (_e, cwd: string, filePaths?: string[]) => gitUnstage(cwd, filePaths));
+  ipcMain.handle('git:discard', async (_e, cwd: string, filePaths: string[]) => gitDiscard(cwd, filePaths));
+  ipcMain.handle(
+    'git:commit',
+    async (_e, cwd: string, message: string, options?: { amend?: boolean; stageAll?: boolean }) =>
+      gitCommit(cwd, message, options),
+  );
+  ipcMain.handle('git:log', async (_e, cwd: string, maxCount?: number) => gitLog(cwd, maxCount));
+  ipcMain.handle('git:diff', async (_e, cwd: string, filePath?: string, staged?: boolean) =>
+    gitDiff(cwd, filePath, staged),
+  );
+  ipcMain.handle('git:fileAtHead', async (_e, cwd: string, filePath: string) => gitFileAtHead(cwd, filePath));
+  ipcMain.handle('git:pull', async (_e, cwd: string) => gitPull(cwd));
+  ipcMain.handle('git:push', async (_e, cwd: string) => gitPush(cwd));
+  ipcMain.handle('git:fetch', async (_e, cwd: string) => gitFetch(cwd));
 
   ipcMain.handle('path:home', () => os.homedir());
   ipcMain.handle('extensions:search', async (_e, query: string, limit?: number) =>
@@ -530,42 +605,22 @@ ipcMain.handle(
   setupHoscIpcHandlers();
 }
 
-function fetchJson<T>(url: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const options = {
+async function fetchJson<T>(url: string): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch(url, {
       headers: {
         'User-Agent': GITHUB_USER_AGENT,
         'Accept': 'application/vnd.github+json',
-        'Accept-Encoding': 'gzip, deflate',
       },
-      timeout: 10000, // 10 second timeout
-    };
-
-    const request = https.get(url, options, (response) => {
-      if (response.statusCode !== 200) {
-        response.resume();
-        reject(new Error(`GitHub release notes request failed with HTTP ${response.statusCode ?? 'unknown'}.`));
-        return;
-      }
-
-      let body = '';
-      response.setEncoding('utf8');
-      response.on('data', (chunk) => {
-        body += chunk;
-      });
-      response.on('end', () => {
-        try {
-          resolve(JSON.parse(body) as T);
-        } catch (error) {
-          reject(error);
-        }
-      });
+      signal: controller.signal,
     });
-
-    request.on('error', reject);
-    request.on('timeout', () => {
-      request.destroy();
-      reject(new Error('GitHub release notes request timed out.'));
-    });
-  });
+    if (!response.ok) {
+      throw new Error(`GitHub request failed with HTTP ${response.status}: ${response.statusText}`);
+    }
+    return (await response.json()) as T;
+  } finally {
+    clearTimeout(timer);
+  }
 }

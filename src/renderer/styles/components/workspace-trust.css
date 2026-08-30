@@ -1,0 +1,158 @@
+/* ─── Workspace Trust Modal (VS Code Standard) ─────────────────────────── */
+
+.workspace-trust-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: trustFadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes trustFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.workspace-trust-dialog {
+  width: 520px;
+  max-width: 90vw;
+  background: var(--bg-modal, #252526);
+  border: 1px solid var(--border, #3c3c3c);
+  border-radius: var(--radius-lg, 8px);
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--text-primary, #cccccc);
+}
+
+.workspace-trust-header {
+  padding: 24px 24px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+}
+
+.workspace-trust-shield-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(226, 192, 141, 0.12);
+  border: 1px solid rgba(226, 192, 141, 0.25);
+  color: #e2c08d;
+}
+
+.workspace-trust-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary, #ffffff);
+  margin: 0;
+  line-height: 1.35;
+}
+
+.workspace-trust-body {
+  padding: 0 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.workspace-trust-folder-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: var(--radius-sm, 4px);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary, #ffffff);
+  overflow: hidden;
+}
+
+.workspace-trust-folder-path {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted, #888888);
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-trust-text {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary, #cccccc);
+  margin: 0;
+}
+
+.workspace-trust-subtext {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted, #999999);
+  margin: 0;
+}
+
+.workspace-trust-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-secondary, #b5b5b5);
+  cursor: pointer;
+}
+
+.workspace-trust-checkbox-row input {
+  cursor: pointer;
+}
+
+.workspace-trust-checkbox-row code {
+  font-family: Consolas, monospace;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.workspace-trust-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  background: var(--bg-toolbar, rgba(0, 0, 0, 0.15));
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+}
+
+/* Statusbar Trust Pill */
+.statusbar-btn.statusbar-trust-trusted {
+  color: #7ee787;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.statusbar-btn.statusbar-trust-untrusted {
+  color: #e3b341;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}

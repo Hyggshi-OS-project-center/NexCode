@@ -48,6 +48,7 @@ import { DiffEditor } from './modules/editor/DiffEditor';
 import type { DiffEditorPendingWrite } from './modules/editor/DiffEditor';
 import { BrowserView } from './modules/editor/BrowserView';
 import { SplashScreen } from './modules/ui/SplashScreen';
+import { WorkspaceTrustManager } from './modules/trust/WorkspaceTrustManager';
 import { NexCodeMoments } from './modules/ui/NexCodeMoments';
 import { UpdateController } from './modules/update/UpdateController';
 import { Debugger as NexDebugger } from './modules/debug/Debugger';
@@ -60,6 +61,8 @@ import splashImageRandom1Url from '@icons/loading/my-splash-Random1.png?url';
 import splashImageRandom2Url from '@icons/loading/my-splash-Random2.png?url';
 import splashImageRandom3Url from '@icons/loading/my-splash-Random3.png?url';
 import { captureDirectoryFiles, captureSingleFile, readDir as bReadDir, readFileContentAsync as bReadFile, exists as bExists, stat as bStat, writeFile as bWriteFile, mkdir as bMkdir, unlink as bUnlink, rename as bRename, reset as bReset, createFileBlobUrl as bCreateBlobUrl, BrowserFileEntry } from './browserFs';
+import { downloadSingleFile, downloadFolderAsZip, exportWorkspaceAsZip, importZipArchive } from './utils/webZipExport';
+import { SessionManager } from './modules/session/SessionManager';
 
 const splashImageUrls = [splashImageRandom1Url, splashImageRandom2Url, splashImageRandom3Url] as const;
 
@@ -80,6 +83,10 @@ const browserElectronAPI: ElectronAPI = (() => {
     {
       get(_target, prop: string) {
         switch (prop) {
+          case 'isDesktop':
+            return false;
+          case 'isWeb':
+            return true;
           case 'onOpenPaths':
           case 'onShortcut':
           case 'onTerminalData':
@@ -138,9 +145,16 @@ const browserElectronAPI: ElectronAPI = (() => {
               const input = document.createElement('input');
               input.type = 'file';
               return new Promise<string | null>((resolve) => {
-                input.onchange = () => {
+                input.onchange = async () => {
                   if (input.files && input.files.length > 0) {
                     const file = input.files[0];
+                    if (file.name.toLowerCase().endsWith('.zip')) {
+                      const root = file.name.replace(/\.zip$/i, '');
+                      await importZipArchive(file, root);
+                      resolve(root);
+                      input.remove();
+                      return;
+                    }
                     const path = captureSingleFile(file);
                     // Read file content immediately so it's available for readFile/readFileForEditor
                     const reader = new FileReader();
@@ -314,6 +328,8 @@ class NexusApp {
   private autoSaveSuspended = false;
   /** Original file content at last save — used to restore when user clicks "Don't Save" */
   private originalContent = new Map<string, string>();
+  private sessionManager = new SessionManager();
+  private hasCommandLineOpenPaths = false;
 
   private editor!: EditorManager;
   private binaryView!: BinaryFileView;
@@ -339,21 +355,25 @@ class NexusApp {
   private tabBrowser!: TabBrowser;
   private browserView!: BrowserView;
   private debuggerModule!: NexDebugger;
+  private trustManager!: WorkspaceTrustManager;
   /** Set while the diff editor is reviewing AI changes — suppresses file watcher reloads */
   private diffEditorActive = false;
   /** Trimmed terminal output sample for moment detection — capped to reduce memory */
   private terminalOutputSample = '';
   private settingsApplyQueue: Promise<void> = Promise.resolve();
 
+  private static readonly MAXIMIZE_SVG = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 4.5C2 3.11929 3.11929 2 4.5 2H11.5C12.8807 2 14 3.11929 14 4.5V11.5C14 12.8807 12.8807 14 11.5 14H4.5C3.11929 14 2 12.8807 2 11.5V4.5ZM4.5 3C3.67157 3 3 3.67157 3 4.5V11.5C3 12.3284 3.67157 13 4.5 13H11.5C12.3284 13 13 12.3284 13 11.5V4.5C13 3.67157 12.3284 3 11.5 3H4.5Z" fill="currentColor"/></svg>`;
+  private static readonly RESTORE_SVG = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M5.08496 4C5.29088 3.4174 5.8465 3 6.49961 3H9.99961C11.6565 3 12.9996 4.34315 12.9996 6V9.5C12.9996 10.1531 12.5822 10.7087 11.9996 10.9146V6C11.9996 4.89543 11.1042 4 9.99961 4H5.08496ZM4.5 5H9.5C10.3284 5 11 5.67157 11 6.5V11.5C11 12.3284 10.3284 13 9.5 13H4.5C3.67157 13 3 12.3284 3 11.5V6.5C3 5.67157 3.67157 5 4.5 5ZM4.5 6C4.22386 6 4 6.22386 4 6.5V11.5C4 11.7761 4.22386 12 4.5 12H9.5C9.77614 12 10 11.7761 10 11.5V6.5C10 6.22386 9.77614 6 9.5 6H4.5Z" fill="currentColor"/></svg>`;
+
   private async syncWindowControlState(): Promise<void> {
     const maximizeBtn = document.getElementById('btn-maximize');
     if (!maximizeBtn) return;
     try {
       const isMaximized = await window.electronAPI.isMaximized();
-      maximizeBtn.innerHTML = isMaximized ? '&#xE923;' : '&#xE922;';
+      maximizeBtn.innerHTML = isMaximized ? NexusApp.RESTORE_SVG : NexusApp.MAXIMIZE_SVG;
       maximizeBtn.setAttribute('title', isMaximized ? 'Restore' : 'Maximize');
     } catch {
-      maximizeBtn.innerHTML = '&#xE922;';
+      maximizeBtn.innerHTML = NexusApp.MAXIMIZE_SVG;
       maximizeBtn.setAttribute('title', 'Maximize');
     }
   }
@@ -454,6 +474,9 @@ class NexusApp {
     EditorManager.registerSnippets();
 
     this.statusBar = new StatusBar();
+    this.trustManager = new WorkspaceTrustManager('status-trust', (trusted) => {
+      console.log(`[WorkspaceTrust] Trust status changed: ${trusted}`);
+    });
     this.moments = new NexCodeMoments();
     this.updates = new UpdateController();
     this.statusBar.applySettings(this.settings);
@@ -563,10 +586,26 @@ class NexusApp {
       void this.applySettings(partial),
     );
 
-    this.gitPanel = new GitPanel('panel-git', (command) => {
-      void this.terminal.show();
-      void this.terminal.sendCommand(command, true);
-    });
+    this.gitPanel = new GitPanel(
+      'panel-git',
+      (command) => {
+        void this.terminal.show();
+        void this.terminal.sendCommand(command, true);
+      },
+      async (filePath) => {
+        try {
+          const content = await window.electronAPI.readFile(filePath);
+          await this.editor.openFile(filePath, content);
+        } catch { /* ignore */ }
+      },
+      async (filePath, _staged) => {
+        // Diff is rendered in the GitPanel's inline diff viewer; just open the file
+        try {
+          const content = await window.electronAPI.readFile(filePath);
+          await this.editor.openFile(filePath, content);
+        } catch { /* ignore */ }
+      },
+    );
 
     this.chatPanel = new ChatPanel(
       'panel-chat',
@@ -601,7 +640,10 @@ class NexusApp {
     // Initialize integrated debugger
     this.debuggerModule = new NexDebugger('panel-debug', this.editor, this.terminal);
 
-    this.tabs.on('select', (path) => { void this.switchToFile(path); });
+    this.tabs.on('select', (path) => {
+      void this.switchToFile(path);
+      this.syncSessionState();
+    });
     this.tabs.on('close', (path) => this.onTabClose(path));
 
     this.startFileChangeWatcher();
@@ -616,6 +658,17 @@ class NexusApp {
     this.updates.init();
     void this.showSidebarPanel('explorer');
     this.updateViewState();
+
+    // Hot Exit / Session Restore: Restore previous workspace, open tabs, and unsaved drafts
+    if (!this.hasCommandLineOpenPaths) {
+      await this.restoreSavedSession();
+    }
+
+    window.addEventListener('beforeunload', () => {
+      this.syncSessionState();
+      this.sessionManager.flush();
+    });
+
     splash.hide();
     void this.openReleaseNotesAfterUpdate();
   }
@@ -637,8 +690,6 @@ class NexusApp {
     document.getElementById('btn-run')?.addEventListener('click', () => void this.runActiveFile());
     document.getElementById('btn-terminal-quick')?.addEventListener('click', () => this.terminal.toggle());
     document.getElementById('status-terminal')?.addEventListener('click', () => this.terminal.toggle());
-    document.getElementById('btn-new-terminal')?.addEventListener('click', () => void this.terminal.createTerminal());
-    document.getElementById('btn-toggle-terminal')?.addEventListener('click', () => this.terminal.toggle());
     document.getElementById('btn-split-down')?.addEventListener('click', () => this.editor.splitDown());
     document.getElementById('status-branch')?.addEventListener('click', () => void this.showSidebarPanel('git'));
     document.getElementById('btn-md-preview')?.addEventListener('click', () => {
@@ -933,7 +984,7 @@ class NexusApp {
           },
           {
             label: 'About NexCode IDE',
-            action: () => window.electronAPI.showAboutWindow(),
+            action: () => void this.showAbout(),
           },
         ];
       default:
@@ -1196,14 +1247,16 @@ class NexusApp {
     });
 
     document.getElementById('terminal-panel')?.addEventListener('contextmenu', (e) => {
-      if (!(e.target as HTMLElement).closest('.terminal-container, .terminal-command-row, .xterm')) return;
+      if (!(e.target as HTMLElement).closest('.terminal-container, .xterm')) return;
       e.preventDefault();
       this.contextMenu.show(e.clientX, e.clientY, [
         { label: 'Paste', shortcut: 'Ctrl+V', action: () => void this.terminal.paste() },
         { label: 'Copy', shortcut: 'Ctrl+C', action: () => void this.terminal.copySelection() },
-        { label: 'Clear', action: () => this.terminal.clear() },
+        { label: 'Select All', shortcut: 'Ctrl+Shift+A', action: () => this.terminal.selectAll() },
+        { label: 'Clear', shortcut: 'Ctrl+L', action: () => this.terminal.clear() },
         { separator: true },
         { label: 'New Terminal', action: () => void this.terminal.createTerminal() },
+        { label: 'Kill Terminal', action: () => this.terminal.killActiveTerminal() },
       ]);
     });
 
@@ -1293,7 +1346,7 @@ class NexusApp {
     let html = '';
     byFile.forEach((markers, uri) => {
       const filename = uri.split('/').pop() ?? uri;
-      html += `<div class="problems-file-label">${filename}</div>`;
+      html += `<div class="problems-file-label">${this.escapeHtml(filename)}</div>`;
       markers.forEach((m) => {
         const severity = m.severity === 8 ? 'error' : m.severity === 4 ? 'warning' : 'info';
         const icon = severity === 'error' ? '✖' : severity === 'warning' ? '⚠' : 'ℹ';
@@ -1497,6 +1550,10 @@ class NexusApp {
 
   /** Files/folders from Windows file association, argv, or second-instance. */
   private async handleOpenPaths(payload: OpenPathsPayload): Promise<void> {
+    if (payload.folders.length > 0 || payload.files.length > 0) {
+      this.hasCommandLineOpenPaths = true;
+    }
+
     for (const folder of payload.folders) {
       try {
         await this.setWorkspaceFolder(folder, true);
@@ -1529,8 +1586,87 @@ class NexusApp {
     await this.setWorkspaceFolder(cwd, false);
   }
 
+  private syncSessionState(): void {
+    const openTabs = this.tabs.getTabs().map((t) => ({
+      path: t.path,
+      name: t.name,
+      isDirty: this.dirtyFiles.has(t.path),
+    }));
+    this.sessionManager.updateSession({
+      workspacePath: this.workspacePath,
+      openTabs,
+      activeTab: this.tabs.getActivePath(),
+    });
+  }
+
+  private async restoreSavedSession(): Promise<void> {
+    const session = this.sessionManager.getState();
+    if (!session) return;
+
+    // 1. Restore previous workspace folder
+    if (session.workspacePath) {
+      try {
+        const exists = await window.electronAPI.exists(session.workspacePath);
+        if (exists) {
+          await this.setWorkspaceFolder(session.workspacePath, false);
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    // 2. Restore previous open tabs & unsaved drafts (Hot Exit)
+    if (session.openTabs && session.openTabs.length > 0) {
+      for (const tabInfo of session.openTabs) {
+        if (this.releaseNotes.isReleaseNotesPath(tabInfo.path) || tabInfo.path === WELCOME_TAB_PATH) {
+          continue;
+        }
+        const draft = this.sessionManager.getDraft(tabInfo.path);
+        if (draft) {
+          // File had unsaved changes when app closed (Hot Exit)
+          try {
+            let baseDiskContent = '';
+            if (!draft.isUntitled) {
+              try {
+                baseDiskContent = await window.electronAPI.readFile(tabInfo.path);
+              } catch {
+                baseDiskContent = draft.originalContent ?? '';
+              }
+            }
+            this.originalContent.set(tabInfo.path, draft.originalContent ?? baseDiskContent);
+            this.tabs.openTab(tabInfo.path);
+            await this.showTextTab(tabInfo.path, draft.content);
+            this.dirtyFiles.add(tabInfo.path);
+            this.tabs.setDirty(tabInfo.path, true);
+            await this.updateFileSnapshot(tabInfo.path);
+          } catch (err) {
+            console.warn('[SessionManager] Failed to restore draft for', tabInfo.path, err);
+          }
+        } else {
+          // Saved / Clean tab
+          try {
+            const exists = await window.electronAPI.exists(tabInfo.path);
+            if (exists) {
+              await this.openFile(tabInfo.path);
+            }
+          } catch {
+            /* ignore missing files */
+          }
+        }
+      }
+
+      // 3. Restore active tab focus
+      if (session.activeTab && this.tabs.getTabs().some((t) => t.path === session.activeTab)) {
+        await this.switchToFile(session.activeTab);
+      } else if (this.tabs.getTabs().length > 0) {
+        await this.switchToFile(this.tabs.getTabs()[0].path);
+      }
+    }
+  }
+
   private async setWorkspaceFolder(folder: string, updateTerminalShell: boolean): Promise<void> {
     this.workspacePath = folder;
+    this.syncSessionState();
     try {
       await window.electronAPI.setWorkspacePath(folder);
     } catch {
@@ -1539,6 +1675,8 @@ class NexusApp {
     this.terminal.setCwd(folder);
     this.statusBar.setTerminalCwd(folder);
     document.getElementById('titlebar-path')!.textContent = folder;
+    this.trustManager.updateWorkspace(folder);
+    void this.trustManager.checkTrustOnOpen(folder);
     await this.explorer.loadFolder(folder);
     if (updateTerminalShell) await this.terminal.changeDirectory(folder, false);
     // Extensions are global (per-user), like VSCode — not re-scanned per
@@ -1631,6 +1769,8 @@ class NexusApp {
     this.explorer.getTimeline().push(path, 'Opened');
     void this.refreshOutline();
     this.pluginHost.emit('fileOpened', path);
+    // Persist tab list to session so it can be restored on next launch
+    this.syncSessionState();
     // Send updated editor context to main so AI has current file/cursor
     this.pushEditorContext();
   }
@@ -1804,7 +1944,7 @@ class NexusApp {
             <span>Unsaved Changes</span>
           </div>
           <div class="unsaved-changes-body">
-            <p>Do you want to save the changes you made to <strong>${filename}</strong>?</p>
+            <p>Do you want to save the changes you made to <strong>${this.escapeHtml(filename)}</strong>?</p>
             <p class="unsaved-changes-hint">Your changes will be lost if you don't save them.</p>
           </div>
           <div class="unsaved-changes-actions">
@@ -2028,7 +2168,7 @@ class NexusApp {
           <span>NexCode IDE — License</span>
           <button id="btn-license-close" class="icon-btn" title="Close">×</button>
         </div>
-        <pre class="license-modal-body">${licenseText}</pre>
+        <pre class="license-modal-body">${this.escapeHtml(licenseText)}</pre>
       </div>
     `;
     document.body.appendChild(modal);
@@ -2042,6 +2182,85 @@ class NexusApp {
     } catch {
       window.alert('Please report issues at: https://github.com/Hyggshi-OS-project-center/NexCode/issues/new');
     }
+  }
+
+  /** Show About dialog — opens native BrowserWindow on desktop, or sleek modal on web. */
+  private async showAbout(): Promise<void> {
+    const isDesktop = Boolean((window.electronAPI as any)?.isDesktop && !(window.electronAPI as any)?.isWeb);
+    if (isDesktop && typeof window.electronAPI?.showAboutWindow === 'function') {
+      try {
+        window.electronAPI.showAboutWindow();
+        return;
+      } catch {
+        /* fallback to in-app modal */
+      }
+    }
+
+    // Web / In-app About Modal
+    const existing = document.getElementById('about-modal');
+    if (existing) {
+      existing.remove();
+      return;
+    }
+
+    const version = '3.5.7-Insider.10';
+    const edition = isDesktop ? 'Desktop' : 'Web Edition';
+    const userAgent = navigator.userAgent;
+    const metaText = [
+      '© 2026 Hyggshi OS major project center',
+      `Platform: ${edition}`,
+      `Browser: ${navigator.appName || 'Web'}`,
+      `User Agent: ${userAgent}`,
+      'Hyggshi OS Engine 2.4.0',
+    ].join('\n');
+
+    const modal = document.createElement('div');
+    modal.id = 'about-modal';
+    modal.className = 'about-modal';
+    modal.innerHTML = `
+      <div class="about-modal-box">
+        <div class="about-modal-logo" aria-hidden="true">
+          <svg viewBox="0 0 48 48" width="56" height="56"><path fill="currentColor" d="M24 4l18 10.5v19L24 44 6 33.5v-19L24 4z"/></svg>
+        </div>
+        <h2 class="about-modal-title">NexCode IDE</h2>
+        <p class="about-modal-tagline">A world-class code editor at its core, enhanced with integrated tools and AI-ready workflows.</p>
+        <p class="about-modal-version">Version <code>${version} (${edition})</code></p>
+        <pre class="about-modal-meta">${this.escapeHtml(metaText)}</pre>
+        <div class="about-modal-actions">
+          <button type="button" class="about-modal-btn" id="btn-about-copy">Copy</button>
+          <button type="button" class="about-modal-btn primary" id="btn-about-ok">OK</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const closeModal = () => modal.remove();
+    document.getElementById('btn-about-ok')?.addEventListener('click', closeModal);
+    document.getElementById('btn-about-copy')?.addEventListener('click', () => {
+      const fullInfo = `NexCode IDE\nVersion: ${version} (${edition})\n${metaText}`;
+      void navigator.clipboard.writeText(fullInfo).then(() => {
+        const btn = document.getElementById('btn-about-copy');
+        if (btn) {
+          btn.textContent = 'Copied!';
+          setTimeout(() => {
+            if (btn) btn.textContent = 'Copy';
+          }, 1500);
+        }
+      });
+    });
+
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        closeModal();
+        window.removeEventListener('keydown', onKeyDown);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
   }
 
   private async switchToFile(path: string): Promise<void> {
@@ -2093,6 +2312,13 @@ class NexusApp {
   private onEditorChange(path: string): void {
     this.dirtyFiles.add(path);
     this.tabs.setDirty(path, true);
+    const content = this.editor.getContent(path);
+    const original = this.originalContent.get(path);
+    const tab = this.tabs.getTabs().find((t) => t.path === path);
+    const name = tab?.name || path.split(/[/\\]/).pop() || 'untitled';
+    const isUntitled = /untitled-\d+\.txt$/i.test(name);
+    this.sessionManager.saveDraft(path, name, content, original, isUntitled);
+    this.syncSessionState();
     void this.refreshOutline();
   }
 
@@ -2139,6 +2365,9 @@ class NexusApp {
     this.dirtyFiles.delete(oldPath);
     this.originalContent.delete(oldPath);
     this.fileSnapshots.delete(oldPath);
+    this.sessionManager.removeDraft(oldPath);
+    this.sessionManager.removeDraft(newPath);
+    this.syncSessionState();
 
     await this.openFile(newPath);
     if (wasActiveTab) this.tabs.setActive(newPath);
@@ -2215,7 +2444,7 @@ class NexusApp {
           { label: 'Clear Recent', action: () => void this.clearRecentFiles() },
         ];
 
-    return [
+    const items: MenuItem[] = [
       { label: 'New Text File', shortcut: 'Ctrl+N', action: () => void this.newUntitledFile() },
       { label: 'New File…', action: () => void this.newUntitledFile() },
       { separator: true },
@@ -2230,9 +2459,48 @@ class NexusApp {
         checked: this.settings.autoSave,
         action: () => void this.toggleAutoSave(),
       },
+    ];
+
+    const isWeb = Boolean((window.electronAPI as any)?.isWeb);
+    if (isWeb) {
+      items.push(
+        { separator: true },
+        {
+          label: 'Download Active File',
+          action: () => {
+            const active = this.tabs.getActivePath();
+            if (active) void downloadSingleFile(active);
+          },
+        },
+        {
+          label: 'Export Workspace as ZIP (.zip)',
+          action: () => void exportWorkspaceAsZip(this.workspacePath),
+        },
+        {
+          label: 'Import Workspace from ZIP…',
+          action: () => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.zip,application/zip';
+            input.onchange = async () => {
+              if (input.files && input.files[0]) {
+                await importZipArchive(input.files[0], this.workspacePath || '/');
+                await this.explorer.refresh();
+              }
+              input.remove();
+            };
+            input.click();
+          },
+        },
+      );
+    }
+
+    items.push(
       { separator: true },
       { label: 'Revert File', action: () => void this.revertActiveFile() },
-    ];
+    );
+
+    return items;
   }
 
   /** Flip the Auto Save setting and refresh any open File menu. */
@@ -2306,6 +2574,8 @@ class NexusApp {
     }
     this.dirtyFiles.delete(path);
     this.tabs.setDirty(path, false);
+    this.sessionManager.removeDraft(path);
+    this.syncSessionState();
     if (showFeedback) {
       document.getElementById('status-file')!.textContent = `Saved ${path.split(/[/\\]/).pop()}`;
     }
@@ -2324,9 +2594,9 @@ class NexusApp {
     this.binaryMeta.delete(path);
     this.forceTextOpen.delete(path);
     this.fileSnapshots.delete(path);
-    // FIX: clear stale dirty state so re-opening this file later does not
-    // trigger a phantom "unsaved changes" dialog.
     this.dirtyFiles.delete(path);
+    this.sessionManager.removeDraft(path);
+    this.syncSessionState();
     if (!this.tabs.hasTabs()) {
       this.editor.hide();
       this.binaryView.hide();

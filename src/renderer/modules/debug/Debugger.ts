@@ -5,6 +5,16 @@
 import type { EditorManager } from '../editor/EditorManager';
 import type { TerminalModule } from '../terminal/TerminalModule';
 
+/** Escape HTML special chars — prevents XSS in innerHTML templates. */
+function esc(s: string): string {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export class Debugger {
   private panel: HTMLElement;
   private editor: EditorManager;
@@ -308,8 +318,8 @@ export class Debugger {
       .map(
         (key) => `
       <li class="debug-variable-row">
-        <span class="debug-variable-name">${key}</span>
-        <span class="debug-variable-val">${this.variables[key]}</span>
+        <span class="debug-variable-name">${esc(key)}</span>
+        <span class="debug-variable-val">${esc(this.variables[key])}</span>
       </li>
     `
       )
@@ -324,8 +334,8 @@ export class Debugger {
       .map(
         (frame, idx) => `
       <li class="debug-stack-row ${idx === 0 ? 'active' : ''}">
-        <span>${frame}</span>
-        <span style="color: var(--text-muted); font-size: 10px; margin-left: auto;">line ${this.currentLine}</span>
+        <span>${esc(frame)}</span>
+        <span style="color: var(--text-muted); font-size: 10px; margin-left: auto;">line ${esc(String(this.currentLine))}</span>
       </li>
     `
       )
@@ -353,7 +363,7 @@ export class Debugger {
     }
 
     emptyEl?.classList.add('hidden');
-    const filename = activePath.split(/[\\/]/).pop() ?? activePath;
+    const filename = esc(activePath.split(/[\\/]/).pop() ?? activePath);
 
     this.breakpointsListEl.innerHTML = activeBreakpoints
       .map(
@@ -361,7 +371,7 @@ export class Debugger {
       <li class="debug-breakpoint-row">
         <input type="checkbox" checked disabled style="width: 13px; height: 13px;" />
         <span class="debug-breakpoint-file">${filename}</span>
-        <span class="debug-breakpoint-line">:${line}</span>
+        <span class="debug-breakpoint-line">:${esc(String(line))}</span>
       </li>
     `
       )

@@ -9,6 +9,7 @@ import type {
   CodeValidationResult,
   AboutInfo,
   ElectronAPI,
+  GitCommitItem,
   GitExecResult,
   GitStatusResult,
   MarketplaceExtensionResult,
@@ -20,6 +21,8 @@ import type {
 } from '../shared/types';
 
 const api: ElectronAPI = {
+  isDesktop: true,
+  isWeb: false,
   openFolder: () => ipcRenderer.invoke('dialog:openFolder'),
   toggleDevtools: () => ipcRenderer.send('window:toggleDevtools'),
   getCrashAudio: () => ipcRenderer.invoke('app:getCrashAudio') as Promise<string | null>,
@@ -57,21 +60,36 @@ const api: ElectronAPI = {
   openPath: (filePath) => ipcRenderer.invoke('shell:openPath', filePath) as Promise<void>,
   getAboutInfo: () => ipcRenderer.invoke('about:getInfo') as Promise<AboutInfo>,
   getLatestReleaseNotes: () => ipcRenderer.invoke('releaseNotes:getLatest') as Promise<ReleaseNotesInfo>,
-  createTerminal: (cwd) => ipcRenderer.invoke('terminal:create', cwd),
+  createTerminal: (options) => ipcRenderer.invoke('terminal:create', options),
   writeTerminal: (id, data) => ipcRenderer.send('terminal:write', id, data),
   resizeTerminal: (id, cols, rows) => ipcRenderer.send('terminal:resize', id, cols, rows),
   killTerminal: (id) => ipcRenderer.send('terminal:kill', id),
+  listTerminalShells: () => ipcRenderer.invoke('terminal:listShells'),
   onTerminalData: (callback) => {
     const handler = (_e: Electron.IpcRendererEvent, payload: { id: number; data: string }) =>
       callback(payload);
     ipcRenderer.on('terminal:data', handler);
     return () => ipcRenderer.removeListener('terminal:data', handler);
   },
+  onTerminalExit: (callback) => {
+    const handler = (
+      _e: Electron.IpcRendererEvent,
+      payload: { id: number; exitCode: number; signal?: number },
+    ) => callback(payload);
+    ipcRenderer.on('terminal:exit', handler);
+    return () => ipcRenderer.removeListener('terminal:exit', handler);
+  },
   onTerminalCwd: (callback) => {
     const handler = (_e: Electron.IpcRendererEvent, payload: { id: number; cwd: string }) =>
       callback(payload);
     ipcRenderer.on('terminal:cwd', handler);
     return () => ipcRenderer.removeListener('terminal:cwd', handler);
+  },
+  onTerminalTitle: (callback) => {
+    const handler = (_e: Electron.IpcRendererEvent, payload: { id: number; title: string }) =>
+      callback(payload);
+    ipcRenderer.on('terminal:title', handler);
+    return () => ipcRenderer.removeListener('terminal:title', handler);
   },
   onShortcut: (callback) => {
     const handler = (_e: Electron.IpcRendererEvent, action: string) =>
@@ -86,6 +104,17 @@ const api: ElectronAPI = {
   },
   gitStatus: (cwd) => ipcRenderer.invoke('git:status', cwd) as Promise<GitStatusResult>,
   gitExec: (cwd, args) => ipcRenderer.invoke('git:exec', cwd, args) as Promise<GitExecResult>,
+  gitStage: (cwd, filePaths) => ipcRenderer.invoke('git:stage', cwd, filePaths) as Promise<GitExecResult>,
+  gitUnstage: (cwd, filePaths) => ipcRenderer.invoke('git:unstage', cwd, filePaths) as Promise<GitExecResult>,
+  gitDiscard: (cwd, filePaths) => ipcRenderer.invoke('git:discard', cwd, filePaths) as Promise<GitExecResult>,
+  gitCommit: (cwd, message, options) =>
+    ipcRenderer.invoke('git:commit', cwd, message, options) as Promise<GitExecResult>,
+  gitLog: (cwd, maxCount) => ipcRenderer.invoke('git:log', cwd, maxCount) as Promise<GitCommitItem[]>,
+  gitDiff: (cwd, filePath, staged) => ipcRenderer.invoke('git:diff', cwd, filePath, staged) as Promise<string>,
+  gitFileAtHead: (cwd, filePath) => ipcRenderer.invoke('git:fileAtHead', cwd, filePath) as Promise<string | null>,
+  gitPull: (cwd) => ipcRenderer.invoke('git:pull', cwd) as Promise<GitExecResult>,
+  gitPush: (cwd) => ipcRenderer.invoke('git:push', cwd) as Promise<GitExecResult>,
+  gitFetch: (cwd) => ipcRenderer.invoke('git:fetch', cwd) as Promise<GitExecResult>,
   getHomePath: () => ipcRenderer.invoke('path:home') as Promise<string>,
   searchMarketplaceExtensions: (query, limit) =>
     ipcRenderer.invoke('extensions:search', query, limit) as Promise<MarketplaceExtensionResult[]>,

@@ -200,7 +200,7 @@ export class UpdateService {
 
     await fsp.chmod(downloadPath, 0o755);
     const { spawn } = await import('child_process');
-    const child = spawn(downloadPath, [], { detached: true, stdio: 'ignore' });
+    const child = spawn(downloadPath, [], { detached: true, stdio: 'ignore', shell: false, windowsHide: true });
     child.unref();
     this.emitProgress('installing', 'Installing update...', 100);
   }

@@ -21,19 +21,32 @@ export function setupHoscIpcHandlers(): void {
         activeHoscProcess = null;
       }
 
-      if (!filePath || !fs.existsSync(filePath)) {
-        return { success: false, error: `File not found: ${filePath}` };
+      if (!filePath || typeof filePath !== 'string' || !fs.existsSync(filePath)) {
+        return { success: false, error: `File not found or invalid path: ${filePath}` };
       }
 
-      const workingDir = cwd || path.dirname(filePath);
+      // Security check: ensure filePath is indeed a file
+      try {
+        const stat = fs.statSync(filePath);
+        if (!stat.isFile()) {
+          return { success: false, error: `Path is not a file: ${filePath}` };
+        }
+      } catch {
+        return { success: false, error: `Cannot access file: ${filePath}` };
+      }
 
-      // Resolve executable path
+      const workingDir = cwd && fs.existsSync(cwd) ? cwd : path.dirname(filePath);
+
+      // Resolve executable path safely — only allow safe characters for custom executable
       const exeName = process.platform === 'win32' ? 'hosc.exe' : 'hosc';
-      let hoscExe = customHoscExe || 'hosc';
+      let hoscExe = 'hosc';
 
-      // Fallback search locations if raw 'hosc' command is not in PATH
-      if (customHoscExe && !fs.existsSync(customHoscExe)) {
-        hoscExe = 'hosc';
+      if (customHoscExe && typeof customHoscExe === 'string') {
+        const cleanExe = customHoscExe.trim();
+        // Disallow dangerous shell metacharacters in custom executable path
+        if (!/[;&|`$<>]/.test(cleanExe) && fs.existsSync(cleanExe)) {
+          hoscExe = cleanExe;
+        }
       }
 
       const webContents: WebContents = event.sender;
@@ -51,6 +64,8 @@ export function setupHoscIpcHandlers(): void {
         const child = spawn(hoscExe, ['run', filePath], {
           cwd: workingDir,
           env: { ...process.env },
+          shell: false,
+          windowsHide: true,
         });
 
         activeHoscProcess = child;

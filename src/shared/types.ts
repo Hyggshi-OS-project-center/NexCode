@@ -35,7 +35,21 @@ export interface CodeValidationResult {
   output: string;
 }
 
-export type TerminalShell = 'cmd' | 'powershell' | 'bash';
+export type TerminalShell = 'cmd' | 'powershell' | 'bash' | 'zsh' | 'sh' | 'pwsh' | string;
+
+export interface TerminalShellInfo {
+  id: string;
+  name: string;
+  path: string;
+  isDefault?: boolean;
+}
+
+export interface TerminalCreateOptions {
+  cwd?: string;
+  shell?: TerminalShell;
+  cols?: number;
+  rows?: number;
+}
 export type AiProvider = 'gemini' | 'openrouter' | 'claude';
 export type AppTheme = 
   | 'dark' 
@@ -273,17 +287,34 @@ export interface OpenPathsPayload {
   folders: string[];
 }
 
+export type GitStatusKind = 'modified' | 'added' | 'deleted' | 'renamed' | 'untracked' | 'conflict' | 'changed';
+
 export interface GitChangedFile {
   path: string;
   index: string;
   worktree: string;
+  status?: GitStatusKind;
 }
 
 export interface GitStatusResult {
   isRepo: boolean;
   branch: string | null;
+  ahead?: number;
+  behind?: number;
+  stagedFiles?: GitChangedFile[];
+  unstagedFiles?: GitChangedFile[];
   files: GitChangedFile[];
   error?: string;
+}
+
+export interface GitCommitItem {
+  hash: string;
+  shortHash: string;
+  subject: string;
+  author: string;
+  relativeDate: string;
+  branches: string[];
+  isHead: boolean;
 }
 
 export interface GitExecResult {
@@ -319,6 +350,7 @@ export interface GitHubRelease {
   html_url?: string;
   body?: string | null;
   prerelease: boolean;
+  draft?: boolean;
   assets: GitHubReleaseAsset[];
 }
 
@@ -368,6 +400,8 @@ export interface UpdateCheckResult {
 export type UpdateChannel = 'stable' | 'insider';
 
 export interface ElectronAPI {
+  isDesktop?: boolean;
+  isWeb?: boolean;
   openFolder: () => Promise<string | null>;
   toggleDevtools: () => void;
   getCrashAudio: () => Promise<string | null>;
@@ -404,16 +438,29 @@ export interface ElectronAPI {
   openPath: (filePath: string) => Promise<void>;
   getAboutInfo: () => Promise<AboutInfo>;
   getLatestReleaseNotes: () => Promise<ReleaseNotesInfo>;
-  createTerminal: (cwd?: string) => Promise<number>;
+  createTerminal: (options?: string | TerminalCreateOptions) => Promise<number>;
   writeTerminal: (id: number, data: string) => void;
   resizeTerminal: (id: number, cols: number, rows: number) => void;
   killTerminal: (id: number) => void;
+  listTerminalShells: () => Promise<TerminalShellInfo[]>;
   onTerminalData: (callback: (payload: { id: number; data: string }) => void) => () => void;
+  onTerminalExit: (callback: (payload: { id: number; exitCode: number; signal?: number }) => void) => () => void;
   onTerminalCwd: (callback: (payload: { id: number; cwd: string }) => void) => () => void;
+  onTerminalTitle: (callback: (payload: { id: number; title: string }) => void) => () => void;
   onShortcut: (callback: (action: import('./shortcuts').ShortcutAction) => void) => () => void;
   onOpenPaths: (callback: (payload: OpenPathsPayload) => void) => () => void;
   gitStatus: (cwd: string) => Promise<GitStatusResult>;
   gitExec: (cwd: string, args: string[]) => Promise<GitExecResult>;
+  gitStage: (cwd: string, filePaths?: string[]) => Promise<GitExecResult>;
+  gitUnstage: (cwd: string, filePaths?: string[]) => Promise<GitExecResult>;
+  gitDiscard: (cwd: string, filePaths: string[]) => Promise<GitExecResult>;
+  gitCommit: (cwd: string, message: string, options?: { amend?: boolean; stageAll?: boolean }) => Promise<GitExecResult>;
+  gitLog: (cwd: string, maxCount?: number) => Promise<GitCommitItem[]>;
+  gitDiff: (cwd: string, filePath?: string, staged?: boolean) => Promise<string>;
+  gitFileAtHead: (cwd: string, filePath: string) => Promise<string | null>;
+  gitPull: (cwd: string) => Promise<GitExecResult>;
+  gitPush: (cwd: string) => Promise<GitExecResult>;
+  gitFetch: (cwd: string) => Promise<GitExecResult>;
   getHomePath: () => Promise<string>;
   searchMarketplaceExtensions: (query: string, limit?: number) => Promise<MarketplaceExtensionResult[]>;
   getWorkspacePath: () => Promise<string | null>;

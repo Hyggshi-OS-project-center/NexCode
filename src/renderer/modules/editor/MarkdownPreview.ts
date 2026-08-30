@@ -416,7 +416,7 @@ function renderMarkdownInsideHtml(html: string): string {
         `<img src="${escapeAttr(imgUrl.replace(/ /g, '%20'))}" alt="${escapeAttr(alt)}"` +
         `${title ? ` title="${escapeAttr(title)}"` : ''}` +
         ` class="md-img" referrerpolicy="no-referrer" crossorigin="anonymous" />`;
-      return `<a href="${escapeAttr(linkUrl)}" target="_blank" rel="noopener">${img}</a>`;
+      return `<a href="${escapeAttr(sanitizeUrl(linkUrl))}" target="_blank" rel="noopener">${img}</a>`;
     }
   );
 
@@ -433,7 +433,7 @@ function renderMarkdownInsideHtml(html: string): string {
   result = result.replace(
     /\[([^\]]+)\]\(([^)]+)\)/g,
     (_m, label: string, url: string) =>
-      `<a href="${escapeAttr(url)}" target="_blank" rel="noopener">${label}</a>`
+      `<a href="${escapeAttr(sanitizeUrl(url))}" target="_blank" rel="noopener">${label}</a>`
   );
 
   // Bold / italic inside HTML text nodes (best-effort; HTML tags are left as-is)
@@ -446,6 +446,28 @@ function renderMarkdownInsideHtml(html: string): string {
 
 function escapeAttr(text: string): string {
   return text.replace(/"/g, '&quot;');
+}
+
+/**
+ * SECURITY: Whitelist-based URL sanitizer for href attributes.
+ * Blocks javascript:, vbscript:, data:text/html, and any other scheme not
+ * explicitly allowed — prevents XSS via markdown links such as
+ * `[click me](javascript:...)` in opened .md files or fetched release notes.
+ */
+function sanitizeUrl(url: string): string {
+  const trimmed = String(url ?? '').trim();
+  if (!trimmed) return '#';
+  if (/^(https?:\/\/|mailto:|#|\.\.?\/|[^:]*$)/i.test(trimmed)) {
+    // Reject anything containing a colon before the first slash unless it's
+    // one of the explicitly allowed schemes above (guards against schemes
+    // like "javascript:" being smuggled through the relative-path branch).
+    const schemeMatch = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(trimmed);
+    if (schemeMatch && !/^(https?|mailto)$/i.test(schemeMatch[1])) {
+      return '#';
+    }
+    return trimmed;
+  }
+  return '#';
 }
 
 function renderInline(text: string): string {
@@ -485,7 +507,7 @@ function renderInline(text: string): string {
       const imgHtml = placeholders[parseInt(imgIdx)] ?? '';
       const idx = placeholders.length;
       placeholders.push(
-        `<a href="${escapeHtml(linkUrl)}" target="_blank" rel="noopener">${imgHtml}</a>`
+        `<a href="${escapeHtml(sanitizeUrl(linkUrl))}" target="_blank" rel="noopener">${imgHtml}</a>`
       );
       return `\x00P${idx}\x00`;
     }
@@ -510,7 +532,7 @@ function renderInline(text: string): string {
     (_m: string, label: string, url: string) => {
       const idx = placeholders.length;
       placeholders.push(
-        `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${label}</a>`
+        `<a href="${escapeHtml(sanitizeUrl(url))}" target="_blank" rel="noopener">${label}</a>`
       );
       return `\x00P${idx}\x00`;
     }
@@ -522,7 +544,7 @@ function renderInline(text: string): string {
     (_m: string, url: string) => {
       const idx = placeholders.length;
       placeholders.push(
-        `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a>`
+        `<a href="${escapeHtml(sanitizeUrl(url))}" target="_blank" rel="noopener">${escapeHtml(url)}</a>`
       );
       return `\x00P${idx}\x00`;
     }

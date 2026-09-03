@@ -27,6 +27,9 @@
 [![Issues](https://hyggshi-badge.vercel.app/api/github/issues/Hyggshi-OS-project-center/NexCode?style=plastic&color=6366f1&labelColor=0f172a&animation=gradient-shift)](https://github.com/Hyggshi-OS-project-center/NexCode/issues)
 [![Pull Requests](https://hyggshi-badge.vercel.app/api/github/pulls/Hyggshi-OS-project-center/NexCode?style=plastic&color=6366f1&labelColor=0f172a&animation=gradient-shift)](https://github.com/Hyggshi-OS-project-center/NexCode/pulls)
 [![Downloads](https://hyggshi-badge.vercel.app/api/github/downloads/Hyggshi-OS-project-center/NexCode?style=plastic&color=6366f1&labelColor=0f172a&animation=gradient-shift)](https://github.com/Hyggshi-OS-project-center/NexCode/releases)
+[![Releases](https://hyggshi-badge.vercel.app/api/github/releases/Hyggshi-OS-project-center/NexCode?style=plastic&color=6366f1&labelColor=0f172a&animation=gradient-shift)](https://github.com/Hyggshi-OS-project-center/NexCode/releases)
+[![Pre-releases](https://hyggshi-badge.vercel.app/api/github/prerelease/Hyggshi-OS-project-center/NexCode?style=plastic&color=6366f1&labelColor=0f172a&animation=gradient-shift)](https://github.com/Hyggshi-OS-project-center/NexCode/releases)
+[![Latest Pre-release](https://hyggshi-badge.vercel.app/api/github/latest-prerelease/Hyggshi-OS-project-center/NexCode?style=plastic&color=6366f1&labelColor=0f172a&animation=gradient-shift)](https://github.com/Hyggshi-OS-project-center/NexCode/releases)
 
 </div>
 

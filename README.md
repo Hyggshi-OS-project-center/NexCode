@@ -10,17 +10,15 @@
 
 <div id="badges" align="center">
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)](https://github.com/Hyggshi-OS-project-center/NexCode/releases)
-[![GitHub All Releases](https://img.shields.io/github/downloads/Hyggshi-OS-project-center/NexCode/total.svg)](https://github.com/Hyggshi-OS-project-center/NexCode/releases) 
-[![current release](https://img.shields.io/github/release/Hyggshi-OS-project-center/NexCode.svg)](https://github.com/Hyggshi-OS-project-center/NexCode/releases)
-
-[![NexCode v 4.0.0 test local](https://hyggshi-badge.vercel.app/api/badge?message=v+4.0.0+test+local&label=NexCode&color=6366f1&labelColor=0f172a&style=hyggshi&shape=cyberpunk&icon=nexcode&animation=gradient-shift)](https://hyggshi-badge.vercel.app/api/badge?message=v+4.0.0+test+local&label=NexCode&color=6366f1&labelColor=0f172a&style=hyggshi&shape=cyberpunk&icon=nexcode&animation=gradient-shift)
-
+[![License](https://hyggshi-badge.vercel.app/api/badge?message=MIT&label=License&color=3b82f6)](LICENSE)
+[![license Hyggshi OS License v1.3](https://hyggshi-badge.vercel.app/api/badge?message=HOSL+1.3&label=license&color=3b82f6)](license)
+[![Platform](https://hyggshi-badge.vercel.app/api/badge?message=Windows+%7C+Linux&label=platform&color=22b5d3)](https://github.com/Hyggshi-OS-project-center/NexCode/releases)
 [![Built with Electron](https://hyggshi-badge.vercel.app/api/badge?message=Electron+37.2.1&label=Built+with&color=6366f1&labelColor=0f172a&style=plastic&icon=electron&animation=gradient-shift)](https://www.electronjs.org/)
 [![TypeScript](https://hyggshi-badge.vercel.app/api/badge?message=5.x&label=TypeScript&color=6366f1&labelColor=0f172a&style=plastic&icon=typescript&animation=gradient-shift)](https://www.typescriptlang.org/)
 [![Vite](https://hyggshi-badge.vercel.app/api/badge?message=6.x&label=Vite&color=6366f1&labelColor=0f172a&style=plastic&icon=vite&animation=gradient-shift)](https://vitejs.dev/)
 [![Monaco Editor](https://hyggshi-badge.vercel.app/api/badge?message=0.55.x&label=monaco+editor&color=6366f1&labelColor=0f172a&style=plastic&animation=gradient-shift)](https://microsoft.github.io/monaco-editor/)
+
+[![NexCode v 4.0.0 test local](https://hyggshi-badge.vercel.app/api/badge?message=v+4.0.0+test+local&label=NexCode&color=6366f1&labelColor=0f172a&style=hyggshi&shape=cyberpunk&icon=nexcode&animation=gradient-shift)](https://hyggshi-badge.vercel.app/api/badge?message=v+4.0.0+test+local&label=NexCode&color=6366f1&labelColor=0f172a&style=hyggshi&shape=cyberpunk&icon=nexcode&animation=gradient-shift)
 
 [![Stars](https://hyggshi-badge.vercel.app/api/github/stars/Hyggshi-OS-project-center/NexCode?style=plastic&color=6366f1&labelColor=0f172a&animation=gradient-shift&icon=star)](https://github.com/Hyggshi-OS-project-center/NexCode/stargazers)
 [![Forks](https://hyggshi-badge.vercel.app/api/github/forks/Hyggshi-OS-project-center/NexCode?style=plastic&color=6366f1&labelColor=0f172a&animation=gradient-shift&icon=gitfork)](https://github.com/Hyggshi-OS-project-center/NexCode/forks)

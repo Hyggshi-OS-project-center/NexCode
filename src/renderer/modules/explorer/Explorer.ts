@@ -134,6 +134,16 @@ export class Explorer {
     await this.render();
   }
 
+  /** Apply the persisted Explorer preference for dot-prefixed files. */
+  async setShowHidden(showHidden: boolean): Promise<void> {
+    if (this.showHidden === showHidden) return;
+    this.showHidden = showHidden;
+    this.mountEl.querySelector('[data-action="hidden"]')?.classList.toggle('active', this.showHidden);
+    this.childrenCache.clear();
+    if (this.rootPath) await this.loadChildren(this.rootPath);
+    await this.render();
+  }
+
   private buildUi(): void {
     this.mountEl.className = 'explorer-panel';
     this.mountEl.innerHTML = `
@@ -166,9 +176,8 @@ export class Explorer {
                 </svg>
               </button>
               <button type="button" class="explorer-tool-btn" data-action="export-zip" title="Download Workspace as ZIP (.zip)">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true">
-                  <path d="M3 2.5h10a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z" fill="none"/>
-                  <path d="M8 5.5v5m0 0l-2-2m2 2l2-2" stroke-linecap="round" stroke-linejoin="round"/>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                  <path d="M8 1a.5.5 0 01.5.5v7.293l2.146-2.147a.5.5 0 11.708.708l-3 3a.5.5 0 01-.708 0l-3-3a.5.5 0 11.708-.708L7.5 8.793V1.5A.5.5 0 018 1zM3 10.5a.5.5 0 01.5.5v2h9v-2a.5.5 0 011 0v2.5a.5.5 0 01-.5.5h-10a.5.5 0 01-.5-.5V11a.5.5 0 01.5-.5z"/>
                 </svg>
               </button>
               <button type="button" class="explorer-tool-btn" data-action="hidden" title="Toggle Hidden Files">
@@ -186,15 +195,15 @@ export class Explorer {
             <div class="explorer-tree"></div>
           </div>
         </details>
-        <details class="explorer-section" open data-section="outline">
+        <details class="explorer-section" data-section="outline">
           <summary class="explorer-section-title">OUTLINE</summary>
           <div class="explorer-section-body outline-list" id="explorer-outline"></div>
         </details>
-        <details class="explorer-section" open data-section="timeline">
+        <details class="explorer-section" data-section="timeline">
           <summary class="explorer-section-title">TIMELINE</summary>
           <div class="explorer-section-body timeline-list" id="explorer-timeline"></div>
         </details>
-        <details class="explorer-section" open data-section="store">
+        <details class="explorer-section" data-section="store">
           <summary class="explorer-section-title">CONVENIENCE STORE</summary>
           <div class="explorer-section-body store-list" id="explorer-store"></div>
         </details>
@@ -220,15 +229,14 @@ export class Explorer {
     this.mountEl.querySelector('[data-action="new-folder"]')?.addEventListener('click', () => void this.showCreateDialog('folder'));
     this.mountEl.querySelector('[data-action="refresh"]')?.addEventListener('click', () => void this.refresh());
     this.mountEl.querySelector('[data-action="collapse"]')?.addEventListener('click', () => this.collapseAll());
-    this.mountEl.querySelector('[data-action="export-zip"]')?.addEventListener('click', () => void exportWorkspaceAsZip(this.rootPath));
-    this.mountEl.querySelector('[data-action="hidden"]')?.addEventListener('click', () => void this.toggleHidden());
-
-    // Only show Web ZIP export in browser web mode (hidden on native Desktop)
-    const isWeb = Boolean((window.electronAPI as any)?.isWeb);
-    const exportZipBtn = this.mountEl.querySelector('[data-action="export-zip"]') as HTMLElement | null;
-    if (exportZipBtn && !isWeb) {
-      exportZipBtn.style.display = 'none';
+    const exportZipButton = this.mountEl.querySelector<HTMLButtonElement>('[data-action="export-zip"]');
+    // Downloading a workspace is a Web-only substitute for direct disk access.
+    // Keep the Desktop Explorer toolbar identical to its native counterpart.
+    if (exportZipButton) {
+      exportZipButton.hidden = !Boolean((window.electronAPI as any)?.isWeb);
+      exportZipButton.addEventListener('click', () => void exportWorkspaceAsZip(this.rootPath));
     }
+    this.mountEl.querySelector('[data-action="hidden"]')?.addEventListener('click', () => void this.toggleHidden());
 
     this.filterInput.addEventListener('input', () => {
       this.filterQuery = this.filterInput.value.trim().toLowerCase();
@@ -339,11 +347,7 @@ export class Explorer {
   }
 
   private async toggleHidden(): Promise<void> {
-    this.showHidden = !this.showHidden;
-    this.mountEl.querySelector('[data-action="hidden"]')?.classList.toggle('active', this.showHidden);
-    this.childrenCache.clear();
-    if (this.rootPath) await this.loadChildren(this.rootPath);
-    await this.render();
+    await this.setShowHidden(!this.showHidden);
   }
 
   private getCreateBaseDir(): string {

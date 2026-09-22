@@ -1,72 +1,130 @@
 /**
  * Claude API service — autonomous agent with file and terminal tools.
- * Uses Anthropic's Messages API.
+ * Uses Anthropic's Messages API, streaming by default.
  */
 import https from 'https';
-import fs from 'fs';
-import path from 'path';
 import type { AiAgentAction, AiChatMessage, AiChatResult, AiEditorContext } from '../../shared/types';
 import type { ListedModel } from './geminiService';
-import { runCommandCapture } from './agentWorkflow';
+import type { McpSession } from './mcpService';
+import { AGENT_WORKFLOW_INSTRUCTIONS, AgentRunState, executeAgentTool, toClaudeTools } from './agentTools';
+import {
+  AiAbortError,
+  isAbortError,
+  requestSse,
+  throwIfAborted,
+  type AiStreamCallbacks,
+} from './streaming';
 
 const DEFAULT_CLAUDE_MODEL = 'claude-sonnet-4-20250514';
 const CLAUDE_HOST = 'api.anthropic.com';
+const CLAUDE_ORIGIN = `https://${CLAUDE_HOST}`;
 const CLAUDE_PATH = '/v1/messages';
 const CLAUDE_VERSION = '2023-06-01';
 
+/**
+ * Model ids are stored in settings and may have been saved by an older build
+ * that listed Claude models through OpenRouter, so they look like
+ * `anthropic/claude-sonnet-4-20250514`. The Anthropic API rejects that prefix,
+ * which made every request fail with "model not found" — strip it here so old
+ * settings keep working.
+ */
+export function normalizeClaudeModel(model: string): string {
+  const trimmed = (model ?? '').trim();
+  if (!trimmed) return DEFAULT_CLAUDE_MODEL;
+  return trimmed.replace(/^anthropic\//i, '');
+}
+
 // ---------------------------------------------------------------------------
-// Dynamic model listing via OpenRouter (Claude models on OpenRouter)
+// Dynamic model listing
 // ---------------------------------------------------------------------------
 
+interface ClaudeModelEntry {
+  id: string;
+  display_name?: string;
+  type?: string;
+}
+
+interface ClaudeModelsResponse {
+  data?: ClaudeModelEntry[];
+  has_more?: boolean;
+  last_id?: string | null;
+  error?: { type?: string; message?: string };
+}
+
 /**
- * Fetches available Claude models via the OpenRouter models API.
- * This is a fallback-friendly approach — Anthropic doesn't expose a public
- * models endpoint, but OpenRouter lists all Claude models it supports.
+ * Fetches available Claude models from Anthropic's own models endpoint.
+ *
+ * The previous implementation asked OpenRouter instead, which returns ids
+ * namespaced as `anthropic/...` — those are valid on OpenRouter but not on
+ * api.anthropic.com, so picking any model from the dropdown broke the chat.
  */
-export async function listClaudeModels(): Promise<ListedModel[]> {
+export async function listClaudeModels(apiKey: string): Promise<ListedModel[]> {
+  if (!apiKey?.trim()) return fallbackClaudeModels();
+
   const headers: Record<string, string> = {
+    'x-api-key': apiKey,
+    'anthropic-version': CLAUDE_VERSION,
     'Content-Type': 'application/json',
-    'HTTP-Referer': 'https://nexcode.local',
-    'X-OpenRouter-Title': 'NexCode IDE',
   };
 
   try {
-    const raw = await httpsGetWithHeaders('openrouter.ai', '/api/v1/models', headers);
-    const data = JSON.parse(raw) as { data?: { id: string; name: string }[] };
-    if (data.data) {
-      return data.data
-        .filter((m) => m.id.toLowerCase().startsWith('anthropic/'))
-        .map((m) => ({
-          value: m.id,
-          label: m.name || m.id.replace(/^anthropic\//, ''),
-          supportsImages: true,
-        }))
-        .sort((a, b) => a.label.localeCompare(b.label));
-    }
-  } catch {
-    // fall through to fallback list
-  }
+    const collected: ClaudeModelEntry[] = [];
+    let afterId: string | null = null;
 
-  // Fallback list if OpenRouter is unreachable
+    // The endpoint pages at 20 by default; ask for the maximum and follow cursors.
+    do {
+      const query = `?limit=100${afterId ? `&after_id=${encodeURIComponent(afterId)}` : ''}`;
+      const raw: string = await httpsGetWithHeaders(CLAUDE_HOST, `/v1/models${query}`, headers);
+      const data = JSON.parse(raw) as ClaudeModelsResponse;
+      if (data.error) throw new Error(data.error.message ?? 'Unknown error');
+      if (data.data?.length) collected.push(...data.data);
+      afterId = data.has_more ? (data.last_id ?? null) : null;
+    } while (afterId);
+
+    if (collected.length === 0) return fallbackClaudeModels();
+
+    return collected
+      .filter((m) => Boolean(m.id))
+      .map((m) => ({
+        value: m.id,
+        label: m.display_name || m.id,
+        supportsImages: true,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  } catch {
+    return fallbackClaudeModels();
+  }
+}
+
+/** Used when the key is missing or Anthropic is unreachable. */
+function fallbackClaudeModels(): ListedModel[] {
   return [
-    { value: 'anthropic/claude-opus-4-20250514', label: 'Claude Opus 4', supportsImages: true },
-    { value: 'anthropic/claude-sonnet-4-20250514', label: 'Claude Sonnet 4', supportsImages: true },
-    { value: 'anthropic/claude-haiku-4-20250514', label: 'Claude Haiku 4', supportsImages: true },
+    { value: 'claude-opus-4-20250514', label: 'Claude Opus 4', supportsImages: true },
+    { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4', supportsImages: true },
+    { value: 'claude-3-5-haiku-20241022', label: 'Claude Haiku 3.5', supportsImages: true },
   ];
 }
 
 // ---------------------------------------------------------------------------
-// Chat (tool-based agent)
+// Wire types
 // ---------------------------------------------------------------------------
 
+interface ClaudeImageSource {
+  type: 'base64';
+  media_type: string;
+  data: string;
+}
+
 interface ClaudeContentBlock {
-  type: 'text' | 'tool_use' | 'tool_result';
+  type: 'text' | 'tool_use' | 'tool_result' | 'image';
   text?: string;
   id?: string;
   name?: string;
   input?: Record<string, unknown>;
   tool_use_id?: string;
   content?: string;
+  source?: ClaudeImageSource;
+  is_error?: boolean;
 }
 
 interface ClaudeMessage {
@@ -77,93 +135,55 @@ interface ClaudeMessage {
 interface ClaudeToolSpec {
   name: string;
   description: string;
-  input_schema: {
-    type: 'object';
-    properties: Record<string, { type: string; description?: string }>;
-    required?: string[];
-  };
+  input_schema: Record<string, unknown>;
 }
 
-interface ClaudeResponse {
-  id: string;
-  type: 'message';
-  role: 'assistant';
+interface ClaudeApiError {
+  type: string;
+  message: string;
+}
+
+/** One completed assistant turn, however it was transported. */
+interface ClaudeTurn {
   content: ClaudeContentBlock[];
-  model: string;
-  stop_reason: 'end_turn' | 'tool_use' | 'max_tokens' | 'stop_sequence' | null;
-  stop_sequence: string | null;
-  usage: { input_tokens: number; output_tokens: number };
-  error?: { type: string; message: string };
+  stopReason: string | null;
+  error?: ClaudeApiError;
 }
 
-const CLAUDE_TOOLS: ClaudeToolSpec[] = [
-  {
-    name: 'write_file',
-    description:
-      'Writes content to a file in the workspace. Use this instead of showing code in chat when the user wants a file created or updated.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        filePath: {
-          type: 'string',
-          description: 'Path relative to workspace root or absolute',
-        },
-        content: { type: 'string', description: 'Full file text content' },
-      },
-      required: ['filePath', 'content'],
-    },
-  },
-  {
-    name: 'read_file',
-    description: 'Reads a text file from the workspace.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        filePath: { type: 'string', description: 'Path relative to workspace or absolute' },
-      },
-      required: ['filePath'],
-    },
-  },
-  {
-    name: 'run_command',
-    description: 'Runs a shell command in the workspace directory.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        command: { type: 'string', description: 'Shell command to execute' },
-      },
-      required: ['command'],
-    },
-  },
-];
 
-function resolveInWorkspace(filePath: string, workspacePath: string | null): string {
-  if (path.isAbsolute(filePath)) return path.normalize(filePath);
-  const base = workspacePath ?? process.cwd();
-  return path.resolve(base, filePath);
+/** Media types Anthropic accepts for image blocks. */
+const SUPPORTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+
+function splitDataUrl(dataUrl: string): { mediaType: string | null; data: string } {
+  const match = /^data:([^;,]+)(?:;[^,]*)*,(.*)$/s.exec(dataUrl);
+  if (!match) return { mediaType: null, data: dataUrl };
+  return { mediaType: match[1] || null, data: match[2] ?? '' };
 }
 
-function displayPath(filePath: string, workspacePath: string | null): string {
-  const resolved = resolveInWorkspace(filePath, workspacePath);
-  if (workspacePath) {
-    const rel = path.relative(workspacePath, resolved);
-    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) return rel;
-  }
-  return path.basename(resolved);
-}
-
+/**
+ * Builds the content blocks for one user turn.
+ *
+ * Images used to be inlined as `[Image: ...]\ndata:image/png;base64,...` inside
+ * a *text* block — Claude cannot see an image sent that way, and the base64
+ * blob burned a large part of the context window for nothing. They are proper
+ * image blocks now.
+ */
 function toClaudeContent(message: AiChatMessage): string | ClaudeContentBlock[] {
   const parts: ClaudeContentBlock[] = [];
   if (message.text) parts.push({ type: 'text', text: message.text });
 
   for (const attachment of message.attachments ?? []) {
     if (attachment.kind === 'image' && attachment.dataUrl) {
-      // Claude supports base64 images: data:image/jpeg;base64,...
-      // We send them as text blocks since Claude can handle it
-      parts.push({
-        type: 'text',
-        text: `[Image: ${attachment.name} (${attachment.mimeType})]\n${attachment.dataUrl}`,
-      });
+      const { mediaType, data } = splitDataUrl(attachment.dataUrl);
+      const resolved = mediaType ?? attachment.mimeType;
+      if (data && SUPPORTED_IMAGE_TYPES.has(resolved)) {
+        parts.push({ type: 'image', source: { type: 'base64', media_type: resolved, data } });
+      } else {
+        parts.push({
+          type: 'text',
+          text: `[Image "${attachment.name}" was skipped: ${resolved || 'unknown type'} is not a format Claude can read. Use JPEG, PNG, GIF or WebP.]`,
+        });
+      }
     } else if (attachment.content) {
       parts.push({
         type: 'text',
@@ -177,12 +197,18 @@ function toClaudeContent(message: AiChatMessage): string | ClaudeContentBlock[] 
   return parts;
 }
 
+// ---------------------------------------------------------------------------
+// Chat (tool-based agent)
+// ---------------------------------------------------------------------------
+
 export async function chatWithClaude(
   apiKey: string,
   model: string,
   messages: AiChatMessage[],
   workspacePath: string | null,
   editorContext: AiEditorContext | null = null,
+  callbacks: AiStreamCallbacks = {},
+  mcpSession: McpSession | null = null,
 ): Promise<AiChatResult> {
   if (!apiKey?.trim()) {
     return {
@@ -190,7 +216,7 @@ export async function chatWithClaude(
     };
   }
 
-  const selectedModel = model.trim() || DEFAULT_CLAUDE_MODEL;
+  const selectedModel = normalizeClaudeModel(model);
 
   const workspaceHint = workspacePath
     ? `Current workspace folder: ${workspacePath}. Resolve relative paths against this folder.`
@@ -200,14 +226,8 @@ export async function chatWithClaude(
   const systemPrompt = [
     `You are an autonomous AI Agent in NexCode IDE with Copilot-style editor control. ${workspaceHint}`,
     editorHint,
-    'When the user asks you to create or change files, you MUST call write_file; do not only paste code in chat.',
     'When the user asks to fix, refactor, explain, continue, or add code without naming a file, use the active editor context.',
-    'If changing the active file or selected code, call write_file with the active file path and the full updated file content.',
-    'Workflow: inspect files when needed, write the full updated file, run command checks when useful, read errors, and fix the code until validation passes or no reliable local check exists.',
-    'After every write_file result, review validation output. If validation failed, you MUST fix the reported errors with another write_file before giving a final answer.',
-    'You may call run_command to execute local command prompts for builds, tests, linting, type checks, and diagnostics. Prefer targeted checks over broad unrelated commands.',
-    'After write_file succeeds, briefly confirm what you did in plain language.',
-    'Be concise and proactive.',
+    AGENT_WORKFLOW_INSTRUCTIONS,
   ]
     .filter(Boolean)
     .join('\n');
@@ -217,153 +237,125 @@ export async function chatWithClaude(
     content: toClaudeContent(m),
   }));
 
-  const actions: AiAgentAction[] = [];
+  const runState = new AgentRunState(workspacePath);
+  const tools: ClaudeToolSpec[] = toClaudeTools((mcpSession?.openAiTools ?? []).map((tool) => tool.function));
+  const actions = runState.actions;
+  const transcript: string[] = [];
   let iteration = 0;
   const maxIterations = 10;
 
-  while (iteration < maxIterations) {
-    iteration++;
+  try {
+    while (iteration < maxIterations) {
+      iteration++;
+      throwIfAborted(callbacks.signal);
 
-    const body = JSON.stringify({
-      model: selectedModel,
-      max_tokens: 8192,
-      system: systemPrompt,
-      messages: claudeMessages,
-      tools: CLAUDE_TOOLS,
-    });
-
-    const json = await makeRequestWithRetry(apiKey, body, 3);
-    if (json.error) {
-      if (actions.length > 0) return completedActionsFallback(actions);
-      return {
-        error: `Claude API error: ${json.error.message ?? 'Unknown error'} (code ${json.error.type ?? '?'})`,
-        actions: actions.length > 0 ? actions : undefined,
-      };
-    }
-
-    const response = json as ClaudeResponse;
-    if (!response.content?.length) {
-      if (actions.length > 0) return completedActionsFallback(actions);
-      return {
-        error: 'No response from Claude. Try rephrasing your question.',
-        actions: actions.length > 0 ? actions : undefined,
-      };
-    }
-
-    // Check for tool_use blocks
-    const toolUseBlocks = response.content.filter((block) => block.type === 'tool_use');
-    const textBlocks = response.content.filter((block) => block.type === 'text');
-
-    if (toolUseBlocks.length > 0) {
-      // Add assistant response with tool calls to message history
-      claudeMessages.push({
-        role: 'assistant',
-        content: response.content,
+      const body = JSON.stringify({
+        model: selectedModel,
+        max_tokens: 8192,
+        system: systemPrompt,
+        messages: claudeMessages,
+        tools,
+        ...(callbacks.onDelta ? { stream: true } : {}),
       });
 
-      // Run each tool call
-      const toolResults: ClaudeContentBlock[] = [];
-      for (const toolBlock of toolUseBlocks) {
-        const { result, error } = await runClaudeToolCall(
-          toolBlock.name ?? '',
-          (toolBlock.input ?? {}) as Record<string, string>,
-          workspacePath,
-          actions,
-        );
-        toolResults.push({
-          type: 'tool_result',
-          tool_use_id: toolBlock.id ?? '',
-          content: error ?? JSON.stringify(result ?? {}),
-        });
+      const turn = callbacks.onDelta
+        ? await streamTurn(apiKey, body, transcript, callbacks)
+        : await makeRequestWithRetry(apiKey, body, 3, callbacks.signal);
+
+      if (turn.error) {
+        if (transcript.length > 0) return { text: transcript.join('').trim(), actions: orUndefined(actions) };
+        if (actions.length > 0) return completedActionsFallback(actions);
+        return {
+          error: `Claude API error: ${turn.error.message ?? 'Unknown error'} (code ${turn.error.type ?? '?'})`,
+          actions: orUndefined(actions),
+        };
       }
 
-      // Send tool results back
-      claudeMessages.push({
-        role: 'user',
-        content: toolResults,
-      });
-      continue;
-    }
+      if (!turn.content.length) {
+        if (transcript.length > 0) return { text: transcript.join('').trim(), actions: orUndefined(actions) };
+        if (actions.length > 0) return completedActionsFallback(actions);
+        return {
+          error: 'No response from Claude. Try rephrasing your question.',
+          actions: orUndefined(actions),
+        };
+      }
 
-    // Return text response
-    const text = textBlocks.map((b) => b.text ?? '').join('\n').trim();
-    if (text) {
-      return { text, actions: actions.length > 0 ? actions : undefined };
-    }
+      const toolUseBlocks = turn.content.filter((block) => block.type === 'tool_use');
+      const textBlocks = turn.content.filter((block) => block.type === 'text');
 
-    if (actions.length > 0) return completedActionsFallback(actions);
-    return { error: 'Received an empty or unsupported response from Claude.', actions };
+      if (toolUseBlocks.length > 0) {
+        claudeMessages.push({ role: 'assistant', content: turn.content });
+
+        const toolResults: ClaudeContentBlock[] = [];
+        for (const toolBlock of toolUseBlocks) {
+          throwIfAborted(callbacks.signal);
+          const toolName = toolBlock.name ?? '';
+          callbacks.onStatus?.({ label: `Running ${toolName}`, kind: 'thinking', status: 'running' });
+
+          const toolArgs = (toolBlock.input ?? {}) as Record<string, unknown>;
+          const { result, error } = toolName.startsWith('mcp__') && mcpSession
+            ? await mcpSession.call(toolName, toolArgs)
+            : await executeAgentTool(toolName, toolArgs, runState);
+
+          callbacks.onStatus?.({
+            label: error ? `${toolName} failed: ${error}` : `${toolName} completed`,
+            kind: 'thinking',
+            status: error ? 'failed' : 'done',
+          });
+
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolBlock.id ?? '',
+            content: error ?? JSON.stringify(result ?? {}),
+            ...(error ? { is_error: true } : {}),
+          });
+        }
+
+        claudeMessages.push({ role: 'user', content: toolResults });
+        continue;
+      }
+
+      // Final turn: plain text.
+      const text = textBlocks.map((b) => b.text ?? '').join('\n').trim();
+      if (callbacks.onDelta) {
+        // Text was already streamed to the caller as it arrived.
+        const full = transcript.join('').trim();
+        if (full) return { text: full, actions: orUndefined(actions) };
+      } else if (text) {
+        return { text, actions: orUndefined(actions) };
+      }
+
+      if (actions.length > 0) return completedActionsFallback(actions);
+      return { error: 'Received an empty or unsupported response from Claude.', actions };
+    }
+  } catch (err) {
+    if (isAbortError(err)) {
+      const partial = transcript.join('').trim();
+      return partial
+        ? { text: partial, actions: orUndefined(actions) }
+        : { error: 'Cancelled.', actions: orUndefined(actions) };
+    }
+    return {
+      error: `Claude request failed: ${err instanceof Error ? err.message : String(err)}`,
+      actions: orUndefined(actions),
+    };
   }
 
+  if (transcript.length > 0) return { text: transcript.join('').trim(), actions: orUndefined(actions) };
   if (actions.length > 0) return completedActionsFallback(actions);
   return {
     error: 'Agent stopped after reaching maximum iterations (10).',
-    actions: actions.length > 0 ? actions : undefined,
+    actions: orUndefined(actions),
   };
+}
+
+function orUndefined(actions: AiAgentAction[]): AiAgentAction[] | undefined {
+  return actions.length > 0 ? actions : undefined;
 }
 
 function completedActionsFallback(actions: AiAgentAction[]): AiChatResult {
   const labels = actions.map((a) => a.label.replace(/`/g, '')).join(', ');
   return { text: `Done. ${labels}.`, actions };
-}
-
-async function runClaudeToolCall(
-  name: string,
-  args: Record<string, string>,
-  workspacePath: string | null,
-  actions: AiAgentAction[],
-): Promise<{ result?: unknown; error?: string }> {
-  try {
-    if (name === 'write_file') {
-      const resolved = resolveInWorkspace(args.filePath, workspacePath);
-      let originalContent = '';
-      try {
-        originalContent = await fs.promises.readFile(resolved, 'utf-8');
-      } catch { /* file does not exist yet */ }
-      const newContent = args.content ?? '';
-      actions.push({
-        type: 'write_file',
-        path: resolved,
-        content: newContent,
-        originalContent,
-        label: `Wrote file \`${displayPath(args.filePath, workspacePath)}\``,
-      });
-      return { result: `Prepared ${resolved} for diff review.` };
-    }
-
-    if (name === 'read_file') {
-      const resolved = resolveInWorkspace(args.filePath, workspacePath);
-      const content = await fs.promises.readFile(resolved, 'utf-8');
-      actions.push({
-        type: 'read_file',
-        path: resolved,
-        label: `Read file \`${displayPath(args.filePath, workspacePath)}\``,
-      });
-      return { result: content };
-    }
-
-    if (name === 'run_command') {
-      const cwd = workspacePath ?? process.cwd();
-      const result = await runCommandCapture(args.command, cwd);
-      actions.push({
-        type: 'run_command',
-        command: args.command,
-        label: `Ran command \`${args.command}\``,
-      });
-      return {
-        result: {
-          code: result.code,
-          output:
-            result.output ||
-            (result.code === 0 ? 'Command completed without output.' : 'Command failed without output.'),
-        },
-      };
-    }
-
-    return { error: `Unknown function: ${name}` };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : String(err) };
-  }
 }
 
 function formatEditorContext(context: AiEditorContext | null): string {
@@ -397,7 +389,154 @@ function formatEditorContext(context: AiEditorContext | null): string {
 }
 
 // ---------------------------------------------------------------------------
-// HTTP helpers
+// Streaming turn
+// ---------------------------------------------------------------------------
+
+interface ClaudeStreamEvent {
+  type: string;
+  index?: number;
+  content_block?: { type: string; id?: string; name?: string; text?: string };
+  delta?: {
+    type?: string;
+    text?: string;
+    partial_json?: string;
+    stop_reason?: string;
+  };
+  error?: ClaudeApiError;
+}
+
+/**
+ * Runs one assistant turn over SSE, forwarding text to `callbacks.onDelta`
+ * the instant each fragment arrives and reassembling tool calls (whose JSON
+ * arguments come in as a stream of `partial_json` fragments).
+ */
+async function streamTurn(
+  apiKey: string,
+  body: string,
+  transcript: string[],
+  callbacks: AiStreamCallbacks,
+): Promise<ClaudeTurn> {
+  // Blocks are keyed by index; tool_use arguments accumulate as raw JSON text.
+  const blocks = new Map<number, { block: ClaudeContentBlock; json: string }>();
+  let stopReason: string | null = null;
+  let streamError: ClaudeApiError | undefined;
+  let wroteThisTurn = false;
+
+  const result = await requestSse({
+    url: `${CLAUDE_ORIGIN}${CLAUDE_PATH}`,
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': CLAUDE_VERSION,
+      'Content-Type': 'application/json',
+    },
+    body,
+    timeoutMs: 180_000,
+    signal: callbacks.signal,
+    onData: (payload) => {
+      let event: ClaudeStreamEvent;
+      try {
+        event = JSON.parse(payload) as ClaudeStreamEvent;
+      } catch {
+        return;
+      }
+
+      switch (event.type) {
+        case 'error':
+          streamError = event.error ?? { type: 'stream_error', message: 'Stream failed' };
+          break;
+
+        case 'content_block_start': {
+          if (event.index === undefined || !event.content_block) break;
+          const kind = event.content_block.type;
+          if (kind === 'text') {
+            blocks.set(event.index, { block: { type: 'text', text: '' }, json: '' });
+          } else if (kind === 'tool_use') {
+            blocks.set(event.index, {
+              block: { type: 'tool_use', id: event.content_block.id, name: event.content_block.name, input: {} },
+              json: '',
+            });
+            callbacks.onStatus?.({
+              label: `Preparing ${event.content_block.name ?? 'tool call'}`,
+              kind: 'thinking',
+              status: 'running',
+            });
+          }
+          break;
+        }
+
+        case 'content_block_delta': {
+          if (event.index === undefined) break;
+          const entry = blocks.get(event.index);
+          if (!entry) break;
+
+          if (event.delta?.type === 'text_delta' && event.delta.text) {
+            entry.block.text = (entry.block.text ?? '') + event.delta.text;
+            // Separate narration from a previous turn so they don't run together.
+            if (!wroteThisTurn && transcript.length > 0) {
+              transcript.push('\n\n');
+              callbacks.onDelta?.('\n\n');
+            }
+            wroteThisTurn = true;
+            transcript.push(event.delta.text);
+            callbacks.onDelta?.(event.delta.text);
+          } else if (event.delta?.type === 'input_json_delta' && event.delta.partial_json) {
+            entry.json += event.delta.partial_json;
+          }
+          break;
+        }
+
+        case 'content_block_stop': {
+          if (event.index === undefined) break;
+          const entry = blocks.get(event.index);
+          if (entry?.block.type === 'tool_use') {
+            try {
+              entry.block.input = entry.json ? (JSON.parse(entry.json) as Record<string, unknown>) : {};
+            } catch {
+              entry.block.input = {};
+            }
+          }
+          break;
+        }
+
+        case 'message_delta':
+          if (event.delta?.stop_reason) stopReason = event.delta.stop_reason;
+          break;
+
+        default:
+          break;
+      }
+    },
+  });
+
+  if (result.errorBody !== null) {
+    return { content: [], stopReason: null, error: parseErrorBody(result.status, result.errorBody) };
+  }
+  if (streamError) {
+    return { content: [], stopReason: null, error: streamError };
+  }
+
+  const content = [...blocks.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([, entry]) => entry.block)
+    .filter((block) => block.type !== 'text' || (block.text ?? '').length > 0);
+
+  return { content, stopReason };
+}
+
+function parseErrorBody(status: number, raw: string): ClaudeApiError {
+  try {
+    const parsed = JSON.parse(raw) as { error?: { type?: string; message?: string } };
+    return {
+      type: parsed.error?.type ?? String(status),
+      message: parsed.error?.message ?? raw.slice(0, 300),
+    };
+  } catch {
+    return { type: String(status), message: raw.slice(0, 300) || `HTTP ${status}` };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// HTTP helpers (non-streaming path)
 // ---------------------------------------------------------------------------
 
 function httpsGetWithHeaders(
@@ -412,6 +551,7 @@ function httpsGetWithHeaders(
         const chunks: Buffer[] = [];
         res.on('data', (chunk: Buffer) => chunks.push(chunk));
         res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')));
+        res.on('error', reject);
       },
     );
     req.on('error', reject);
@@ -427,79 +567,70 @@ async function makeRequestWithRetry(
   apiKey: string,
   body: string,
   maxRetries: number,
-): Promise<ClaudeResponse & { error?: { type: string; message: string } }> {
+  signal?: AbortSignal,
+): Promise<ClaudeTurn> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    throwIfAborted(signal);
     try {
-      const response = await new Promise<ClaudeResponse & { error?: { type: string; message: string } }>(
-        (resolve, reject) => {
-          const req = https.request(
-            {
-              hostname: CLAUDE_HOST,
-              path: CLAUDE_PATH,
-              method: 'POST',
-              headers: {
-                'x-api-key': apiKey,
-                'anthropic-version': CLAUDE_VERSION,
-                'Content-Type': 'application/json',
-                'Content-Length': Buffer.byteLength(body),
-              },
-              timeout: 180_000,
+      const response = await new Promise<ClaudeTurn>((resolve, reject) => {
+        const req = https.request(
+          {
+            hostname: CLAUDE_HOST,
+            path: CLAUDE_PATH,
+            method: 'POST',
+            headers: {
+              'x-api-key': apiKey,
+              'anthropic-version': CLAUDE_VERSION,
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(body),
             },
-            (res) => {
-              const chunks: Buffer[] = [];
-              res.on('data', (chunk: Buffer) => chunks.push(chunk));
-              res.on('end', () => {
-                const raw = Buffer.concat(chunks).toString('utf-8');
-                try {
-                  const json = JSON.parse(raw) as ClaudeResponse & { error?: { type: string; message: string } };
-                  if (res.statusCode && res.statusCode >= 400) {
-                    resolve({
-                      id: '',
-                      type: 'message',
-                      role: 'assistant',
-                      content: [],
-                      model: '',
-                      stop_reason: null,
-                      stop_sequence: null,
-                      usage: { input_tokens: 0, output_tokens: 0 },
-                      error: {
-                        type: String(res.statusCode),
-                        message: json.error?.message ?? raw.slice(0, 300),
-                      },
-                    });
-                    return;
-                  }
-                  resolve(json);
-                } catch {
-                  resolve({
-                    id: '',
-                    type: 'message',
-                    role: 'assistant',
-                    content: [],
-                    model: '',
-                    stop_reason: null,
-                    stop_sequence: null,
-                    usage: { input_tokens: 0, output_tokens: 0 },
-                    error: {
-                      type: 'parse_error',
-                      message: `Failed to parse Claude response: ${raw.slice(0, 200)}`,
-                    },
-                  });
-                }
-              });
-            },
-          );
+            timeout: 180_000,
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on('data', (chunk: Buffer) => chunks.push(chunk));
+            res.on('end', () => {
+              const raw = Buffer.concat(chunks).toString('utf-8');
+              if (res.statusCode && res.statusCode >= 400) {
+                resolve({ content: [], stopReason: null, error: parseErrorBody(res.statusCode, raw) });
+                return;
+              }
+              try {
+                const json = JSON.parse(raw) as {
+                  content?: ClaudeContentBlock[];
+                  stop_reason?: string | null;
+                };
+                resolve({ content: json.content ?? [], stopReason: json.stop_reason ?? null });
+              } catch {
+                resolve({
+                  content: [],
+                  stopReason: null,
+                  error: {
+                    type: 'parse_error',
+                    message: `Failed to parse Claude response: ${raw.slice(0, 200)}`,
+                  },
+                });
+              }
+            });
+            res.on('error', reject);
+          },
+        );
 
-          req.on('error', (err) => reject(err));
-          req.on('timeout', () => {
-            req.destroy();
-            reject(new Error('Request timed out'));
-          });
+        const onAbort = () => {
+          req.destroy();
+          reject(new AiAbortError());
+        };
+        signal?.addEventListener('abort', onAbort, { once: true });
 
-          req.write(body);
-          req.end();
-        },
-      );
+        req.on('error', (err) => reject(err));
+        req.on('timeout', () => {
+          req.destroy();
+          reject(new Error('Request timed out'));
+        });
+
+        req.write(body);
+        req.end();
+      });
 
       if (response.error && isRetryableError(response.error.type)) {
         throw new Error(`${response.error.message} (type ${response.error.type})`);
@@ -507,16 +638,11 @@ async function makeRequestWithRetry(
 
       return response;
     } catch (err) {
+      if (isAbortError(err)) throw err;
       if (attempt === maxRetries) {
         return {
-          id: '',
-          type: 'message',
-          role: 'assistant',
           content: [],
-          model: '',
-          stop_reason: null,
-          stop_sequence: null,
-          usage: { input_tokens: 0, output_tokens: 0 },
+          stopReason: null,
           error: {
             type: 'retry_exhausted',
             message: `Request failed after ${maxRetries} retries: ${
@@ -530,18 +656,12 @@ async function makeRequestWithRetry(
     }
   }
   return {
-    id: '',
-    type: 'message',
-    role: 'assistant',
     content: [],
-    model: '',
-    stop_reason: null,
-    stop_sequence: null,
-    usage: { input_tokens: 0, output_tokens: 0 },
+    stopReason: null,
     error: { type: 'retry_exhausted', message: 'Max retries exceeded' },
   };
 }
 
 function isRetryableError(type: string): boolean {
-  return type === '429' || type === '408' || type === '409' || type === '425' || type === '500' || type === '502' || type === '503';
+  return ['429', '408', '409', '425', '500', '502', '503', '529', 'overloaded_error'].includes(type);
 }

@@ -17,18 +17,18 @@ function resolveAppIconPath(): string | undefined {
 
   const candidates = app.isPackaged
     ? [
-        path.join(process.resourcesPath, insider ? 'insider-icon.ico' : 'icon.ico'),
-        path.join(path.dirname(process.execPath), 'resources', insider ? 'insider-icon.ico' : 'icon.ico'),
-        // Fallback to regular icon if the insider icon is missing
-        path.join(process.resourcesPath, 'icon.ico'),
-        path.join(path.dirname(process.execPath), 'resources', 'icon.ico'),
-      ]
+      path.join(process.resourcesPath, insider ? 'insider-icon.ico' : 'icon.ico'),
+      path.join(path.dirname(process.execPath), 'resources', insider ? 'insider-icon.ico' : 'icon.ico'),
+      // Fallback to regular icon if the insider icon is missing
+      path.join(process.resourcesPath, 'icon.ico'),
+      path.join(path.dirname(process.execPath), 'resources', 'icon.ico'),
+    ]
     : [
-        // In development, the insider icon lives in src/renderer/public/
-        path.join(__dirname, '../../../src/renderer/public/insider-icon.ico'),
-        path.join(__dirname, '../../../build/icon.ico'),
-        path.join(__dirname, '../../../build/icon.png'),
-      ];
+      // In development, the insider icon lives in src/renderer/public/
+      path.join(__dirname, '../../../src/renderer/public/insider-icon.ico'),
+      path.join(__dirname, '../../../build/icon.ico'),
+      path.join(__dirname, '../../../build/icon.png'),
+    ];
   for (const file of candidates) {
     if (fs.existsSync(file)) return path.resolve(file);
   }
@@ -123,6 +123,7 @@ export function showEasterEggWindow(parent: BrowserWindow | null): void {
     backgroundColor: '#1e1e1e',
     icon,
     webPreferences: {
+      preload: path.join(__dirname, 'easterEggPreload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,

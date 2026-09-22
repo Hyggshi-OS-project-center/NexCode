@@ -206,6 +206,12 @@
   transition: all var(--transition, 0.15s ease);
 }
 
+/* The component's display rule overrides the browser's generic [hidden]
+   rule, so explicitly preserve the Desktop-only hide for Web ZIP export. */
+.explorer-tool-btn[hidden] {
+  display: none;
+}
+
 .explorer-tool-btn svg {
   width: 14px;
   height: 14px;

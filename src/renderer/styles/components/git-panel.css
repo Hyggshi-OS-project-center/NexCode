@@ -461,7 +461,7 @@
 .git-status-letter {
   font-size: 11px;
   font-weight: 700;
-  font-family: Consolas, monospace;
+  font-family: var(--font-mono, Consolas, monospace);
   margin-left: auto;
   padding-left: 4px;
 }

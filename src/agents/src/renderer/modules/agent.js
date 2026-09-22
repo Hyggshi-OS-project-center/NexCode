@@ -456,6 +456,34 @@ function removeTypingIndicator() {
     if (existing) existing.remove();
 }
 
+/**
+ * This window is a fully autonomous agent (no diff-review UI like the main
+ * IDE window), so write_file / delete_file actions are applied to disk
+ * immediately once the agent proposes them, then validated when possible.
+ */
+async function applyAgentActions(actions) {
+    if (!actions || actions.length === 0) return;
+    const api = window.electronAPI;
+
+    for (const action of actions) {
+        try {
+            if (action.type === 'write_file' && action.path) {
+                await api.writeFile(action.path, action.content ?? '');
+                if (api.validateFile) {
+                    const validation = await api.validateFile(action.path, state.workspacePath || null);
+                    if (validation && !validation.ok) {
+                        addSystemMessage(`Validation failed for ${action.path.split(/[/\\]/).pop()}: ${(validation.output || '').slice(0, 300)}`);
+                    }
+                }
+            } else if (action.type === 'delete_file' && action.path && api.deleteFile) {
+                await api.deleteFile(action.path);
+            }
+        } catch (err) {
+            addSystemMessage(`Failed to apply "${action.label}": ${err.message || err}`);
+        }
+    }
+}
+
 function addAction(action) {
     if (!dom.actionItemTemplate || !isElement(dom.actionLogList) || !isElement(dom.actionCount)) return;
     const template = dom.actionItemTemplate.content.cloneNode(true);
@@ -471,6 +499,18 @@ function addAction(action) {
             break;
         case 'read_file':
             icon.textContent = 'R';
+            item.classList.add('action-success');
+            break;
+        case 'delete_file':
+            icon.textContent = 'D';
+            item.classList.add('action-error');
+            break;
+        case 'list_directory':
+            icon.textContent = 'L';
+            item.classList.add('action-success');
+            break;
+        case 'search_files':
+            icon.textContent = 'S';
             item.classList.add('action-success');
             break;
         case 'run_command':
@@ -929,6 +969,7 @@ async function sendMessage() {
             updateProviderStatus('error');
             addSystemMessage(`Error: ${result.error}`);
         } else {
+            await applyAgentActions(result.actions || []);
             const replyText = result.text || '*(Agent completed the task without a text response.)*';
             addMessage('agent', replyText, {
                 actions: result.actions || [],

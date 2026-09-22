@@ -36,11 +36,28 @@ import { searchMarketplaceExtensions } from '../extensions/marketplaceService';
 import { clearRecentFiles, getRecentFiles, pushRecentFile, removeRecentFile } from '../recentFiles';
 import { closeAboutWindow, showAboutWindow } from '../about/aboutWindow';
 import { closeEasterEggWindow, showEasterEggWindow } from '../easterEgg/easterEggWindow';
+import { loadCustomEasterEggConfig } from '../easterEgg/customEasterEgg';
 import { chatWithGemini, listGeminiModels } from '../ai/geminiService';
 import { chatWithOpenRouter, listOpenRouterModels } from '../ai/openRouterService';
 import { chatWithClaude, listClaudeModels } from '../ai/claudeService';
+import { chatWithLocal, listLocalModels } from '../ai/localService';
+import { openMcpSession } from '../ai/mcpService';
 import { validateWrittenFile } from '../ai/agentWorkflow';
-import type { AboutInfo, AiChatMessage, AiEditorContext } from '../../shared/types';
+import type { AiStreamCallbacks } from '../ai/streaming';
+import {
+  clearConversations,
+  deleteConversation,
+  listConversations,
+  loadConversation,
+  saveConversation,
+} from '../chat/conversationStore';
+import type {
+  AboutInfo,
+  AiChatMessage,
+  AiChatResult,
+  AiEditorContext,
+  ChatConversation,
+} from '../../shared/types';
 import type { GitHubRelease, ReleaseNotesInfo } from '../../shared/types';
 import { UpdateService } from '../update/UpdateService';
 import { setupHoscIpcHandlers } from './hoscHandler';
@@ -94,6 +111,73 @@ function wrapFsError(error: unknown, filePath: string, operation: string): Error
     return new Error(`Path component is not a directory: "${filePath}".`);
   }
   return error instanceof Error ? error : new Error(String(error));
+}
+
+/**
+ * In-flight streaming runs, keyed by the renderer-supplied request id, so a
+ * "Stop" click can abort the HTTP request instead of leaving it running and
+ * throwing the answer away.
+ */
+const activeAiRuns = new Map<string, AbortController>();
+
+/** Routes a chat request to the provider configured in settings. */
+async function dispatchAiChat(
+  messages: AiChatMessage[],
+  workspacePath: string | null,
+  editorContext: AiEditorContext | null,
+  callbacks: AiStreamCallbacks = {},
+): Promise<AiChatResult> {
+  const settings = getSettings();
+  const mcpSession = await openMcpSession(settings.mcpServersJson);
+
+  try {
+
+  if (settings.aiProvider === 'openrouter') {
+    return await chatWithOpenRouter(
+      settings.openRouterApiKey,
+      settings.openRouterModel,
+      messages,
+      workspacePath,
+      editorContext,
+      undefined,
+      callbacks,
+      mcpSession,
+    );
+  }
+  if (settings.aiProvider === 'local') {
+      return await chatWithLocal(
+        settings.localAiBaseUrl,
+        settings.localAiModel,
+        messages,
+        workspacePath,
+        editorContext,
+        callbacks,
+        mcpSession,
+      );
+  }
+  if (settings.aiProvider === 'claude') {
+    return await chatWithClaude(
+      settings.claudeApiKey,
+      settings.claudeModel,
+      messages,
+      workspacePath,
+      editorContext,
+      callbacks,
+      mcpSession,
+    );
+  }
+  return await chatWithGemini(
+    settings.geminiApiKey,
+    settings.geminiModel,
+    messages,
+    workspacePath,
+    editorContext,
+    callbacks,
+    mcpSession,
+  );
+  } finally {
+    mcpSession?.close();
+  }
 }
 
 export function registerIpcHandlers(
@@ -306,10 +390,19 @@ export function registerIpcHandlers(
   ipcMain.on('window:showAbout', () => showAboutWindow(getWindow()));
   ipcMain.on('window:showEasterEgg', () => showEasterEggWindow(getWindow()));
   ipcMain.on('window:closeEasterEgg', () => closeEasterEggWindow());
+  ipcMain.handle('easterEgg:getCustomConfig', async () => loadCustomEasterEggConfig(currentWorkspacePath));
   ipcMain.handle('shell:openExternal', async (_e, url: string) => {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'https:') throw new Error('Only HTTPS links can be opened externally.');
-    await shell.openExternal(parsed.href);
+    try {
+      if (!url || typeof url !== 'string') return;
+      const parsed = new URL(url);
+      if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
+        console.warn(`[shell:openExternal] Blocked unsupported protocol: ${parsed.protocol} for URL: ${url}`);
+        return;
+      }
+      await shell.openExternal(parsed.href);
+    } catch (err) {
+      console.warn(`[shell:openExternal] Failed to open URL: ${url}`, err);
+    }
   });
   ipcMain.handle('shell:openPath', async (_e, filePath: string) => {
     await shell.openPath(filePath);
@@ -410,19 +503,19 @@ export function registerIpcHandlers(
     let iconUrl: string | null = null;
     const iconCandidates = app.isPackaged
       ? [
-          path.join(process.resourcesPath, insider ? 'insider-icon.ico' : 'icon.ico'),
-          path.join(path.dirname(process.execPath), 'resources', insider ? 'insider-icon.ico' : 'icon.ico'),
-          // Fallback to regular icon
-          path.join(process.resourcesPath, 'icon.ico'),
-          path.join(path.dirname(process.execPath), 'resources', 'icon.ico'),
-          path.join(process.resourcesPath, 'icon.png'),
-        ]
+        path.join(process.resourcesPath, insider ? 'insider-icon.ico' : 'icon.ico'),
+        path.join(path.dirname(process.execPath), 'resources', insider ? 'insider-icon.ico' : 'icon.ico'),
+        // Fallback to regular icon
+        path.join(process.resourcesPath, 'icon.ico'),
+        path.join(path.dirname(process.execPath), 'resources', 'icon.ico'),
+        path.join(process.resourcesPath, 'icon.png'),
+      ]
       : [
-          // In development, the insider icon lives in src/renderer/public/
-          path.join(__dirname, '../../../src/renderer/public/insider-icon.ico'),
-          path.join(__dirname, '../../../build/icon.ico'),
-          path.join(__dirname, '../../../build/icon.png'),
-        ];
+        // In development, the insider icon lives in src/renderer/public/
+        path.join(__dirname, '../../../src/renderer/public/insider-icon.ico'),
+        path.join(__dirname, '../../../build/icon.ico'),
+        path.join(__dirname, '../../../build/icon.png'),
+      ];
     for (const file of iconCandidates) {
       try {
         await fs.access(file);
@@ -514,48 +607,87 @@ export function registerIpcHandlers(
     searchMarketplaceExtensions(query, limit),
   );
 
-ipcMain.handle(
-     'ai:chat',
-     async (
-       _e,
-       messages: AiChatMessage[],
-       workspacePath?: string | null,
-       editorContext?: AiEditorContext | null,
-     ) => {
-        const settings = getSettings();
-        if (settings.aiProvider === 'openrouter') {
-          return chatWithOpenRouter(
-            settings.openRouterApiKey,
-            settings.openRouterModel,
-            messages,
-            workspacePath ?? null,
-            editorContext ?? null,
-          );
-        }
-        if (settings.aiProvider === 'claude') {
-          return chatWithClaude(
-            settings.claudeApiKey,
-            settings.claudeModel,
-            messages,
-            workspacePath ?? null,
-            editorContext ?? null,
-          );
-        }
-        return chatWithGemini(
-          settings.geminiApiKey,
-          settings.geminiModel,
+  ipcMain.handle(
+    'ai:chat',
+    async (
+      _e,
+      messages: AiChatMessage[],
+      workspacePath?: string | null,
+      editorContext?: AiEditorContext | null,
+    ) => dispatchAiChat(messages, workspacePath ?? null, editorContext ?? null),
+  );
+
+  /**
+   * Streaming chat. Text is pushed to the renderer through `ai:chat-delta`
+   * as the model produces it, so the reply renders token by token instead of
+   * appearing all at once when the request finishes.
+   */
+  ipcMain.handle(
+    'ai:chat-stream',
+    async (
+      event,
+      requestId: string,
+      messages: AiChatMessage[],
+      workspacePath?: string | null,
+      editorContext?: AiEditorContext | null,
+    ): Promise<AiChatResult> => {
+      // A repeated id would orphan the previous controller — stop it first.
+      activeAiRuns.get(requestId)?.abort();
+
+      const controller = new AbortController();
+      activeAiRuns.set(requestId, controller);
+
+      const sender = event.sender;
+      const send = (channel: string, payload: unknown) => {
+        if (sender.isDestroyed()) return;
+        sender.send(channel, payload);
+      };
+
+      try {
+        const result = await dispatchAiChat(
           messages,
           workspacePath ?? null,
           editorContext ?? null,
+          {
+            signal: controller.signal,
+            onDelta: (text) => send('ai:chat-delta', { requestId, text }),
+            onStatus: (status) => send('ai:chat-status', { requestId, ...status }),
+          },
         );
-      },
-   );
+        return controller.signal.aborted ? { ...result, cancelled: true } : result;
+      } catch (err) {
+        return {
+          error: `AI request failed: ${err instanceof Error ? err.message : String(err)}`,
+          cancelled: controller.signal.aborted,
+        };
+      } finally {
+        activeAiRuns.delete(requestId);
+      }
+    },
+  );
 
-   // Validate a file after user approves AI changes
-   ipcMain.handle('ai:validate', async (_e, filePath: string, workspacePath: string | null) => {
-     const cwd = workspacePath ?? process.cwd();
-     return validateWrittenFile(filePath, workspacePath ?? null, cwd, []);
-   });
+  ipcMain.on('ai:chat-cancel', (_e, requestId: string) => {
+    activeAiRuns.get(requestId)?.abort();
+  });
+
+  // ── Chat history ──
+  ipcMain.handle('chat:list', async () => listConversations());
+  ipcMain.handle('chat:load', async (_e, id: string) => loadConversation(id));
+  ipcMain.handle('chat:save', async (_e, conversation: ChatConversation) => {
+    try {
+      return await saveConversation(conversation);
+    } catch {
+      return null; // A failed save must never break the conversation itself.
+    }
+  });
+  ipcMain.handle('chat:delete', async (_e, id: string) => deleteConversation(id));
+  ipcMain.handle('chat:clear', async () => clearConversations());
+
+  // Validate a file after user approves AI changes
+  ipcMain.handle('ai:validate', async (_e, filePath: string, workspacePath: string | null) => {
+    const cwd = workspacePath ?? process.cwd();
+    return validateWrittenFile(filePath, workspacePath ?? null, cwd, []);
+  });
 
   // Dynamic AI model listing
   ipcMain.handle('models:list-gemini', async () => {
@@ -580,9 +712,17 @@ ipcMain.handle(
 
   ipcMain.handle('models:list-claude', async () => {
     try {
-      return await listClaudeModels();
+      return await listClaudeModels(getSettings().claudeApiKey);
     } catch {
       return [];
+    }
+  });
+
+  ipcMain.handle('models:list-local', async () => {
+    try {
+      return await listLocalModels(getSettings().localAiBaseUrl);
+    } catch {
+      return []; // server not running / unreachable → renderer keeps its fallback
     }
   });
 

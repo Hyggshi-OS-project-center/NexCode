@@ -2,10 +2,16 @@
  * Gemini API service — autonomous agent with file and terminal tools.
  */
 import https from 'https';
-import fs from 'fs';
-import path from 'path';
 import type { AiAgentAction, AiChatMessage, AiChatResult, AiEditorContext } from '../../shared/types';
-import { runCommandCapture } from './agentWorkflow';
+import { AGENT_WORKFLOW_INSTRUCTIONS, AgentRunState, executeAgentTool, toGeminiTools } from './agentTools';
+import type { McpSession } from './mcpService';
+import {
+  AiAbortError,
+  isAbortError,
+  requestSse,
+  throwIfAborted,
+  type AiStreamCallbacks,
+} from './streaming';
 
 const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 const GEMINI_HOST = 'generativelanguage.googleapis.com';
@@ -65,50 +71,6 @@ export interface ListedModel {
   supportsImages: boolean;
 }
 
-const TOOLS = [
-  {
-    functionDeclarations: [
-      {
-        name: 'write_file',
-        description:
-          'Writes content to a file in the workspace. Use this instead of showing code in chat when the user wants a file created or updated.',
-        parameters: {
-          type: 'OBJECT',
-          properties: {
-            filePath: {
-              type: 'STRING',
-              description: 'Path relative to workspace root or absolute',
-            },
-            content: { type: 'STRING', description: 'Full file text content' },
-          },
-          required: ['filePath', 'content'],
-        },
-      },
-      {
-        name: 'read_file',
-        description: 'Reads a text file from the workspace.',
-        parameters: {
-          type: 'OBJECT',
-          properties: {
-            filePath: { type: 'STRING', description: 'Path relative to workspace or absolute' },
-          },
-          required: ['filePath'],
-        },
-      },
-      {
-        name: 'run_command',
-        description: 'Runs a shell command in the workspace directory (cmd on Windows).',
-        parameters: {
-          type: 'OBJECT',
-          properties: {
-            command: { type: 'STRING', description: 'Shell command to execute' },
-          },
-          required: ['command'],
-        },
-      },
-    ],
-  },
-];
 
 // ---------------------------------------------------------------------------
 // Dynamic model listing
@@ -160,21 +122,6 @@ export async function listGeminiModels(apiKey: string): Promise<ListedModel[]> {
 // Chat
 // ---------------------------------------------------------------------------
 
-function resolveInWorkspace(filePath: string, workspacePath: string | null): string {
-  if (path.isAbsolute(filePath)) return path.normalize(filePath);
-  const base = workspacePath ?? process.cwd();
-  return path.resolve(base, filePath);
-}
-
-function displayPath(filePath: string, workspacePath: string | null): string {
-  const resolved = resolveInWorkspace(filePath, workspacePath);
-  if (workspacePath) {
-    const rel = path.relative(workspacePath, resolved);
-    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) return rel;
-  }
-  return path.basename(resolved);
-}
-
 function toGeminiParts(message: AiChatMessage): GeminiPart[] {
   const parts: GeminiPart[] = [];
   if (message.text) parts.push({ text: message.text });
@@ -215,6 +162,8 @@ export async function chatWithGemini(
   messages: AiChatMessage[],
   workspacePath: string | null,
   editorContext: AiEditorContext | null = null,
+  callbacks: AiStreamCallbacks = {},
+  mcpSession: McpSession | null = null,
 ): Promise<AiChatResult> {
   if (!apiKey?.trim()) {
     return { error: 'No API key configured. Open Settings → AI / Gemini and add your API key.' };
@@ -245,135 +194,233 @@ export async function chatWithGemini(
     parts: [
       {
         text: `You are an autonomous AI Agent in NexCode IDE. ${workspaceHint}
-When the user asks you to create or change files, you MUST call write_file — do not only paste code in chat.
-Workflow: understand the request, inspect files when needed, write the full updated file, run command checks when useful, read errors, and fix the code until validation passes or no reliable local check exists.
-After every write_file result, review any validation output. If validation failed, you MUST fix the reported errors with another write_file before giving a final answer.
-You may call run_command to execute local command prompts for builds, tests, linting, type checks, and diagnostics. Prefer targeted checks over broad unrelated commands.
-When the user asks you to lint, inspect, review, or diagnose code, use the active editor context and return concise diagnostics with line numbers, severity, the issue, and a suggested fix. Do not call write_file for lint requests unless the user explicitly asks you to apply the fixes.
-After write_file succeeds, briefly confirm what you did in plain language.
-Be concise and proactive.`,
+${AGENT_WORKFLOW_INSTRUCTIONS}
+When the user asks you to lint, inspect, review, or diagnose code, use the active editor context and return concise diagnostics with line numbers, severity, the issue, and a suggested fix. Do not call write_file for lint requests unless the user explicitly asks you to apply the fixes.`,
       },
     ],
   };
 
-  const url = `/v1beta/models/${selectedModel}:generateContent?key=${apiKey}`;
-  const actions: AiAgentAction[] = [];
+  // The key is a query parameter, so it has to be encoded — an unescaped key
+  // containing a reserved character silently produced a 400 here.
+  const encodedKey = encodeURIComponent(apiKey);
+  const generatePath = `/v1beta/models/${encodeURIComponent(selectedModel)}:generateContent?key=${encodedKey}`;
+  const streamPath = `/v1beta/models/${encodeURIComponent(selectedModel)}:streamGenerateContent?alt=sse&key=${encodedKey}`;
+
+  const runState = new AgentRunState(workspacePath);
+  const tools = toGeminiTools((mcpSession?.openAiTools ?? []).map((tool) => tool.function));
+  const actions = runState.actions;
+  const transcript: string[] = [];
   let iteration = 0;
   const maxIterations = 10;
 
-  while (iteration < maxIterations) {
-    iteration++;
+  try {
+    while (iteration < maxIterations) {
+      iteration++;
+      throwIfAborted(callbacks.signal);
 
-    const body = JSON.stringify({
-      contents,
-      tools: TOOLS,
-      generationConfig: {
-        temperature: 0.2,
-        topP: 0.95,
-        topK: 40,
-        maxOutputTokens: 8192,
-      },
-      systemInstruction,
-    });
+      const body = JSON.stringify({
+        contents,
+        tools,
+        generationConfig: {
+          temperature: 0.2,
+          topP: 0.95,
+          topK: 40,
+          maxOutputTokens: 8192,
+        },
+        systemInstruction,
+      });
 
-    const json = await makeRequestWithRetry(url, body, 3);
+      const json = callbacks.onDelta
+        ? await streamTurn(streamPath, body, transcript, callbacks)
+        : await makeRequestWithRetry(generatePath, body, 3, callbacks.signal);
 
-    if (json.error) {
-      return {
-        error: `Gemini API error: ${json.error.message ?? 'Unknown error'} (code ${json.error.code ?? '?'})`,
-        actions: actions.length > 0 ? actions : undefined,
-      };
-    }
-
-    const candidateContent = json.candidates?.[0]?.content;
-    if (!candidateContent?.parts?.length) {
-      const reason = json.candidates?.[0]?.finishReason;
-      return {
-        error: `No response from Gemini${reason ? ` (${reason})` : ''}. Try rephrasing your question.`,
-        actions: actions.length > 0 ? actions : undefined,
-      };
-    }
-
-    const part = candidateContent.parts.find(
-      (candidatePart) => candidatePart.functionCall || candidatePart.text,
-    );
-    if (!part) {
-      return { error: 'Received an empty or unsupported response from Gemini.', actions };
-    }
-
-    if (part.functionCall) {
-      const call = part.functionCall;
-      let functionResult: unknown = null;
-      let functionError: string | undefined;
-
-      try {
-        if (call.name === 'write_file') {
-          const resolved = resolveInWorkspace(call.args.filePath, workspacePath);
-          let originalContent = '';
-          try {
-            originalContent = await fs.promises.readFile(resolved, 'utf-8');
-          } catch { /* file does not exist yet */ }
-          const newContent = call.args.content ?? '';
-          actions.push({
-            type: 'write_file',
-            path: resolved,
-            content: newContent,
-            originalContent,
-            label: `Wrote file \`${displayPath(call.args.filePath, workspacePath)}\``,
-          });
-          functionResult = `Prepared ${resolved} for diff review.`;
-        } else if (call.name === 'read_file') {
-          const resolved = resolveInWorkspace(call.args.filePath, workspacePath);
-          functionResult = await fs.promises.readFile(resolved, 'utf-8');
-          actions.push({
-            type: 'read_file',
-            path: resolved,
-            label: `📖 Read file \`${displayPath(call.args.filePath, workspacePath)}\``,
-          });
-        } else if (call.name === 'run_command') {
-          const cwd = workspacePath ?? process.cwd();
-          const result = await runCommandCapture(call.args.command, cwd);
-          functionResult = {
-            code: result.code,
-            output:
-              result.output ||
-              (result.code === 0 ? 'Command completed without output.' : 'Command failed without output.'),
-          };
-          actions.push({
-            type: 'run_command',
-            command: call.args.command,
-            label: `💻 Ran command \`${call.args.command}\``,
-          });
-        } else {
-          functionError = `Unknown function: ${call.name}`;
-        }
-      } catch (err) {
-        functionError = err instanceof Error ? err.message : String(err);
+      if (json.error) {
+        if (transcript.length > 0) return { text: transcript.join('').trim(), actions: orUndefined(actions) };
+        return {
+          error: `Gemini API error: ${json.error.message ?? 'Unknown error'} (code ${json.error.code ?? '?'})`,
+          actions: orUndefined(actions),
+        };
       }
 
-      contents.push({ role: 'model', parts: candidateContent.parts });
-      contents.push({
-        role: 'user',
-        parts: [
-          {
+      const candidateContent = json.candidates?.[0]?.content;
+      if (!candidateContent?.parts?.length) {
+        if (transcript.length > 0) return { text: transcript.join('').trim(), actions: orUndefined(actions) };
+        const reason = json.candidates?.[0]?.finishReason;
+        return {
+          error: `No response from Gemini${reason ? ` (${reason})` : ''}. Try rephrasing your question.`,
+          actions: orUndefined(actions),
+        };
+      }
+
+      // Skip "thought" parts — they are internal reasoning, not an answer.
+      const visibleParts = candidateContent.parts.filter((part) => part.thought !== true);
+
+      /*
+       * Gemini may return narration *and* one or more function calls in the
+       * same turn, e.g. [{text: "Let me check that file"}, {functionCall: …}].
+       * The old code took the first part matching `functionCall || text`, so a
+       * leading text part made it return early and silently drop every tool
+       * call — the agent looked like it answered but never touched a file.
+       * Collect all calls instead, and only treat a turn as final when it
+       * contains no calls at all.
+       */
+      const functionCalls = visibleParts
+        .map((part) => part.functionCall)
+        .filter((call): call is GeminiFunctionCall => Boolean(call));
+
+      if (functionCalls.length > 0) {
+        contents.push({ role: 'model', parts: candidateContent.parts });
+
+        const responses: GeminiPart[] = [];
+        for (const call of functionCalls) {
+          throwIfAborted(callbacks.signal);
+          callbacks.onStatus?.({ label: `Running ${call.name}`, kind: 'thinking', status: 'running' });
+
+          const toolArgs = call.args as Record<string, unknown>;
+          const { result: functionResult, error: functionError } = call.name.startsWith('mcp__') && mcpSession
+            ? await mcpSession.call(call.name, toolArgs)
+            : await executeAgentTool(call.name, toolArgs, runState);
+
+          callbacks.onStatus?.({
+            label: functionError ? `${call.name} failed: ${functionError}` : `${call.name} completed`,
+            kind: 'thinking',
+            status: functionError ? 'failed' : 'done',
+          });
+
+          responses.push({
             functionResponse: {
               name: call.name,
               response: functionError ? { error: functionError } : { result: functionResult },
             },
-          },
-        ],
-      });
-    } else if (part.text) {
-      return { text: part.text.trim(), actions: actions.length > 0 ? actions : undefined };
-    } else {
+          });
+        }
+
+        contents.push({ role: 'user', parts: responses });
+        continue;
+      }
+
+      // No tool calls left — this turn is the answer.
+      if (callbacks.onDelta) {
+        const full = transcript.join('').trim();
+        if (full) return { text: full, actions: orUndefined(actions) };
+      } else {
+        const text = visibleParts.map((part) => part.text ?? '').join('').trim();
+        if (text) return { text, actions: orUndefined(actions) };
+      }
+
       return { error: 'Received an empty or unsupported response from Gemini.', actions };
+    }
+  } catch (err) {
+    if (isAbortError(err)) {
+      const partial = transcript.join('').trim();
+      return partial
+        ? { text: partial, actions: orUndefined(actions) }
+        : { error: 'Cancelled.', actions: orUndefined(actions) };
+    }
+    return {
+      error: `Gemini request failed: ${err instanceof Error ? err.message : String(err)}`,
+      actions: orUndefined(actions),
+    };
+  }
+
+  if (transcript.length > 0) return { text: transcript.join('').trim(), actions: orUndefined(actions) };
+  return {
+    error: 'Agent stopped after reaching maximum iterations (10).',
+    actions: orUndefined(actions),
+  };
+}
+
+function orUndefined(actions: AiAgentAction[]): AiAgentAction[] | undefined {
+  return actions.length > 0 ? actions : undefined;
+}
+
+/**
+ * Runs one turn against `:streamGenerateContent?alt=sse`.
+ *
+ * Each SSE payload is a partial GenerateContentResponse; text parts are pushed
+ * to the caller as they land and the parts are merged back into one candidate
+ * so the surrounding agent loop can treat streamed and buffered turns alike.
+ */
+async function streamTurn(
+  urlPath: string,
+  body: string,
+  transcript: string[],
+  callbacks: AiStreamCallbacks,
+): Promise<GeminiResponse> {
+  const parts: GeminiPart[] = [];
+  let finishReason: string | undefined;
+  let streamError: { message?: string; code?: number } | undefined;
+  let textPart: GeminiPart | null = null;
+  let wroteThisTurn = false;
+
+  const result = await requestSse({
+    url: `https://${GEMINI_HOST}${urlPath}`,
+    headers: { 'Content-Type': 'application/json' },
+    body,
+    timeoutMs: 180_000,
+    signal: callbacks.signal,
+    onData: (payload) => {
+      let chunk: GeminiResponse;
+      try {
+        chunk = JSON.parse(payload) as GeminiResponse;
+      } catch {
+        return;
+      }
+
+      if (chunk.error) {
+        streamError = chunk.error;
+        return;
+      }
+
+      const candidate = chunk.candidates?.[0];
+      if (candidate?.finishReason) finishReason = candidate.finishReason;
+
+      for (const part of candidate?.content?.parts ?? []) {
+        if (part.thought === true) continue;
+
+        if (part.functionCall) {
+          parts.push(part);
+          callbacks.onStatus?.({
+            label: `Preparing ${part.functionCall.name}`,
+            kind: 'thinking',
+            status: 'running',
+          });
+          continue;
+        }
+
+        if (typeof part.text === 'string' && part.text.length > 0) {
+          if (!wroteThisTurn && transcript.length > 0) {
+            transcript.push('\n\n');
+            callbacks.onDelta?.('\n\n');
+          }
+          wroteThisTurn = true;
+          transcript.push(part.text);
+          callbacks.onDelta?.(part.text);
+
+          // Merge consecutive text fragments into a single part.
+          if (textPart) {
+            textPart.text = (textPart.text ?? '') + part.text;
+          } else {
+            textPart = { text: part.text };
+            parts.push(textPart);
+          }
+        }
+      }
+    },
+  });
+
+  if (result.errorBody !== null) {
+    try {
+      const parsed = JSON.parse(result.errorBody) as GeminiResponse;
+      return { error: parsed.error ?? { message: result.errorBody.slice(0, 300), code: result.status } };
+    } catch {
+      return { error: { message: result.errorBody.slice(0, 300) || `HTTP ${result.status}`, code: result.status } };
     }
   }
 
-  return {
-    error: 'Agent stopped after reaching maximum iterations (10).',
-    actions: actions.length > 0 ? actions : undefined,
-  };
+  if (streamError) return { error: streamError };
+
+  return { candidates: [{ content: { role: 'model', parts }, finishReason }] };
 }
 
 function formatEditorContext(context: AiEditorContext | null): string {
@@ -431,8 +478,10 @@ async function makeRequestWithRetry(
   url: string,
   body: string,
   maxRetries: number,
+  signal?: AbortSignal,
 ): Promise<GeminiResponse> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    throwIfAborted(signal);
     try {
       const response = await new Promise<GeminiResponse>((resolve, reject) => {
         const req = https.request(
@@ -469,6 +518,12 @@ async function makeRequestWithRetry(
           },
         );
 
+        const onAbort = () => {
+          req.destroy();
+          reject(new AiAbortError());
+        };
+        signal?.addEventListener('abort', onAbort, { once: true });
+
         req.on('error', (err) => reject(err));
         req.on('timeout', () => {
           req.destroy();
@@ -481,6 +536,7 @@ async function makeRequestWithRetry(
 
       return response;
     } catch (err) {
+      if (isAbortError(err)) throw err;
       if (attempt === maxRetries) {
         return {
           error: {

@@ -92,7 +92,7 @@ function showCrashMessage(error: unknown): void {
   crashMessageShown = true;
   const detail = error instanceof Error ? error.stack ?? error.message : String(error);
   dialog.showErrorBox('NexCode crashed', `(???)\nI don't know what the error is either...\n\n${detail}`);
-  void shell.openExternal(CRASH_ISSUES_URL);
+  void shell.openExternal(CRASH_ISSUES_URL).catch(() => {});
   void playCrashAudio();
   mainWindow?.webContents.openDevTools({ mode: 'detach' });
 }
@@ -217,7 +217,16 @@ function createWindow(): void {
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+    try {
+      const parsed = new URL(url);
+      if (['http:', 'https:', 'mailto:'].includes(parsed.protocol)) {
+        shell.openExternal(parsed.href).catch((err) => {
+          console.warn('[main] Failed to open external URL:', url, err);
+        });
+      }
+    } catch (err) {
+      console.warn('[main] Invalid window open URL:', url, err);
+    }
     return { action: 'deny' };
   });
 

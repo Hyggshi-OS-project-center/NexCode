@@ -1,5 +1,5 @@
 /**
- * Source Control (Git Panel) — Modern Industrial-Standard (Bản Tiêu Chuẩn)
+ * Source Control (Git Panel) — Modern Industrial-Standard.
  * Supports Staged Changes, Unstaged/Untracked Changes, Individual/Batch Stage/Unstage/Discard,
  * Smart AI Commit Generation, Split Commit Button, Visual Commit Graph/History, and Diff View.
  */

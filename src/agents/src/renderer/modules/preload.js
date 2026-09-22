@@ -25,6 +25,35 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
 
     /**
+     * Write a file to disk. Used to apply write_file agent actions — this
+     * window has no diff-review UI, so it is fully autonomous and applies
+     * changes immediately.
+     * @param {string} filePath
+     * @param {string} content
+     */
+    writeFile: (filePath, content) => {
+        return ipcRenderer.invoke('fs:writeFile', filePath, content);
+    },
+
+    /**
+     * Delete a file from disk. Used to apply delete_file agent actions.
+     * @param {string} filePath
+     */
+    deleteFile: (filePath) => {
+        return ipcRenderer.invoke('fs:unlink', filePath);
+    },
+
+    /**
+     * Run the local validation command (build/lint/typecheck) for a file
+     * after it has been written, so the agent's changes are checked.
+     * @param {string} filePath
+     * @param {string|null} workspacePath
+     */
+    validateFile: (filePath, workspacePath) => {
+        return ipcRenderer.invoke('ai:validate', filePath, workspacePath);
+    },
+
+    /**
      * Get the current editor context from the main IDE window.
      * @returns {Promise<{ activeFilePath: string|null, languageId: string|null, cursor?: object, selection?: object, selectedText?: string, content?: string }|null>}
      */

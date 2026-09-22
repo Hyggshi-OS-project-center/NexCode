@@ -6,6 +6,7 @@ export class EditorIdleEasterEgg {
   private idleTimer: ReturnType<typeof window.setTimeout> | null = null;
   private lastPointerMoveAt = 0;
   private visible = false;
+  private enabled = true;
 
   constructor(containerId: string) {
     const container = document.getElementById(containerId);
@@ -34,6 +35,16 @@ export class EditorIdleEasterEgg {
     document.removeEventListener('visibilitychange', this.handleActivity);
     this.clearTimers();
     this.closeWindow();
+  }
+
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+    if (!enabled) {
+      this.clearTimers();
+      this.hide();
+      return;
+    }
+    this.scheduleIdle();
   }
 
   private bindActivity(): void {
@@ -68,6 +79,7 @@ export class EditorIdleEasterEgg {
   };
 
   private scheduleIdle(): void {
+    if (!this.enabled) return;
     if (this.idleTimer !== null) window.clearTimeout(this.idleTimer);
     this.idleTimer = window.setTimeout(() => this.show(), IDLE_DELAY_MS);
   }
@@ -94,6 +106,7 @@ export class EditorIdleEasterEgg {
   }
 
   private canShow(): boolean {
+    if (!this.enabled) return false;
     if (document.hidden || !document.hasFocus()) return false;
     const splitRoot = document.getElementById('editor-split-root');
     if (!splitRoot || splitRoot.classList.contains('hidden')) return false;

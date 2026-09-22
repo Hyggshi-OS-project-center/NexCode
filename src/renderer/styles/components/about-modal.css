@@ -65,7 +65,7 @@
 }
 
 .about-modal-version code {
-  font-family: Consolas, 'Courier New', monospace;
+  font-family: var(--font-mono, Consolas, 'Courier New', monospace);
   font-size: 12px;
   background: rgba(255, 255, 255, 0.08);
   padding: 2px 6px;

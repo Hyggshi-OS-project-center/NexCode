@@ -63,6 +63,7 @@ export class EditorManager {
   private secondaryBreakpointDecorations: monaco.editor.IEditorDecorationsCollection | null = null;
   private primaryDebugLineDecorations: monaco.editor.IEditorDecorationsCollection | null = null;
   private secondaryDebugLineDecorations: monaco.editor.IEditorDecorationsCollection | null = null;
+  private containerResizeObserver: ResizeObserver | null = null;
 
   constructor(hostId: string, settings: AppSettings) {
     this.host = document.getElementById(hostId)!;
@@ -78,6 +79,24 @@ export class EditorManager {
     this.secondaryHost.addEventListener('mousedown', () => {
       this.focusedPane = 'secondary';
     });
+
+    // Backup ResizeObserver on editor-container: ensures layout() is called
+    // whenever the CSS grid reflows (e.g. sidebar toggle). automaticLayout:true
+    // handles gradual resize via the CSS transition; this catches any edge cases.
+    const editorContainer = document.getElementById('editor-container');
+    if (editorContainer) {
+      this.containerResizeObserver = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        if (!entry) return;
+        const { width, height } = entry.contentRect;
+        // Only call layout when the container actually has positive dimensions
+        if (width > 0 && height > 0) {
+          this.editor?.layout();
+          this.editorSecondary?.layout();
+        }
+      });
+      this.containerResizeObserver.observe(editorContainer);
+    }
   }
 
   setHandlers(
@@ -342,24 +361,30 @@ export class EditorManager {
   }
 
   private buildOptions(): monaco.editor.IStandaloneEditorConstructionOptions {
+    const s = this.settings;
     return {
-      theme: getMonacoTheme(this.settings.theme),
-      fontFamily: this.settings.fontFamily,
-      fontSize: this.settings.fontSize,
-      tabSize: this.settings.tabSize,
+      theme: getMonacoTheme(s.theme),
+      fontFamily: s.editorFontFamily,
+      fontSize: s.fontSize,
+      tabSize: s.tabSize,
       insertSpaces: true,
-      wordWrap: this.settings.wordWrap ? 'on' : 'off',
-      minimap: { enabled: this.settings.minimap },
-      automaticLayout: true,
+      wordWrap: s.wordWrap ? 'on' : 'off',
+      minimap: { enabled: s.minimap },
       scrollBeyondLastLine: false,
-      smoothScrolling: true,
-      cursorBlinking: 'smooth',
-      cursorSmoothCaretAnimation: 'on',
+      smoothScrolling: s.smoothScrolling ?? true,
+      cursorBlinking: s.cursorBlinking ?? 'smooth',
+      cursorSmoothCaretAnimation: s.cursorSmoothCaretAnimation ?? 'on',
       renderWhitespace: 'selection',
-      bracketPairColorization: { enabled: true },
+      bracketPairColorization: { enabled: s.bracketPairColorization ?? true },
+      guides: {
+        bracketPairs: s.bracketPairGuides === 'always' ? true
+          : s.bracketPairGuides === 'active' ? 'active'
+          : false,
+      },
+      hover: { delay: s.hoverDelay ?? 300 },
       suggestOnTriggerCharacters: true,
       quickSuggestions: true,
-      wordBasedSuggestions: 'matchingDocuments',
+      wordBasedSuggestions: s.wordBasedSuggestions ?? 'matchingDocuments',
       formatOnPaste: true,
       padding: { top: 12 },
       glyphMargin: true,
@@ -370,21 +395,32 @@ export class EditorManager {
       colorDecorators: true,
       colorDecoratorsActivatedOn: 'clickAndHover',
       // Performance optimizations for large files
-      largeFileOptimizations: this.settings.largeFileOptimizations,
-      maxTokenizationLineLength: this.settings.maxTokenizationLineLength,
-      stopRenderingLineAfter: this.settings.stopRenderingLineAfter,
+      largeFileOptimizations: s.largeFileOptimizations,
+      maxTokenizationLineLength: s.maxTokenizationLineLength,
+      stopRenderingLineAfter: s.stopRenderingLineAfter,
+      automaticLayout: true,
     };
   }
 
   applySettings(settings: AppSettings): void {
     this.settings = settings;
-    const options = {
-      theme: getMonacoTheme(settings.theme),
-      fontFamily: settings.fontFamily,
+    const options: monaco.editor.IStandaloneEditorConstructionOptions = {
+      fontFamily: settings.editorFontFamily,
       fontSize: settings.fontSize,
       tabSize: settings.tabSize,
       wordWrap: settings.wordWrap ? ('on' as const) : ('off' as const),
       minimap: { enabled: settings.minimap },
+      smoothScrolling: settings.smoothScrolling ?? true,
+      cursorBlinking: settings.cursorBlinking ?? 'smooth',
+      cursorSmoothCaretAnimation: settings.cursorSmoothCaretAnimation ?? 'on',
+      bracketPairColorization: { enabled: settings.bracketPairColorization ?? true },
+      guides: {
+        bracketPairs: settings.bracketPairGuides === 'always' ? true
+          : settings.bracketPairGuides === 'active' ? 'active'
+          : false,
+      },
+      hover: { delay: settings.hoverDelay ?? 300 },
+      wordBasedSuggestions: settings.wordBasedSuggestions ?? 'matchingDocuments',
       // Performance settings
       largeFileOptimizations: settings.largeFileOptimizations,
       maxTokenizationLineLength: settings.maxTokenizationLineLength,

@@ -12,9 +12,11 @@ export interface DiffEditorPendingWrite {
   originalContent: string;
   modifiedContent: string;
   label: string;
+  /** True when this pending write represents a delete_file action (modifiedContent is always ''). */
+  isDelete?: boolean;
 }
 
-export type DiffEditorApproveHandler = (path: string, content: string) => void | Promise<void>;
+export type DiffEditorApproveHandler = (path: string, content: string, isDelete?: boolean) => void | Promise<void>;
 export type DiffEditorRejectHandler = (path: string, originalContent: string) => void | Promise<void>;
 
 export class DiffEditor {
@@ -296,7 +298,7 @@ export class DiffEditor {
     const write = this.pendingWrites[this.currentIndex];
     if (!write) return;
 
-    await this.onApprove(write.path, write.modifiedContent);
+    await this.onApprove(write.path, write.modifiedContent, write.isDelete);
     this.advanceOrFinish();
   }
 
@@ -344,7 +346,7 @@ export class DiffEditor {
     for (let i = this.currentIndex; i < this.pendingWrites.length; i++) {
       const write = this.pendingWrites[i];
       try {
-        await this.onApprove(write.path, write.modifiedContent);
+        await this.onApprove(write.path, write.modifiedContent, write.isDelete);
       } catch (err) {
         console.error(`[DiffEditor] Failed to approve ${write.path}:`, err);
       }

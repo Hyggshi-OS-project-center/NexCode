@@ -2,7 +2,7 @@
  * File / folder icon resolution for the explorer tree (SVG + win32 ICO).
  */
 import { resolveExplorerIcon } from '../../shared/win32IconMap';
-import { getIconSvg, getWin32IconUrl } from './iconRegistry';
+import { getIconSvg, getIconSvgDataUri, getWin32IconUrl } from './iconRegistry';
 
 export interface FileIconDescriptor {
   iconName: string;
@@ -145,4 +145,25 @@ export function renderFileIconHtml(
 
   const svg = getIconSvg(icon.iconName);
   return `<span class="tree-icon tree-icon-file" role="img" aria-label="${escapeAttr(icon.iconName)}" aria-hidden="true">${svg}</span>`;
+}
+
+/**
+ * HTML for a tab bar icon — uses <img> with SVG data URI instead of inline SVG.
+ * This avoids all inline SVG gradient ID conflicts and browser rendering context
+ * resets that cause gradient-based icons to disappear on sidebar panel switches.
+ */
+export function renderFileIconTabHtml(name: string): string {
+  const icon = getFileIcon(name, false, false);
+
+  // ICO files already use <img>, safe to reuse existing URL
+  if (icon.kind === 'ico') {
+    const url = getWin32IconUrl(icon.iconName);
+    if (url) {
+      return `<span class="tree-icon tree-icon-file tree-icon-ico" role="img" aria-label="${escapeAttr(icon.iconName)}" aria-hidden="true"><img src="${escapeAttr(url)}" alt="" width="16" height="16" decoding="async" /></span>`;
+    }
+  }
+
+  // SVG: encode as data URI to avoid gradient ID conflicts in the DOM
+  const dataUri = getIconSvgDataUri(icon.iconName);
+  return `<span class="tree-icon tree-icon-file tree-icon-img" role="img" aria-label="${escapeAttr(icon.iconName)}" aria-hidden="true"><img src="${escapeAttr(dataUri)}" alt="" width="16" height="16" decoding="async" /></span>`;
 }

@@ -1,5 +1,5 @@
 /**
- * Integrated Terminal Module — Standard Industrial Quality (Bản Tiêu Chuẩn).
+ * Integrated Terminal Module — Standard Industrial Quality.
  * Supports multi-terminal tabs, real-time PTY resizing, direct xterm interaction,
  * smooth theme syncing, WebGL/Canvas rendering, and shell switching.
  */
@@ -56,6 +56,7 @@ export class TerminalModule {
   private activeView: TerminalPanelView = 'terminal';
   private resizeObserver: ResizeObserver | null = null;
   private isMaximized = false;
+  private lastPasteTimestamp = 0;
 
   constructor(
     panelId: string,
@@ -311,6 +312,15 @@ export class TerminalModule {
   }
 
   async createTerminal(options?: TerminalShell | TerminalCreateOptions): Promise<number> {
+    // node-pty is a Node native binding and cannot run in a browser tab — the
+    // web build stubs createTerminal() to return null. Bail out early with a
+    // clear message instead of silently building a dead xterm instance.
+    if ((window.electronAPI as any)?.isWeb) {
+      this.placeholder.textContent = 'Terminal is not available in the Web build — use the Desktop app for full terminal support.';
+      this.placeholder.classList.remove('hidden');
+      return -1;
+    }
+
     const opts: TerminalCreateOptions =
       typeof options === 'string'
         ? { shell: options, cwd: this.cwd ?? undefined }
@@ -328,13 +338,16 @@ export class TerminalModule {
     opts.rows = rows;
 
     const id = await window.electronAPI.createTerminal(opts);
-    if (id < 0) return -1;
+    // Defensive: some backends (e.g. the web stub) resolve with null/undefined
+    // rather than a negative id — `null < 0` is false in JS, so check for a
+    // missing id explicitly too, not just a negative one.
+    if (id == null || id < 0) return -1;
 
     const shell = opts.shell;
     const term = new Terminal({
       allowProposedApi: true,
       fontSize: this.settings.terminalFontSize || 14,
-      fontFamily: this.settings.fontFamily || getTerminalFontFamily(shell),
+      fontFamily: this.settings.editorFontFamily || getTerminalFontFamily(shell),
       theme: getTerminalTheme(shell, this.settings.theme),
       cursorBlink: true,
       cursorStyle: shell === 'cmd' ? 'block' : 'bar',
@@ -349,7 +362,9 @@ export class TerminalModule {
     this.loadAddon(
       term,
       new WebLinksAddon((_event, uri) => {
-        void window.electronAPI.openExternal(uri);
+        window.electronAPI.openExternal(uri).catch((err) => {
+          console.warn('Failed to open link from terminal:', uri, err);
+        });
       }),
       'WebLinksAddon',
     );
@@ -397,11 +412,8 @@ export class TerminalModule {
     // Handle standard terminal keyboard shortcuts
     term.attachCustomKeyEventHandler((event) => this.handleTerminalKey(event, term, id));
 
-    // Right-click paste support
-    wrapper.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      void this.paste();
-    });
+    // Right-click context menu is handled in app.ts via terminal-panel contextmenu listener.
+    // Do NOT paste on right-click here — that would paste before the context menu appears.
 
     const instance: TerminalInstance = {
       id,
@@ -435,11 +447,18 @@ export class TerminalModule {
   }
 
   private handleTerminalKey(event: KeyboardEvent, term: Terminal, id: number): boolean {
+    // Only handle keydown events — ignore keyup and keypress to prevent duplicate execution
+    if (event.type !== 'keydown') {
+      return true;
+    }
+
     const mod = event.ctrlKey || event.metaKey;
 
     // Ctrl+C: If there is a selection, copy it. Otherwise send SIGINT (\x03)
     if (mod && event.key.toLowerCase() === 'c' && !event.shiftKey) {
       if (term.hasSelection()) {
+        event.preventDefault();
+        event.stopPropagation();
         void this.copySelection();
         return false;
       }
@@ -449,18 +468,26 @@ export class TerminalModule {
 
     // Ctrl+Shift+C: Force Copy
     if (mod && event.shiftKey && event.key.toLowerCase() === 'c') {
+      event.preventDefault();
+      event.stopPropagation();
       void this.copySelection();
       return false;
     }
 
     // Ctrl+V or Ctrl+Shift+V: Paste from clipboard
     if (mod && event.key.toLowerCase() === 'v') {
-      void this.paste();
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.repeat) {
+        void this.paste();
+      }
       return false;
     }
 
     // Ctrl+K or Ctrl+L: Clear terminal screen
     if (mod && (event.key.toLowerCase() === 'k' || event.key.toLowerCase() === 'l')) {
+      event.preventDefault();
+      event.stopPropagation();
       term.clear();
       window.electronAPI.writeTerminal(id, '\x0c'); // Form Feed / clear signal
       return false;
@@ -468,6 +495,8 @@ export class TerminalModule {
 
     // Ctrl+Shift+A: Select All
     if (mod && event.shiftKey && event.key.toLowerCase() === 'a') {
+      event.preventDefault();
+      event.stopPropagation();
       term.selectAll();
       return false;
     }
@@ -711,6 +740,12 @@ export class TerminalModule {
     const id = this.activeId;
     if (id === null) return;
 
+    const now = Date.now();
+    if (text === undefined && now - this.lastPasteTimestamp < 150) {
+      return;
+    }
+    this.lastPasteTimestamp = now;
+
     let payload = text;
     if (payload === undefined) {
       try {
@@ -794,7 +829,7 @@ export class TerminalModule {
   applySettings(settings: AppSettings): void {
     this.settings = settings;
     const theme = getTerminalTheme(this.settings.terminalShell, this.settings.theme);
-    const fontFamily = this.settings.fontFamily || getTerminalFontFamily(this.settings.terminalShell);
+    const fontFamily = this.settings.editorFontFamily || getTerminalFontFamily(this.settings.terminalShell);
 
     this.terminals.forEach(({ term, shell }) => {
       term.options.theme = getTerminalTheme(shell, this.settings.theme) || theme;
@@ -824,7 +859,9 @@ export class TerminalModule {
   }
 
   private setQuickAccessActive(active: boolean): void {
-    document.getElementById('btn-terminal-quick')?.classList.toggle('active', active);
+    const panelBtn = document.getElementById('titlebar-btn-panel');
+    panelBtn?.classList.toggle('active', active);
+    panelBtn?.setAttribute('aria-pressed', String(active));
     document.getElementById('status-terminal')?.classList.toggle('active', active);
   }
 

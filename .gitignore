@@ -128,3 +128,5 @@ Thumbs.db
 
 # C/C++ files
 cli/**/*.o
+
+*.zip

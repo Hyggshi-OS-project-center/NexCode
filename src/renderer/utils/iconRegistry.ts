@@ -30,6 +30,14 @@ export function getIconSvg(iconName: string): string {
   return SVG_ICONS.get(iconName) ?? SVG_ICONS.get('file-text') ?? '';
 }
 
+export function getIconSvgDataUri(iconName: string): string {
+  const svg = getIconSvg(iconName);
+  // Encode SVG as a data URI so it can be used in <img src="...">
+  // This avoids all inline SVG gradient ID conflicts.
+  const encoded = encodeURIComponent(svg);
+  return `data:image/svg+xml,${encoded}`;
+}
+
 export function getWin32IconUrl(iconBase: string): string | undefined {
   return WIN32_ICO_URLS.get(iconBase);
 }

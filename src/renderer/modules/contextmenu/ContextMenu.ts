@@ -26,6 +26,7 @@ export class ContextMenu {
   private openSubmenus: MenuNode[] = [];
   private hideTimer: number | null = null;
   private rootItems: MenuItem[] = [];
+  private onCloseCallback: (() => void) | null = null;
 
   constructor(menuId: string) {
     this.menu = document.getElementById(menuId)!;
@@ -40,16 +41,29 @@ export class ContextMenu {
     this.hide();
   }
 
-  show(x: number, y: number, items: MenuItem[]): void {
+  /**
+   * @param onClose Optional: fires once, the next time the menu closes for
+   * any reason (an item was picked, or it was dismissed without a pick).
+   */
+  show(x: number, y: number, items: MenuItem[], onClose?: () => void): void {
     this.rootItems = items;
+    this.onCloseCallback = onClose ?? null;
     this.renderMenu(this.menu, items, { isSubmenu: false });
     this.menu.classList.remove('hidden');
     this.positionMenu(this.menu, x, y, false);
   }
 
   hide(): void {
+    const wasHidden = this.menu.classList.contains('hidden');
     this.menu.classList.add('hidden');
     this.closeAllSubmenus();
+    if (!wasHidden && this.onCloseCallback) {
+      const callback = this.onCloseCallback;
+      this.onCloseCallback = null;
+      // Deferred: hide() runs before the clicked item's own action (see click
+      // handler below), so firing synchronously here would race a real pick.
+      setTimeout(callback, 0);
+    }
   }
 
   /** Re-render the root menu in place (e.g. after a toggle flip). */

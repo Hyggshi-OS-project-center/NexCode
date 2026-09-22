@@ -38,7 +38,7 @@
 .license-modal-body {
   padding: 18px 22px 24px;
   overflow-y: auto;
-  font-family: 'Cascadia Code', Consolas, monospace;
+  font-family: var(--font-mono, 'Cascadia Code', Consolas, monospace);
   font-size: 12px;
   line-height: 1.7;
   color: var(--text-secondary);

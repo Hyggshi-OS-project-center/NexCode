@@ -42,7 +42,9 @@ export class ReleaseNotesView {
     this.titleEl = panel.querySelector('#release-notes-title') as HTMLElement;
     this.bodyEl = panel.querySelector('#release-notes-body') as HTMLElement;
     panel.querySelector('#btn-release-notes-changelog')?.addEventListener('click', () => {
-      void window.electronAPI.openExternal(this.currentChangelogUrl || this.getChangelogUrl());
+      window.electronAPI.openExternal(this.currentChangelogUrl || this.getChangelogUrl()).catch((err) => {
+        console.warn('Failed to open changelog URL:', err);
+      });
     });
   }
 
@@ -53,7 +55,7 @@ export class ReleaseNotesView {
     this.currentVersion = data.version;
     this.currentChangelogUrl = data.changelogUrl;
     this.titleEl.textContent = data.title || `What's New in version ${data.version}`;
-    this.bodyEl.innerHTML = renderMarkdown(data.body);
+    this.bodyEl.innerHTML = renderMarkdown(stripEmoji(data.body));
   }
 
   hide(): void {
@@ -166,4 +168,18 @@ function escapeXml(value: string): string {
         return '&apos;';
     }
   });
+}
+
+/** Remove emoji characters and trailing whitespace from a string. */
+function stripEmoji(text: string): string {
+  return text
+    // Remove emoji and pictographs (U+1F300–1FFFF range)
+    .replace(/[\u{1F300}-\u{1FFFF}]/gu, '')
+    // Remove misc symbols & dingbats (U+2600–27BF)
+    .replace(/[\u2600-\u27BF]/g, '')
+    // Remove variation selectors (e.g. ️ = U+FE0F)
+    .replace(/[\uFE00-\uFE0F]/g, '')
+    // Collapse multiple spaces left by removed emoji
+    .replace(/  +/g, ' ')
+    .replace(/^ /gm, '');
 }

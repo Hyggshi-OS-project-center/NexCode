@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
+import packageManifest from './package.json';
 
 const isDev = process.env.NODE_ENV === 'development' || process.env.VITE_DEV_SERVER === '1';
 const noSourcemap = process.env.VITE_NO_SOURCEMAP === '1';
@@ -7,6 +8,11 @@ const noSourcemap = process.env.VITE_NO_SOURCEMAP === '1';
 export default defineConfig({
   root: resolve(__dirname, 'src/renderer'),
   base: isDev ? '/' : './',
+  // The browser build has no Electron main process to call app.getVersion().
+  // Inject the manifest value so About always reflects the actual release.
+  define: {
+    __NEXCODE_VERSION__: JSON.stringify(packageManifest.version),
+  },
   server: isDev
     ? {
         host: '127.0.0.1',

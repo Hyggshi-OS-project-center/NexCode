@@ -60,9 +60,20 @@
           </defs>
         </svg>
       </button>
-      <button class="titlebar-nav-btn" type="button" id="titlebar-btn-sidebar" title="Toggle sidebar">▢</button>
       <button class="titlebar-nav-btn" type="button" id="titlebar-nav-back" title="Back">←</button>
       <button class="titlebar-nav-btn" type="button" id="titlebar-nav-forward" title="Forward">→</button>
+      <button class="titlebar-nav-btn" type="button" id="titlebar-btn-sidebar" title="Toggle Sidebar" aria-label="Toggle Sidebar" aria-pressed="true">
+        <!-- codicon_ layout activitybar left.svg -->
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path fill="currentColor" d="M12.5 1H3.5C2.119 1 1 2.119 1 3.5V12.5C1 13.881 2.119 15 3.5 15H12.5C13.881 15 15 13.881 15 12.5V3.5C15 2.119 13.881 1 12.5 1ZM4 14V2H12.5C13.328 2 14 2.672 14 3.5V12.5C14 13.328 13.328 14 12.5 14H4Z"/></svg>
+      </button>
+      <button class="titlebar-nav-btn" type="button" id="titlebar-btn-panel" title="Toggle Panel" aria-label="Toggle Panel" aria-pressed="false">
+        <!-- codicon_ layout panel.svg -->
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path fill="currentColor" d="M15 12.5C15 13.881 13.881 15 12.5 15H3.5C2.119 15 1 13.881 1 12.5V3.5C1 2.119 2.119 1 3.5 1H12.5C13.881 1 15 2.119 15 3.5V12.5ZM2 10H14V3.5C14 2.672 13.328 2 12.5 2H3.5C2.672 2 2 2.672 2 3.5V10Z"/></svg>
+      </button>
+      <button class="titlebar-nav-btn" type="button" id="titlebar-btn-sidebar-right" title="Toggle Secondary Sidebar" aria-label="Toggle Secondary Sidebar" aria-pressed="false">
+        <!-- codicon_ layout activitybar right.svg -->
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path fill="currentColor" d="M1 3.5V12.5C1 13.881 2.119 15 3.5 15H12.5C13.881 15 15 13.881 15 12.5V3.5C15 2.119 13.881 1 12.5 1H3.5C2.119 1 1 2.119 1 3.5ZM3.5 14C2.672 14 2 13.328 2 12.5V3.5C2 2.672 2.672 2 3.5 2H12V14H3.5Z"/></svg>
+      </button>
     </div>
     <div class="titlebar-controls">
       <button class="titlebar-btn" id="btn-minimize" title="Minimize" aria-label="Minimize">
@@ -126,12 +137,6 @@
           <path d="M14.5 8H13V6C13 5.63 12.898 5.283 12.722 4.985L13.853 3.854C14.048 3.659 14.048 3.342 13.853 3.147C13.658 2.952 13.341 2.952 13.146 3.147L12.015 4.278C11.717 4.102 11.37 4 11 4C11 2.346 9.654 1 8 1C6.346 1 5 2.346 5 4C4.63 4 4.283 4.102 3.985 4.278L2.854 3.147C2.659 2.952 2.342 2.952 2.147 3.147C1.952 3.342 1.952 3.659 2.147 3.854L3.278 4.985C3.102 5.283 3 5.63 3 6V8H1.5C1.224 8 1 8.224 1 8.5C1 8.776 1.224 9 1.5 9H3C3 10.199 3.424 11.3 4.13 12.163L2.396 13.897C2.201 14.092 2.201 14.409 2.396 14.604C2.494 14.702 2.622 14.75 2.75 14.75C2.878 14.75 3.006 14.701 3.104 14.604L4.838 12.87C5.7 13.576 6.802 14 8.001 14C9.2 14 10.301 13.576 11.164 12.87L12.898 14.604C12.996 14.702 13.124 14.75 13.252 14.75C13.38 14.75 13.508 14.701 13.606 14.604C13.801 14.409 13.801 14.092 13.606 13.897L11.872 12.163C12.578 11.301 13.002 10.199 13.002 9H14.502C14.778 9 15.002 8.776 15.002 8.5C15.002 8.224 14.778 8 14.502 8H14.5ZM8 2C9.103 2 10 2.897 10 4H6C6 2.897 6.897 2 8 2ZM12 9C12 11.206 10.206 13 8 13C5.794 13 4 11.206 4 9V6C4 5.449 4.448 5 5 5H11C11.552 5 12 5.449 12 6V9Z" fill="currentColor"/>
         </svg>
       </button>
-      <!-- Settings: codicon_ gear.svg -->
-      <button class="activity-item" data-panel="settings" title="Settings" aria-label="Settings">
-        <svg class="activity-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <path d="M7.99997 6C6.89497 6 5.99997 6.895 5.99997 8C5.99997 9.105 6.89497 10 7.99997 10C9.10497 10 9.99997 9.105 9.99997 8C9.99997 6.895 9.10497 6 7.99997 6ZM7.99997 9C7.44797 9 6.99997 8.552 6.99997 8C6.99997 7.448 7.44797 7 7.99997 7C8.55197 7 8.99997 7.448 8.99997 8C8.99997 8.552 8.55197 9 7.99997 9ZM14.565 9.715L13.279 8.628C13.245 8.599 13.213 8.567 13.184 8.533C12.888 8.186 12.931 7.667 13.279 7.372L14.565 6.285C14.693 6.177 14.742 6.003 14.691 5.844C14.386 4.903 13.882 4.04 13.219 3.308C13.139 3.22 13.027 3.172 12.912 3.172C12.865 3.172 12.818 3.18 12.773 3.196L11.186 3.761C11.144 3.776 11.1 3.788 11.056 3.796C11.006 3.805 10.956 3.81 10.907 3.81C10.515 3.81 10.167 3.532 10.094 3.134L9.79097 1.482C9.76097 1.318 9.63397 1.188 9.46997 1.153C8.98997 1.051 8.49897 1 8.00097 1C7.50297 1 7.01097 1.052 6.53097 1.153C6.36697 1.188 6.23997 1.318 6.20997 1.482L5.90797 3.134C5.89997 3.178 5.88797 3.221 5.87297 3.263C5.75197 3.6 5.43397 3.81 5.09397 3.81C5.00197 3.81 4.90797 3.794 4.81597 3.762L3.22897 3.197C3.18397 3.181 3.13597 3.173 3.08997 3.173C2.97497 3.173 2.86297 3.221 2.78297 3.309C2.11897 4.041 1.61597 4.904 1.30997 5.845C1.25797 6.004 1.30797 6.178 1.43597 6.286L2.72197 7.373C2.75597 7.402 2.78797 7.434 2.81697 7.468C3.11297 7.815 3.06997 8.334 2.72197 8.629L1.43597 9.716C1.30797 9.824 1.25897 9.998 1.30997 10.157C1.61497 11.098 2.11897 11.961 2.78297 12.693C2.86297 12.781 2.97497 12.829 3.08997 12.829C3.13697 12.829 3.18397 12.821 3.22897 12.805L4.81597 12.24C4.85797 12.225 4.90197 12.213 4.94597 12.205C4.99597 12.196 5.04597 12.192 5.09497 12.192C5.48697 12.192 5.83497 12.47 5.90797 12.868L6.20997 14.52C6.23997 14.684 6.36697 14.814 6.53097 14.849C7.01097 14.951 7.50297 15.002 8.00097 15.002C8.49897 15.002 8.99097 14.95 9.46997 14.849C9.63397 14.814 9.76097 14.684 9.79097 14.52L10.094 12.868C10.102 12.824 10.114 12.781 10.129 12.739C10.25 12.402 10.568 12.192 10.908 12.192C11 12.192 11.094 12.208 11.186 12.24L12.772 12.805C12.818 12.821 12.865 12.829 12.911 12.829C13.026 12.829 13.138 12.781 13.218 12.693C13.882 11.961 14.385 11.098 14.69 10.157C14.742 9.998 14.692 9.824 14.564 9.716L14.565 9.715ZM12.728 11.726L11.521 11.296C11.323 11.226 11.117 11.19 10.908 11.19C10.139 11.19 9.44697 11.676 9.18797 12.399C9.15397 12.492 9.12897 12.588 9.11097 12.686L8.88097 13.937C8.59097 13.979 8.29597 14 8.00097 14C7.70597 14 7.41097 13.979 7.11997 13.936L6.89097 12.685C6.73197 11.818 5.97697 11.189 5.09497 11.189C4.98697 11.189 4.87697 11.199 4.76597 11.219C4.66897 11.237 4.57397 11.262 4.47997 11.295L3.27297 11.725C2.90497 11.264 2.61097 10.759 2.39397 10.214L3.36797 9.391C3.74097 9.076 3.96797 8.634 4.00797 8.148C4.04797 7.662 3.89497 7.19 3.57797 6.818C3.51397 6.743 3.44297 6.672 3.36797 6.608L2.39397 5.785C2.61097 5.24 2.90497 4.734 3.27297 4.274L4.47997 4.704C4.67797 4.774 4.88397 4.81 5.09397 4.81C5.86297 4.81 6.55497 4.324 6.81397 3.601C6.84797 3.507 6.87297 3.411 6.89097 3.314L7.11997 2.063C7.41097 2.021 7.70597 1.999 8.00097 1.999C8.29597 1.999 8.59097 2.02 8.88097 2.062L9.10997 3.313C9.26897 4.18 10.024 4.809 10.906 4.809C11.014 4.809 11.124 4.799 11.234 4.779C11.331 4.761 11.427 4.736 11.521 4.703L12.728 4.273C13.096 4.733 13.39 5.239 13.607 5.784L12.634 6.607C12.261 6.922 12.033 7.364 11.994 7.85C11.954 8.336 12.107 8.809 12.424 9.18C12.489 9.256 12.559 9.326 12.635 9.39L13.609 10.213C13.392 10.758 13.098 11.264 12.73 11.724L12.728 11.726Z" fill="currentColor"/>
-        </svg>
-      </button>
     </nav>
 
     <aside id="sidebar" class="sidebar">
@@ -161,13 +166,14 @@
           </div>
         </div>
         <div class="editor-toolbar-actions">
-          <button type="button" id="btn-md-preview" class="icon-btn icon-btn-labeled" title="Toggle Markdown preview" style="display:none">Preview</button>
+          <button type="button" id="btn-md-preview" class="icon-btn" title="Toggle Markdown preview" aria-label="Toggle Markdown preview" style="display:none">
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M14 2H2a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V3a1 1 0 0 0-1-1zM2 3h12v10H2V3zm7 2h4v7H9V5zm-1 0H3v7h5V5z"/></svg>
+          </button>
           <button type="button" id="btn-extensions" class="icon-btn" title="Extension Marketplace" aria-label="Extension Marketplace">
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M1 3.5A1.5 1.5 0 0 1 2.5 2h3A1.5 1.5 0 0 1 7 3.5v3A1.5 1.5 0 0 1 5.5 8h-3A1.5 1.5 0 0 1 1 6.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm5.5.5A1.5 1.5 0 0 1 9.5 2h3A1.5 1.5 0 0 1 14 3.5v3A1.5 1.5 0 0 1 12.5 8h-3A1.5 1.5 0 0 1 8 6.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm-7.5 6A1.5 1.5 0 0 1 3.5 8h3A1.5 1.5 0 0 1 8 9.5v.293l.646-.647a.5.5 0 0 1 .708.708L8 11.207V12.5A1.5 1.5 0 0 1 6.5 14h-3A1.5 1.5 0 0 1 2 12.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm5.354-.854a.5.5 0 0 0-.708.708L10.793 11l-1.147 1.146a.5.5 0 0 0 .708.708L11.5 11.707l1.146 1.147a.5.5 0 0 0 .708-.708L12.207 11l1.147-1.146a.5.5 0 0 0-.708-.708L11.5 10.293l-1.146-1.147z"/></svg>
           </button>
-          <button type="button" id="btn-run" class="icon-btn icon-btn-labeled" title="Run file (F5)">Run</button>
-          <button type="button" id="btn-terminal-quick" class="icon-btn" title="Toggle terminal" aria-label="Terminal">
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5v-9zM3.5 3a.5.5 0 0 0-.5.5v9a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5h-9zm1.75 2.5l2.5 2.25L5.25 10h1l1.5-1.35L8.25 10h1l-1.5-2.25L8.25 5.5h-1L5.75 7.35 5.25 5.5h-1z"/></svg>
+          <button type="button" id="btn-run" class="icon-btn" title="Run file (F5)" aria-label="Run file (F5)">
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M4 2.5v11l9-5.5L4 2.5z"/></svg>
           </button>
           <button type="button" id="btn-split-down" class="icon-btn" title="Split editor down" aria-label="Split editor">
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M2 2.5A.5.5 0 0 1 2.5 2h11a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-4zm.5-.5a.5.5 0 0 0-.5.5v3h11v-3a.5.5 0 0 0-.5-.5h-11zM2 9.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-4zm.5-.5a.5.5 0 0 0-.5.5v3h11v-3a.5.5 0 0 0-.5-.5h-11z"/></svg>
@@ -185,6 +191,7 @@
       </div>
       <div id="editor-container" class="editor-container">
         <div id="welcome-screen" class="welcome-screen"></div>
+        <div id="settings-view" class="settings-view hidden" role="main" aria-label="Settings"></div>
         <div id="editor-split-root" class="editor-split-root">
           <div id="monaco-host" class="monaco-pane monaco-pane-primary hidden"></div>
           <div id="editor-split-divider" class="editor-split-divider hidden" aria-hidden="true"></div>
@@ -240,6 +247,12 @@
         <div id="terminal-container" class="terminal-view-content terminal-container"></div>
       </div>
     </main>
+    <aside id="sidebar-secondary" class="sidebar sidebar-secondary">
+      <div class="sidebar-header">
+        <span>SECONDARY SIDE BAR</span>
+      </div>
+      <div class="sidebar-content"></div>
+    </aside>
   </div>
 
   <footer id="statusbar" class="statusbar">

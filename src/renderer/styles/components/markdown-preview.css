@@ -95,7 +95,7 @@
 .md-preview-body a:hover { text-decoration: underline; }
 
 .md-preview-body code {
-  font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+  font-family: var(--font-mono, 'Cascadia Code', 'Fira Code', Consolas, monospace);
   font-size: 0.875em;
   background: color-mix(in srgb, var(--bg-panel) 70%, transparent);
   border: 1px solid var(--border);

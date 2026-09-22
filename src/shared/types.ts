@@ -50,14 +50,14 @@ export interface TerminalCreateOptions {
   cols?: number;
   rows?: number;
 }
-export type AiProvider = 'gemini' | 'openrouter' | 'claude';
-export type AppTheme = 
-  | 'dark' 
-  | 'light' 
-  | 'cute' 
-  | 'midnight' 
-  | 'forest' 
-  | 'rose' 
+export type AiProvider = 'gemini' | 'openrouter' | 'claude' | 'local';
+export type AppTheme =
+  | 'dark'
+  | 'light'
+  | 'cute'
+  | 'midnight'
+  | 'forest'
+  | 'rose'
   | 'high-contrast-dark'
   | 'Cyber Lime'
   | 'Electric Cobalt'
@@ -76,7 +76,7 @@ export type AppTheme =
   | 'Industrial Steel'
   | '2017 Dark (Visual Studio - C/C++)'
   | '2017 Light (Visual Studio - C/C++)';
-  
+
 export interface ShellAdapter {
   SHELL: TerminalShell;
   formatPrompt(cwd: string | null): string;
@@ -89,7 +89,8 @@ export interface ShellAdapter {
 export interface AppSettings {
   theme: AppTheme;
   fontFamily: string;
-  insertFontFamily: string;
+  /** Font used inside the Monaco code editor (separate from UI font) */
+  editorFontFamily: string;
   customFontFamilies: string[];
   fontSize: number;
   tabSize: number;
@@ -116,6 +117,15 @@ export interface AppSettings {
   claudeApiKey: string;
   /** Claude model id, e.g. claude-sonnet-4-20250514 */
   claudeModel: string;
+  /**
+   * Base URL of a local OpenAI-compatible server (Ollama, LM Studio, llama.cpp, ...),
+   * including the /v1 suffix, e.g. http://localhost:11434/v1
+   */
+  localAiBaseUrl: string;
+  /** Local model id as the server knows it. Empty = auto (a coder model if the server has one, else the first model). */
+  localAiModel: string;
+  /** JSON configuration for local stdio MCP servers available to the Local AI agent. */
+  mcpServersJson: string;
   /** Enable Chromium sandbox (requires restart) — off by default for memory savings */
   sandbox: boolean;
   /** Enable Monaco large-file optimizations (virtual scrolling, reduced tokenization) */
@@ -126,6 +136,24 @@ export interface AppSettings {
   stopRenderingLineAfter: number;
   /** Word-based suggestions mode */
   wordBasedSuggestions: 'off' | 'matchingDocuments' | 'currentDocument' | 'allDocuments';
+  /** Cursor blink animation style */
+  cursorBlinking: 'blink' | 'smooth' | 'phase' | 'expand' | 'solid';
+  /** Smooth cursor movement animation */
+  cursorSmoothCaretAnimation: 'off' | 'explicit' | 'on';
+  /** Enable smooth scrolling animation in the editor */
+  smoothScrolling: boolean;
+  /** Delay (ms) before hover tooltip appears */
+  hoverDelay: number;
+  /** Enable bracket pair colorization */
+  bracketPairColorization: boolean;
+  /** Show bracket pair guide lines */
+  bracketPairGuides: 'none' | 'active' | 'always';
+  /** Show the idle Easter egg after the editor has been inactive. */
+  easterEggEnabled: boolean;
+  /** Reduce non-essential UI animation for accessibility and lower-motion use. */
+  reducedMotion: boolean;
+  /** Show dot-prefixed files in Explorer by default. */
+  showHiddenFiles: boolean;
 }
 
 /** One turn in the Gemini chat history */
@@ -160,26 +188,89 @@ export interface AiEditorContext {
   contentTruncated?: boolean;
 }
 
+/** A single match returned by a search_files agent action */
+export interface AiAgentSearchMatch {
+  path: string;
+  line: number;
+  text: string;
+}
+
 /** Tool action performed by the agent (for UI + editor sync) */
 export interface AiAgentAction {
-  type: 'write_file' | 'read_file' | 'run_command';
+  type: 'write_file' | 'read_file' | 'run_command' | 'delete_file' | 'list_directory' | 'search_files';
   /** Absolute path on disk */
   path?: string;
   command?: string;
   label: string;
   /** New file content (for write_file actions — used by the diff editor) */
   content?: string;
-  /** Original file content before the AI modified it (for write_file actions) */
+  /** Original file content before the AI modified it (for write_file / delete_file actions) */
   originalContent?: string;
+  /** Directory entries returned by a list_directory action */
+  entries?: string[];
+  /** Matches returned by a search_files action */
+  matches?: AiAgentSearchMatch[];
+  /** Marks this action as a deletion so the UI routes approval to delete instead of write */
+  isDelete?: boolean;
 }
 
 export interface AiChatResult {
   text?: string;
   error?: string;
   actions?: AiAgentAction[];
+  /** True when the run was stopped by the user rather than finishing. */
+  cancelled?: boolean;
+}
+
+/** A stored conversation, as written to userData/chats/<id>.json. */
+export interface ChatConversation {
+  id: string;
+  title: string;
+  createdAt: number;
+  updatedAt: number;
+  /** Full turn history, in the same shape the providers consume. */
+  messages: AiChatMessage[];
+}
+
+/** Lightweight row for the history list — avoids loading every message. */
+export interface ChatConversationSummary {
+  id: string;
+  title: string;
+  updatedAt: number;
+  messageCount: number;
+}
+
+/** One text fragment pushed from main → renderer while a reply is generated. */
+export interface AiStreamDelta {
+  requestId: string;
+  text: string;
+}
+
+/** A live agent-loop step (tool call, thinking) for the Process panel. */
+export interface AiStreamStatus {
+  requestId: string;
+  label: string;
+  kind: AiAgentAction['type'] | 'thinking';
+  status: 'running' | 'done' | 'failed';
 }
 
 /** Metadata shown in the About dialog window */
+/**
+ * Project-level Easter Egg override: <workspace>/.nexcode/custom/easter-egg.json
+ * Lets a project swap the built-in Easter Egg art for its own image(s).
+ */
+export interface CustomEasterEggCharacter {
+  /** Resolved data: URL (already read + base64-encoded by the main process). */
+  image: string;
+  audio?: string;
+}
+
+export interface CustomEasterEggConfig {
+  /** "replace" (default) shows only the custom characters; "extend" adds them to the built-in pool. */
+  mode: 'replace' | 'extend';
+  characters: CustomEasterEggCharacter[];
+}
+
 export interface AboutInfo {
   productName: string;
   version: string;
@@ -198,7 +289,7 @@ export interface AboutInfo {
 export const DEFAULT_SETTINGS: AppSettings = {
   theme: 'dark',
   fontFamily: '"Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif',
-  insertFontFamily: 'Arial, Helvetica, sans-serif',
+  editorFontFamily: '"JetBrains Mono", "Cascadia Code", Consolas, "Courier New", monospace',
   customFontFamilies: [],
   fontSize: 14,
   tabSize: 2,
@@ -216,11 +307,23 @@ export const DEFAULT_SETTINGS: AppSettings = {
   openRouterModel: 'openai/gpt-4o-mini',
   claudeApiKey: '',
   claudeModel: 'claude-sonnet-4-20250514',
+  localAiBaseUrl: 'http://localhost:11434/v1',
+  localAiModel: '',
+  mcpServersJson: '{\n  "mcpServers": {}\n}',
   sandbox: false,
   largeFileOptimizations: true,
   maxTokenizationLineLength: 20000,
   stopRenderingLineAfter: 50000,
   wordBasedSuggestions: 'matchingDocuments',
+  cursorBlinking: 'smooth',
+  cursorSmoothCaretAnimation: 'on',
+  smoothScrolling: true,
+  hoverDelay: 300,
+  bracketPairColorization: true,
+  bracketPairGuides: 'active',
+  easterEggEnabled: true,
+  reducedMotion: false,
+  showHiddenFiles: false,
 };
 
 export type IpcChannel =
@@ -258,6 +361,15 @@ export type IpcChannel =
   | 'path:home'
   | 'extensions:search'
   | 'ai:chat'
+  | 'chat:list'
+  | 'chat:load'
+  | 'chat:save'
+  | 'chat:delete'
+  | 'chat:clear'
+  | 'ai:chat-stream'
+  | 'ai:chat-cancel'
+  | 'ai:chat-delta'
+  | 'ai:chat-status'
   | 'ai:get-workspace-path'
   | 'ai:set-workspace-path'
   | 'shortcut:trigger'
@@ -279,6 +391,7 @@ export type IpcChannel =
   | 'models:list-gemini'
   | 'models:list-openrouter'
   | 'models:list-claude'
+  | 'models:list-local'
   | 'ai:set-editor-context'
 
 /** Paths to open from OS file association or second-instance launch */
@@ -471,6 +584,28 @@ export interface ElectronAPI {
     editorContext?: AiEditorContext | null,
   ) => Promise<AiChatResult>;
   aiValidate: (filePath: string, workspacePath: string | null) => Promise<CodeValidationResult | null>;
+  /**
+   * Streaming counterpart of `aiChat`. Text arrives through `onAiChatDelta`
+   * as the model produces it; the promise resolves with the finished result.
+   */
+  aiChatStream: (
+    requestId: string,
+    messages: AiChatMessage[],
+    workspacePath?: string | null,
+    editorContext?: AiEditorContext | null,
+  ) => Promise<AiChatResult>;
+  /** Persisted conversation history. */
+  chatList: () => Promise<ChatConversationSummary[]>;
+  chatLoad: (id: string) => Promise<ChatConversation | null>;
+  chatSave: (conversation: ChatConversation) => Promise<ChatConversation | null>;
+  chatDelete: (id: string) => Promise<boolean>;
+  chatClear: () => Promise<number>;
+  /** Aborts an in-flight `aiChatStream` run. */
+  aiChatCancel: (requestId: string) => void;
+  /** Subscribe to streamed text fragments. Returns an unsubscribe function. */
+  onAiChatDelta: (callback: (delta: AiStreamDelta) => void) => () => void;
+  /** Subscribe to live agent-loop progress. Returns an unsubscribe function. */
+  onAiChatStatus: (callback: (status: AiStreamStatus) => void) => () => void;
   openAgent: () => void;
   checkForUpdates: () => Promise<UpdateCheckResult>;
   startUpdate: () => Promise<void>;
@@ -492,6 +627,8 @@ export interface ElectronAPI {
   listOpenRouterModels: () => Promise<{ value: string; label: string; supportsImages: boolean }[]>;
   /** Fetch available Claude models from the API dynamically. */
   listClaudeModels: () => Promise<{ value: string; label: string; supportsImages: boolean }[]>;
+  /** Fetch models from the configured local AI server (Ollama / LM Studio / llama.cpp). Empty if unreachable. */
+  listLocalModels: () => Promise<{ value: string; label: string; supportsImages: boolean }[]>;
   /** Send the current editor context to main so AI can access it. */
   setEditorContext: (ctx: AiEditorContext | null) => void;
   /** Run a .hosc file using child_process (hosc run) */

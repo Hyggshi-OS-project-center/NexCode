@@ -23,7 +23,9 @@ export function getRunSpec(
   const useRelativePath = options.cwd ? pathsEqual(options.cwd, fileDir) : false;
   const commandPath = useRelativePath ? basename(filePath) : filePath;
   const commandDir = useRelativePath ? '.' : fileDir;
-  const outputBasePath = useRelativePath ? stripExtension(basename(filePath)) : stripExtension(filePath);
+  // Relative mode: just the file name without extension. (Running stripExtension() on a bare name would
+  // treat the name itself as its parent directory and produce e.g. "hello.c/hello".)
+  const outputBasePath = useRelativePath ? removeExtension(basename(filePath)) : stripExtension(filePath);
   const q = quotePath(commandPath);
   const dir = quotePath(commandDir);
   const outBase = quotePath(outputBasePath);
@@ -51,13 +53,18 @@ export function getRunSpec(
     go: { command: `go run ${q}`, label: 'Go' },
     rs: { command: rustRunCommand(q, outBase, shell), label: 'Rust' },
     java: { command: javaCommand(filePath, q, dir, shell), label: 'Java' },
-    c: { command: cCompileRun(q, outBase, shell), label: 'GCC' },
-    cpp: { command: cppCompileRun(q, outBase, shell), label: 'G++' },
-    cc: { command: cppCompileRun(q, outBase, shell), label: 'G++' },
-    cxx: { command: cppCompileRun(q, outBase, shell), label: 'G++' },
+    c: { command: cCompileRun(q, outputBasePath, shell), label: 'GCC' },
+    cpp: { command: cppCompileRun(q, outputBasePath, shell), label: 'G++' },
+    cc: { command: cppCompileRun(q, outputBasePath, shell), label: 'G++' },
+    cxx: { command: cppCompileRun(q, outputBasePath, shell), label: 'G++' },
   };
 
   return map[ext] ?? null;
+}
+
+function removeExtension(name: string): string {
+  const dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(0, dot) : name;
 }
 
 function stripExtension(filePath: string): string {
@@ -83,16 +90,28 @@ function javaCommand(filePath: string, q: string, dir: string, shell: TerminalSh
   return `javac ${q} && cd /d ${dir} && java ${className}`;
 }
 
-function cCompileRun(q: string, outBase: string, shell: TerminalShell): string {
-  const out = `${outBase}_nexrun.exe`;
-  if (shell === 'powershell') return `gcc ${q} -o ${out}; if ($?) { & ${out} }`;
-  return `gcc ${q} -o ${out} && ${out}`;
+/**
+ * Compiled-binary target for C/C++: quoted as ONE token, no ".exe" on Unix shells, and a "./" prefix when
+ * the binary sits in the current directory (Unix shells and PowerShell don't run a bare name from cwd).
+ */
+function compiledTarget(outputBasePath: string, shell: TerminalShell): { out: string; run: string } {
+  const unix = shell === 'bash' || shell === 'zsh' || shell === 'sh';
+  const outPath = `${outputBasePath}_nexrun${unix ? '' : '.exe'}`;
+  const bare = !/[\\/]/.test(outPath);
+  const runPath = bare && shell !== 'cmd' ? `./${outPath}` : outPath;
+  return { out: quotePath(outPath), run: quotePath(runPath) };
 }
 
-function cppCompileRun(q: string, outBase: string, shell: TerminalShell): string {
-  const out = `${outBase}_nexrun.exe`;
-  if (shell === 'powershell') return `g++ ${q} -o ${out}; if ($?) { & ${out} }`;
-  return `g++ ${q} -o ${out} && ${out}`;
+function cCompileRun(q: string, outputBasePath: string, shell: TerminalShell): string {
+  const { out, run } = compiledTarget(outputBasePath, shell);
+  if (shell === 'powershell') return `gcc ${q} -o ${out}; if ($?) { & ${run} }`;
+  return `gcc ${q} -o ${out} && ${run}`;
+}
+
+function cppCompileRun(q: string, outputBasePath: string, shell: TerminalShell): string {
+  const { out, run } = compiledTarget(outputBasePath, shell);
+  if (shell === 'powershell') return `g++ ${q} -o ${out}; if ($?) { & ${run} }`;
+  return `g++ ${q} -o ${out} && ${run}`;
 }
 
 function rustRunCommand(q: string, outBase: string, shell: TerminalShell): string {

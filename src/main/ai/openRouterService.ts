@@ -2,11 +2,18 @@
  * OpenRouter API service: OpenAI-compatible autonomous agent with file and terminal tools.
  */
 import https from 'https';
-import fs from 'fs';
-import path from 'path';
 import type { AiAgentAction, AiChatMessage, AiChatResult, AiEditorContext } from '../../shared/types';
-import { runCommandCapture } from './agentWorkflow';
+import { AGENT_WORKFLOW_INSTRUCTIONS, AgentRunState, executeAgentTool, toOpenAiTools } from './agentTools';
 import type { ListedModel } from './geminiService';
+import type { McpSession } from './mcpService';
+import {
+  AiAbortError,
+  isAbortError,
+  requestSse,
+  throwIfAborted,
+  ToolCallAccumulator,
+  type AiStreamCallbacks,
+} from './streaming';
 
 const OPENROUTER_HOST = 'openrouter.ai';
 const OPENROUTER_PATH = '/api/v1/chat/completions';
@@ -129,70 +136,6 @@ interface OpenRouterResponse {
   error?: { message?: string; code?: number };
 }
 
-const OPENROUTER_TOOLS = [
-  {
-    type: 'function',
-    function: {
-      name: 'write_file',
-      description:
-        'Writes content to a file in the workspace. Use this instead of showing code in chat when the user wants a file created or updated.',
-      parameters: {
-        type: 'object',
-        properties: {
-          filePath: {
-            type: 'string',
-            description: 'Path relative to workspace root or absolute',
-          },
-          content: { type: 'string', description: 'Full file text content' },
-        },
-        required: ['filePath', 'content'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'read_file',
-      description: 'Reads a text file from the workspace.',
-      parameters: {
-        type: 'object',
-        properties: {
-          filePath: { type: 'string', description: 'Path relative to workspace or absolute' },
-        },
-        required: ['filePath'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'run_command',
-      description: 'Runs a shell command in the workspace directory.',
-      parameters: {
-        type: 'object',
-        properties: {
-          command: { type: 'string', description: 'Shell command to execute' },
-        },
-        required: ['command'],
-      },
-    },
-  },
-] as const;
-
-function resolveInWorkspace(filePath: string, workspacePath: string | null): string {
-  if (path.isAbsolute(filePath)) return path.normalize(filePath);
-  const base = workspacePath ?? process.cwd();
-  return path.resolve(base, filePath);
-}
-
-function displayPath(filePath: string, workspacePath: string | null): string {
-  const resolved = resolveInWorkspace(filePath, workspacePath);
-  if (workspacePath) {
-    const rel = path.relative(workspacePath, resolved);
-    if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) return rel;
-  }
-  return path.basename(resolved);
-}
 
 function toOpenRouterContent(message: AiChatMessage): string | OpenRouterMessagePart[] {
   const parts: OpenRouterMessagePart[] = [];
@@ -209,7 +152,9 @@ function toOpenRouterContent(message: AiChatMessage): string | OpenRouterMessage
     }
   }
 
-  if (parts.length === 0) return message.text;
+  // `message.text` may be undefined for an attachment-only turn; the API
+  // rejects `content: undefined`, so fall back to an empty string.
+  if (parts.length === 0) return message.text ?? '';
   if (parts.length === 1 && parts[0]?.type === 'text') return parts[0].text;
   return parts;
 }
@@ -222,6 +167,8 @@ export async function chatWithOpenRouter(
   editorContext: AiEditorContext | null = null,
   /** Optional: pass the cached model list so image-support check is authoritative */
   modelCache?: ListedModel[],
+  callbacks: AiStreamCallbacks = {},
+  mcpSession: McpSession | null = null,
 ): Promise<AiChatResult> {
   if (!apiKey?.trim()) {
     return {
@@ -256,14 +203,8 @@ export async function chatWithOpenRouter(
       content: [
         `You are an autonomous AI Agent in NexCode IDE with Copilot-style editor control. ${workspaceHint}`,
         editorHint,
-        'When the user asks you to create or change files, you MUST call write_file; do not only paste code in chat.',
         'When the user asks to fix, refactor, explain, continue, or add code without naming a file, use the active editor context.',
-        'If changing the active file or selected code, call write_file with the active file path and the full updated file content.',
-        'Workflow: inspect files when needed, write the full updated file, run command checks when useful, read errors, and fix the code until validation passes or no reliable local check exists.',
-        'After every write_file result, review validation output. If validation failed, you MUST fix the reported errors with another write_file before giving a final answer.',
-        'You may call run_command to execute local command prompts for builds, tests, linting, type checks, and diagnostics. Prefer targeted checks over broad unrelated commands.',
-        'After write_file succeeds, briefly confirm what you did in plain language.',
-        'Be concise and proactive.',
+        AGENT_WORKFLOW_INSTRUCTIONS,
       ]
         .filter(Boolean)
         .join('\n'),
@@ -274,81 +215,275 @@ export async function chatWithOpenRouter(
     })),
   ];
 
-  const actions: AiAgentAction[] = [];
+  const runState = new AgentRunState(workspacePath);
+  const tools = toOpenAiTools((mcpSession?.openAiTools ?? []).map((tool) => tool.function));
+  const actions = runState.actions;
+  const transcript: string[] = [];
   let iteration = 0;
   const maxIterations = 10;
 
-  while (iteration < maxIterations) {
-    iteration++;
+  try {
+    while (iteration < maxIterations) {
+      iteration++;
+      throwIfAborted(callbacks.signal);
 
-    const body = JSON.stringify({
-      model: selectedModel,
-      messages: openRouterMessages,
-      tools: OPENROUTER_TOOLS,
-      temperature: 0.2,
-      top_p: 0.95,
-      max_tokens: 8192,
-    });
-
-    const json = await makeRequestWithRetry(apiKey, body, 3);
-    if (json.error) {
-      if (actions.length > 0) return completedActionsFallback(actions);
-      return {
-        error: `OpenRouter API error: ${json.error.message ?? 'Unknown error'} (code ${json.error.code ?? '?'})`,
-        actions: actions.length > 0 ? actions : undefined,
-      };
-    }
-
-    const message = json.choices?.[0]?.message;
-    if (!message) {
-      if (actions.length > 0) return completedActionsFallback(actions);
-      const reason = json.choices?.[0]?.finish_reason;
-      return {
-        error: `No response from OpenRouter${reason ? ` (${reason})` : ''}. Try rephrasing your question.`,
-        actions: actions.length > 0 ? actions : undefined,
-      };
-    }
-
-    if (message.tool_calls?.length) {
-      openRouterMessages.push({
-        role: 'assistant',
-        content: message.content ?? null,
-        tool_calls: message.tool_calls,
+      const body = JSON.stringify({
+        model: selectedModel,
+        messages: openRouterMessages,
+        tools,
+        temperature: 0.2,
+        top_p: 0.95,
+        max_tokens: 8192,
+        ...(callbacks.onDelta ? { stream: true } : {}),
       });
 
-      for (const toolCall of message.tool_calls) {
-        const { result, error } = await runToolCall(toolCall, workspacePath, actions);
-        openRouterMessages.push({
-          role: 'tool',
-          tool_call_id: toolCall.id,
-          name: toolCall.function.name,
-          content: JSON.stringify(error ? { error } : { result }),
-        });
+      const json = callbacks.onDelta
+        ? await streamTurn(apiKey, body, transcript, callbacks)
+        : await makeRequestWithRetry(apiKey, body, 3, callbacks.signal);
+
+      if (json.error) {
+        if (transcript.length > 0) return { text: transcript.join('').trim(), actions: orUndefined(actions) };
+        if (actions.length > 0) return completedActionsFallback(actions);
+        return {
+          error: `OpenRouter API error: ${json.error.message ?? 'Unknown error'} (code ${json.error.code ?? '?'})`,
+          actions: orUndefined(actions),
+        };
       }
-      continue;
-    }
 
-    if (typeof message.content === 'string' && message.content.trim()) {
-      return { text: message.content.trim(), actions: actions.length > 0 ? actions : undefined };
-    }
+      const message = json.choices?.[0]?.message;
+      if (!message) {
+        if (transcript.length > 0) return { text: transcript.join('').trim(), actions: orUndefined(actions) };
+        if (actions.length > 0) return completedActionsFallback(actions);
+        const reason = json.choices?.[0]?.finish_reason;
+        return {
+          error: `No response from OpenRouter${reason ? ` (${reason})` : ''}. Try rephrasing your question.`,
+          actions: orUndefined(actions),
+        };
+      }
 
-    if (actions.length > 0) return completedActionsFallback(actions);
-    return { error: 'Received an empty or unsupported response from OpenRouter.', actions };
+      if (message.tool_calls?.length) {
+        openRouterMessages.push({
+          role: 'assistant',
+          content: message.content ?? null,
+          tool_calls: message.tool_calls,
+        });
+
+        for (const toolCall of message.tool_calls) {
+          throwIfAborted(callbacks.signal);
+          callbacks.onStatus?.({
+            label: `Running ${toolCall.function.name}`,
+            kind: 'thinking',
+            status: 'running',
+          });
+
+          let parsedArgs: Record<string, unknown> | null;
+          try {
+            parsedArgs = JSON.parse(toolCall.function.arguments || '{}') as Record<string, unknown>;
+          } catch {
+            parsedArgs = null;
+          }
+          const { result, error } =
+            parsedArgs === null
+              ? { result: undefined, error: `Invalid tool arguments for ${toolCall.function.name}` }
+              : toolCall.function.name.startsWith('mcp__') && mcpSession
+                ? await mcpSession.call(toolCall.function.name, parsedArgs)
+                : await executeAgentTool(toolCall.function.name, parsedArgs, runState);
+
+          callbacks.onStatus?.({
+            label: error ? `${toolCall.function.name} failed: ${error}` : `${toolCall.function.name} completed`,
+            kind: 'thinking',
+            status: error ? 'failed' : 'done',
+          });
+
+          openRouterMessages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            name: toolCall.function.name,
+            content: JSON.stringify(error ? { error } : { result }),
+          });
+        }
+        continue;
+      }
+
+      if (callbacks.onDelta) {
+        const full = transcript.join('').trim();
+        if (full) return { text: full, actions: orUndefined(actions) };
+      } else if (typeof message.content === 'string' && message.content.trim()) {
+        return { text: message.content.trim(), actions: orUndefined(actions) };
+      }
+
+      if (actions.length > 0) return completedActionsFallback(actions);
+      return { error: 'Received an empty or unsupported response from OpenRouter.', actions };
+    }
+  } catch (err) {
+    if (isAbortError(err)) {
+      const partial = transcript.join('').trim();
+      return partial
+        ? { text: partial, actions: orUndefined(actions) }
+        : { error: 'Cancelled.', actions: orUndefined(actions) };
+    }
+    return {
+      error: `OpenRouter request failed: ${err instanceof Error ? err.message : String(err)}`,
+      actions: orUndefined(actions),
+    };
   }
 
+  if (transcript.length > 0) return { text: transcript.join('').trim(), actions: orUndefined(actions) };
   if (actions.length > 0) return completedActionsFallback(actions);
   return {
     error: 'Agent stopped after reaching maximum iterations (10).',
-    actions: actions.length > 0 ? actions : undefined,
+    actions: orUndefined(actions),
   };
 }
 
-function completedActionsFallback(actions: AiAgentAction[]): AiChatResult {
+function orUndefined(actions: AiAgentAction[]): AiAgentAction[] | undefined {
+  return actions.length > 0 ? actions : undefined;
+}
+
+/**
+ * Streamed variant of one OpenAI-compatible turn.
+ *
+ * Text arrives as `choices[0].delta.content` fragments and is forwarded
+ * immediately; tool calls arrive as indexed fragments whose JSON arguments are
+ * split across many events, so they are reassembled before the turn is
+ * handed back to the agent loop in the same shape a buffered reply has.
+ */
+export async function streamOpenAiCompatibleTurn(options: {
+  url: string;
+  headers: Record<string, string>;
+  body: string;
+  timeoutMs: number;
+  transcript: string[];
+  callbacks: AiStreamCallbacks;
+}): Promise<OpenRouterResponse> {
+  const { url, headers, body, timeoutMs, transcript, callbacks } = options;
+
+  const toolCalls = new ToolCallAccumulator();
+  let finishReason: string | undefined;
+  let streamError: { message?: string; code?: number } | undefined;
+  let content = '';
+  let wroteThisTurn = false;
+
+  const result = await requestSse({
+    url,
+    headers,
+    body,
+    timeoutMs,
+    signal: callbacks.signal,
+    onData: (payload) => {
+      if (payload === '[DONE]') return;
+
+      let chunk: {
+        choices?: {
+          delta?: {
+            content?: string | null;
+            tool_calls?: {
+              index?: number;
+              id?: string;
+              function?: { name?: string; arguments?: string };
+            }[];
+          };
+          finish_reason?: string | null;
+        }[];
+        error?: { message?: string; code?: number };
+      };
+      try {
+        chunk = JSON.parse(payload);
+      } catch {
+        return;
+      }
+
+      if (chunk.error) {
+        streamError = chunk.error;
+        return;
+      }
+
+      const choice = chunk.choices?.[0];
+      if (choice?.finish_reason) finishReason = choice.finish_reason;
+
+      const text = choice?.delta?.content;
+      if (typeof text === 'string' && text.length > 0) {
+        if (!wroteThisTurn && transcript.length > 0) {
+          transcript.push('\n\n');
+          callbacks.onDelta?.('\n\n');
+        }
+        wroteThisTurn = true;
+        content += text;
+        transcript.push(text);
+        callbacks.onDelta?.(text);
+      }
+
+      for (const [position, fragment] of (choice?.delta?.tool_calls ?? []).entries()) {
+        toolCalls.add(fragment.index ?? position, {
+          id: fragment.id,
+          name: fragment.function?.name,
+          args: fragment.function?.arguments,
+        });
+      }
+    },
+  });
+
+  if (result.errorBody !== null) {
+    try {
+      const parsed = JSON.parse(result.errorBody) as OpenRouterResponse;
+      return { error: parsed.error ?? { message: result.errorBody.slice(0, 300), code: result.status } };
+    } catch {
+      return { error: { message: result.errorBody.slice(0, 300) || `HTTP ${result.status}`, code: result.status } };
+    }
+  }
+
+  if (streamError) return { error: streamError };
+
+  const collected = toolCalls.toArray();
+  return {
+    choices: [
+      {
+        message: {
+          role: 'assistant',
+          content: content || null,
+          ...(collected.length > 0
+            ? {
+                tool_calls: collected.map((call) => ({
+                  id: call.id,
+                  type: 'function' as const,
+                  function: { name: call.name, arguments: call.args || '{}' },
+                })),
+              }
+            : {}),
+        },
+        finish_reason: finishReason,
+      },
+    ],
+  };
+}
+
+function streamTurn(
+  apiKey: string,
+  body: string,
+  transcript: string[],
+  callbacks: AiStreamCallbacks,
+): Promise<OpenRouterResponse> {
+  return streamOpenAiCompatibleTurn({
+    url: `https://${OPENROUTER_HOST}${OPENROUTER_PATH}`,
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'HTTP-Referer': 'https://nexcode.local',
+      'X-OpenRouter-Title': 'NexCode IDE',
+    },
+    body,
+    timeoutMs: 180_000,
+    transcript,
+    callbacks,
+  });
+}
+
+export function completedActionsFallback(actions: AiAgentAction[]): AiChatResult {
   const labels = actions.map((a) => a.label.replace(/`/g, '')).join(', ');
   return { text: `Done. ${labels}.`, actions };
 }
 
-function hasImageAttachment(message: AiChatMessage): boolean {
+export function hasImageAttachment(message: AiChatMessage): boolean {
   return (
     message.attachments?.some((a) => a.kind === 'image' && Boolean(a.dataUrl)) ?? false
   );
@@ -381,7 +516,7 @@ function openRouterModelIdSupportsImages(model: string): boolean {
   ].some((marker) => n.includes(marker));
 }
 
-function formatEditorContext(context: AiEditorContext | null): string {
+export function formatEditorContext(context: AiEditorContext | null): string {
   if (!context?.activeFilePath) return '';
 
   const lines = [
@@ -409,71 +544,6 @@ function formatEditorContext(context: AiEditorContext | null): string {
   }
 
   return lines.join('\n');
-}
-
-async function runToolCall(
-  toolCall: OpenRouterToolCall,
-  workspacePath: string | null,
-  actions: AiAgentAction[],
-): Promise<{ result?: unknown; error?: string }> {
-  let args: Record<string, string>;
-  try {
-    args = JSON.parse(toolCall.function.arguments || '{}') as Record<string, string>;
-  } catch {
-    return { error: `Invalid tool arguments for ${toolCall.function.name}` };
-  }
-
-  try {
-    if (toolCall.function.name === 'write_file') {
-      const resolved = resolveInWorkspace(args.filePath, workspacePath);
-      let originalContent = '';
-      try {
-        originalContent = await fs.promises.readFile(resolved, 'utf-8');
-      } catch { /* file does not exist yet */ }
-      const newContent = args.content ?? '';
-      actions.push({
-        type: 'write_file',
-        path: resolved,
-        content: newContent,
-        originalContent,
-        label: `Wrote file \`${displayPath(args.filePath, workspacePath)}\``,
-      });
-      return { result: `Prepared ${resolved} for diff review.` };
-    }
-
-    if (toolCall.function.name === 'read_file') {
-      const resolved = resolveInWorkspace(args.filePath, workspacePath);
-      const content = await fs.promises.readFile(resolved, 'utf-8');
-      actions.push({
-        type: 'read_file',
-        path: resolved,
-        label: `Read file \`${displayPath(args.filePath, workspacePath)}\``,
-      });
-      return { result: content };
-    }
-
-    if (toolCall.function.name === 'run_command') {
-      const cwd = workspacePath ?? process.cwd();
-      const result = await runCommandCapture(args.command, cwd);
-      actions.push({
-        type: 'run_command',
-        command: args.command,
-        label: `Ran command \`${args.command}\``,
-      });
-      return {
-        result: {
-          code: result.code,
-          output:
-            result.output ||
-            (result.code === 0 ? 'Command completed without output.' : 'Command failed without output.'),
-        },
-      };
-    }
-
-    return { error: `Unknown function: ${toolCall.function.name}` };
-  } catch (err) {
-    return { error: err instanceof Error ? err.message : String(err) };
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -507,8 +577,10 @@ async function makeRequestWithRetry(
   apiKey: string,
   body: string,
   maxRetries: number,
+  signal?: AbortSignal,
 ): Promise<OpenRouterResponse> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    throwIfAborted(signal);
     try {
       const response = await new Promise<OpenRouterResponse>((resolve, reject) => {
         const req = https.request(
@@ -553,6 +625,12 @@ async function makeRequestWithRetry(
           },
         );
 
+        const onAbort = () => {
+          req.destroy();
+          reject(new AiAbortError());
+        };
+        signal?.addEventListener('abort', onAbort, { once: true });
+
         req.on('error', (err) => reject(err));
         req.on('timeout', () => {
           req.destroy();
@@ -569,6 +647,7 @@ async function makeRequestWithRetry(
 
       return response;
     } catch (err) {
+      if (isAbortError(err)) throw err;
       if (attempt === maxRetries) {
         return {
           error: {

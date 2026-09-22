@@ -74,7 +74,7 @@ export class UpdateController {
         const channel = (e.target as HTMLInputElement).value as UpdateChannel;
         this.currentChannel = channel;
         void window.electronAPI.setUpdateChannel(channel).then(() => {
-          // Re-check updates với channel mới
+          // Re-check updates with new channel
           void window.electronAPI.checkForUpdates().then((result) => {
             if (result?.available && result.info) this.setUpdateAvailable(result.info);
           });

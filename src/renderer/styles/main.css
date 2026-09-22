@@ -167,31 +167,107 @@ body {
   display: flex;
   -webkit-app-region: no-drag;
 }
+
+/* A browser tab already provides its own window controls. */
+body.web-edition .titlebar-controls {
+  display: none;
+}
+
+/* Accessibility preference applied from Settings > Advanced. */
+body.reduce-motion *,
+body.reduce-motion *::before,
+body.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.01ms !important;
+}
 /* Window button visuals are defined in components/buttons.css */
 
-/* Workbench grid */
+/* Workbench grid — only 2 true columns: activity bar + editor.
+   The sidebar panel is an absolute overlay so the editor always
+   has its full width and Monaco never sees a size change on toggle. */
 .app-shell {
   flex: 1;
   display: grid;
-  grid-template-columns: 48px var(--sidebar-width, 280px) 6px 1fr;
+  grid-template-columns: 48px minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
+  position: relative;
 }
 
-.app-shell.sidebar-collapsed {
-  grid-template-columns: 48px 0 0 minmax(0, 1fr);
+/* Primary sidebar: absolute overlay anchored to the left edge of app-shell.
+   Width is controlled by --sidebar-width. Sits above the editor. */
+.sidebar:not(.sidebar-secondary) {
+  position: absolute;
+  left: 48px;
+  top: 0;
+  bottom: 0;
+  width: var(--sidebar-width, 280px);
+  z-index: 10;
+  transition: transform 200ms ease, visibility 200ms;
 }
 
-.app-shell.sidebar-collapsed .sidebar {
-  min-width: 0;
-  overflow: hidden;
-  border-right: none;
+/* Sidebar resizer: positioned right after the sidebar */
+.sidebar-resizer {
+  position: absolute;
+  left: calc(48px + var(--sidebar-width, 280px));
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 11;
+  transition: background 0.15s ease, left 200ms ease;
+}
+
+.sidebar-resizer:hover,
+.sidebar-resizer.dragging {
+  background: var(--accent-primary, #4c8bf5);
+}
+
+/* Editor area pushed right by sidebar so content isn't under the overlay */
+.editor-area {
+  grid-column: 2;
+  margin-left: calc(var(--sidebar-width, 280px) + 6px);
+  transition: margin-left 200ms ease;
+}
+
+/* Collapsed state: slide sidebar off-screen, remove editor margin */
+.app-shell.sidebar-collapsed .sidebar:not(.sidebar-secondary) {
+  transform: translateX(calc(-1 * var(--sidebar-width, 280px)));
   visibility: hidden;
 }
 
 .app-shell.sidebar-collapsed .sidebar-resizer {
-  width: 0;
-  cursor: default;
+  transform: translateX(calc(-1 * (var(--sidebar-width, 280px) + 6px)));
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.app-shell.sidebar-collapsed .editor-area {
+  margin-left: 0;
+}
+
+/* Secondary sidebar is an overlay docked to the right edge, not a grid
+   track — this keeps it fully independent from the primary sidebar/editor
+   grid so toggling either one can never resize or blank out the other. */
+.sidebar-secondary {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: var(--sidebar-secondary-width, 280px);
+  z-index: 20;
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.25);
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform 0.15s ease;
+}
+
+.app-shell.sidebar-secondary-open .sidebar-secondary {
+  transform: translateX(0);
+  visibility: visible;
 }
 
 .app-shell.settings-expanded {
@@ -264,29 +340,18 @@ body {
   color: var(--text-primary);
 }
 
-.sidebar-resizer {
-  width: 6px;
-  cursor: col-resize;
-  background: transparent;
-  flex-shrink: 0;
-  transition: background 0.15s ease;
-  position: relative;
-  z-index: 2;
-}
-
-.sidebar-resizer:hover,
-.sidebar-resizer.dragging {
-  background: var(--accent-primary, #4c8bf5);
-}
-
-/* Side bar */
+/* Side bar base styles */
 .sidebar {
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
-  min-width: 0;
   overflow: hidden;
+}
+
+.sidebar-secondary {
+  border-right: none;
+  border-left: 1px solid var(--border-subtle);
 }
 
 .sidebar-header {
@@ -547,12 +612,13 @@ body {
   }
 }
 
-/* Editor column */
+/* Editor column — grid-column, margin-left, transition defined in overlay section above */
 .editor-area {
   display: flex;
   flex-direction: column;
-  min-width: 0;
   background: var(--bg-editor);
+  min-width: 0;
+  overflow: hidden;
 }
 
 .editor-tabs-row {
@@ -814,7 +880,7 @@ body {
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.22);
   color: #ffc457;
-  font-family: Consolas, 'Cascadia Code', monospace;
+  font-family: var(--font-mono, Consolas, 'Cascadia Code', monospace);
   font-size: 12px;
   line-height: 1.35;
   white-space: nowrap;

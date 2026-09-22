@@ -39,7 +39,15 @@ import { PluginHost } from './modules/plugin/PluginHost';
 import { VsixExtensionStore } from './modules/plugin/VsixExtensionStore';
 import { KeyboardShortcuts } from './modules/keyboard/KeyboardShortcuts';
 import type { ShortcutAction } from '../shared/shortcuts';
-import { getRunSpec } from './utils/runCommand';
+import { getRunSpec, type RunSpec } from './utils/runCommand';
+import {
+  getRunActionsPath,
+  parseRunActionsFile,
+  buildDefaultRunActionsFile,
+  stringifyRunActionsFile,
+  substituteRunVariables,
+  type RunActionConfiguration,
+} from './utils/runActions';
 import { parentDir, pathsEqual } from './utils/pathUtils';
 import { startMemoryMonitor } from './utils/memoryMonitor';
 import { GitPanel } from './modules/git/GitPanel';
@@ -60,14 +68,127 @@ import {
 import splashImageRandom1Url from '@icons/loading/my-splash-Random1.png?url';
 import splashImageRandom2Url from '@icons/loading/my-splash-Random2.png?url';
 import splashImageRandom3Url from '@icons/loading/my-splash-Random3.png?url';
-import { captureDirectoryFiles, captureSingleFile, readDir as bReadDir, readFileContentAsync as bReadFile, exists as bExists, stat as bStat, writeFile as bWriteFile, mkdir as bMkdir, unlink as bUnlink, rename as bRename, reset as bReset, createFileBlobUrl as bCreateBlobUrl, BrowserFileEntry } from './browserFs';
+import splashImageRandom4Url from '@icons/loading/my-splash-Random4.png?url';
+import splashImageRandom5Url from '@icons/loading/my-splash-Random5.png?url';
+import splashImageRandom6Url from '@icons/loading/my-splash-Random6.png?url';
+import splashImageRandom7Url from '@icons/loading/my-splash-Random7.png?url';
+import { captureDirectoryFiles, captureSingleFile, readDir as bReadDir, readFileContentAsync as bReadFile, exists as bExists, stat as bStat, writeFile as bWriteFile, mkdir as bMkdir, unlink as bUnlink, rename as bRename, reset as bReset, createFileBlobUrl as bCreateBlobUrl, getWorkspaceRoot as bGetWorkspaceRoot, BrowserFileEntry } from './browserFs';
 import { downloadSingleFile, downloadFolderAsZip, exportWorkspaceAsZip, importZipArchive } from './utils/webZipExport';
 import { SessionManager } from './modules/session/SessionManager';
 
-const splashImageUrls = [splashImageRandom1Url, splashImageRandom2Url, splashImageRandom3Url] as const;
+declare const __NEXCODE_VERSION__: string;
+
+const splashImageUrls = [splashImageRandom1Url, splashImageRandom2Url, splashImageRandom3Url, splashImageRandom4Url, splashImageRandom5Url, splashImageRandom6Url, splashImageRandom7Url] as const;
+const WEB_SETTINGS_STORAGE_KEY = 'nexcode.web-settings.v1';
 
 function getRandomSplashImageUrl(): string {
   return splashImageUrls[Math.floor(Math.random() * splashImageUrls.length)];
+}
+
+/**
+ * Web build has no BrowserWindow, so the easter egg is simulated as a
+ * floating "fake window" overlay (title bar + draggable + close button)
+ * hosting the real easterEgg.html in an iframe. Mirrors the size/position
+ * logic of src/main/easterEgg/easterEggWindow.ts as closely as a web page
+ * reasonably can.
+ */
+let webEasterEggWindow: HTMLDivElement | null = null;
+
+function openWebEasterEggWindow(): void {
+  if (webEasterEggWindow) {
+    webEasterEggWindow.style.zIndex = '100000';
+    return;
+  }
+
+  const width = 500;
+  const height = 580;
+  const margin = 20;
+
+  const win = document.createElement('div');
+  webEasterEggWindow = win;
+  win.className = 'web-easter-egg-window';
+  Object.assign(win.style, {
+    position: 'fixed',
+    right: `${margin}px`,
+    bottom: `${margin}px`,
+    width: `${Math.min(width, window.innerWidth - margin * 2)}px`,
+    height: `${Math.min(height, window.innerHeight - margin * 2)}px`,
+    background: '#1e1e1e',
+    border: '1px solid #3c3c3c',
+    borderRadius: '8px',
+    boxShadow: '0 8px 28px rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    zIndex: '100000',
+  } as CSSStyleDeclaration);
+
+  const titlebar = document.createElement('div');
+  Object.assign(titlebar.style, {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '6px 10px',
+    background: '#2d2d2d',
+    color: '#cccccc',
+    fontSize: '12px',
+    fontFamily: 'system-ui, sans-serif',
+    cursor: 'move',
+    userSelect: 'none',
+  } as CSSStyleDeclaration);
+  const titleLabel = document.createElement('span');
+  titleLabel.textContent = 'NexCode Easter Egg';
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '\u2715';
+  closeBtn.setAttribute('aria-label', 'Close');
+  Object.assign(closeBtn.style, {
+    background: 'transparent',
+    border: 'none',
+    color: '#cccccc',
+    cursor: 'pointer',
+    fontSize: '13px',
+    lineHeight: '1',
+    padding: '2px 6px',
+  } as CSSStyleDeclaration);
+  closeBtn.addEventListener('click', closeWebEasterEggWindow);
+  titlebar.append(titleLabel, closeBtn);
+
+  // Drag-to-move, since it's meant to feel like a real window.
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+  let startRight = margin;
+  let startBottom = margin;
+  titlebar.addEventListener('mousedown', (event) => {
+    dragging = true;
+    startX = event.clientX;
+    startY = event.clientY;
+    startRight = parseFloat(win.style.right || '0');
+    startBottom = parseFloat(win.style.bottom || '0');
+    event.preventDefault();
+  });
+  window.addEventListener('mousemove', (event) => {
+    if (!dragging) return;
+    win.style.right = `${startRight - (event.clientX - startX)}px`;
+    win.style.bottom = `${startBottom - (event.clientY - startY)}px`;
+  });
+  window.addEventListener('mouseup', () => { dragging = false; });
+
+  const iframe = document.createElement('iframe');
+  iframe.src = 'easterEgg.html';
+  iframe.title = 'NexCode Easter Egg';
+  Object.assign(iframe.style, {
+    flex: '1',
+    border: 'none',
+  } as CSSStyleDeclaration);
+
+  win.append(titlebar, iframe);
+  document.body.appendChild(win);
+}
+
+function closeWebEasterEggWindow(): void {
+  webEasterEggWindow?.remove();
+  webEasterEggWindow = null;
 }
 
 const browserElectronAPI: ElectronAPI = (() => {
@@ -93,15 +214,24 @@ const browserElectronAPI: ElectronAPI = (() => {
           case 'onTerminalCwd':
           case 'onUpdateAvailable':
           case 'onUpdateProgress':
+          // Streamed-chat subscriptions. Browser mode has no main process to
+          // push deltas, so these return a no-op unsubscribe and the chat
+          // panel falls back to a single buffered reply.
+          case 'onAiChatDelta':
+          case 'onAiChatStatus':
             return (_callback: any) => noOpUnsubscribe;
+          case 'aiChatCancel':
+            return noop;
           case 'minimizeWindow':
           case 'maximizeWindow':
           case 'closeWindow':
           case 'showAboutWindow':
-          case 'showEasterEggWindow':
-          case 'closeEasterEggWindow':
           case 'openAgent':
             return noop;
+          case 'showEasterEggWindow':
+            return openWebEasterEggWindow;
+          case 'closeEasterEggWindow':
+            return closeWebEasterEggWindow;
           case 'toggleDevtools':
             return () => {
               // In browser mode, just use the browser's built-in DevTools (F12)
@@ -116,9 +246,10 @@ const browserElectronAPI: ElectronAPI = (() => {
           case 'isMaximized':
             return promiseUndefined;
           case 'getHomePath':
-          case 'getWorkspacePath':
           case 'createTerminal':
             return async () => null;
+          case 'getWorkspacePath':
+            return async () => bGetWorkspaceRoot();
           case 'saveFile':
             return async () => null;
           case 'openFolder':
@@ -155,18 +286,7 @@ const browserElectronAPI: ElectronAPI = (() => {
                       input.remove();
                       return;
                     }
-                    const path = captureSingleFile(file);
-                    // Read file content immediately so it's available for readFile/readFileForEditor
-                    const reader = new FileReader();
-                    reader.onload = () => {
-                      const entry = bStat(path);
-                      if (entry && typeof reader.result === 'string') {
-                        (entry as any).content = reader.result;
-                      }
-                      resolve(path);
-                    };
-                    reader.onerror = () => resolve(path);
-                    reader.readAsText(file);
+                    resolve(captureSingleFile(file));
                   } else {
                     resolve(null);
                   }
@@ -218,20 +338,41 @@ const browserElectronAPI: ElectronAPI = (() => {
               bRename(oldPath, newPath);
             };
           case 'setWorkspacePath':
-            return async (path: string) => {
-              /* no-op in browser dev mode */
-            };
+            return async (_path: string) => undefined;
           case 'getSettings':
-            return async () => ({ ...DEFAULT_SETTINGS });
+            return async () => {
+              try {
+                const saved = localStorage.getItem(WEB_SETTINGS_STORAGE_KEY);
+                return { ...DEFAULT_SETTINGS, ...(saved ? JSON.parse(saved) : {}) };
+              } catch {
+                return { ...DEFAULT_SETTINGS };
+              }
+            };
           case 'setSettings':
-            return async (settings: Partial<AppSettings>) => ({ ...DEFAULT_SETTINGS, ...settings });
+            return async (settings: Partial<AppSettings>) => {
+              let current: AppSettings = { ...DEFAULT_SETTINGS };
+              try {
+                const saved = localStorage.getItem(WEB_SETTINGS_STORAGE_KEY);
+                if (saved) current = { ...current, ...JSON.parse(saved) };
+              } catch {
+                // Keep the editor usable when storage is blocked by the browser.
+              }
+              const updated = { ...current, ...settings };
+              try {
+                localStorage.setItem(WEB_SETTINGS_STORAGE_KEY, JSON.stringify(updated));
+              } catch (error) {
+                console.warn('[Web] Could not persist settings:', error);
+              }
+              return updated;
+            };
           case 'getAboutInfo':
             return async () => ({
-              name: 'NexCode IDE',
-              version: 'web',
-              description: 'NexCode IDE web preview',
-              author: { name: 'Hyggshi OS major project center', email: '' },
-              license: 'MIT',
+              productName: 'NexCode IDE',
+              version: __NEXCODE_VERSION__,
+              description: 'A world-class code editor at its core, built for speed and modern workflows.',
+              author: 'Hyggshi OS project center',
+              electron: 'Not applicable (Web)',
+              iconUrl: null,
             } as any);
           case 'getLatestReleaseNotes':
             return async () => ({
@@ -447,6 +588,9 @@ class NexusApp {
   }
 
   async init(): Promise<void> {
+    // Web runs inside a browser tab, where minimize/maximize/close belong to
+    // the browser chrome rather than the application titlebar.
+    document.body.classList.toggle('web-edition', (window.electronAPI as any)?.isWeb === true);
     const legacySplash2025 = this.isLegacySplash2025Enabled();
     const splash = new SplashScreen({
       minDisplayMs: 1999,
@@ -462,6 +606,7 @@ class NexusApp {
     splash.setStatus('Loading settings…');
     this.settings = await window.electronAPI.getSettings();
     document.body.dataset.theme = this.settings.theme;
+    document.body.classList.toggle('reduce-motion', this.settings.reducedMotion ?? false);
     this.applyGlobalFont();
     // Sync the saved update channel to main process on startup
     void window.electronAPI.setUpdateChannel(this.settings.updateChannel ?? 'stable');
@@ -483,6 +628,7 @@ class NexusApp {
 
     this.editor = new EditorManager('monaco-host', this.settings);
     this.idleEasterEgg = new EditorIdleEasterEgg('editor-container');
+    this.idleEasterEgg.setEnabled(this.settings.easterEggEnabled ?? true);
     this.binaryView = new BinaryFileView('editor-container');
     this.editorBanner = new EditorBanner('editor-container');
     this.diffEditor = new DiffEditor('editor-container');
@@ -517,6 +663,7 @@ class NexusApp {
       (line) => this.editor.revealLine(line),
       (oldPath, newPath, isDirectory) => this.handleRenamedPath(oldPath, newPath, isDirectory),
     );
+    void this.explorer.setShowHidden(this.settings.showHiddenFiles ?? false);
     this.explorer.setExtensionHost(this.pluginHost);
     this.explorer.setOnInstallExtension(() => void this.installExtensionFromDialog());
     void this.vsixStore.loadGlobalExtensions(this.pluginHost).then(() => {
@@ -582,7 +729,8 @@ class NexusApp {
     );
     this.search = new SearchReplace(this.editor);
 
-    this.settingsPanel = new SettingsPanel('panel-settings', this.settings, (partial) =>
+    // Settings panel renders inside the full-page #settings-view tab
+    this.settingsPanel = new SettingsPanel('settings-view', this.settings, (partial) =>
       void this.applySettings(partial),
     );
 
@@ -609,7 +757,7 @@ class NexusApp {
 
     this.chatPanel = new ChatPanel(
       'panel-chat',
-      () => void this.showSidebarPanel('settings'),
+      () => void this.openSettingsTab(),
       (actions) => this.handleAgentActions(actions),
       () => this.workspacePath,
       () => this.editor.getAiContext(),
@@ -640,11 +788,29 @@ class NexusApp {
     // Initialize integrated debugger
     this.debuggerModule = new NexDebugger('panel-debug', this.editor, this.terminal);
 
+    const SETTINGS_PATH = '__nexcode_settings__';
+
     this.tabs.on('select', (path) => {
-      void this.switchToFile(path);
+      if (path === SETTINGS_PATH) {
+        // Show settings view, hide Monaco
+        document.getElementById('settings-view')?.classList.remove('hidden');
+        document.getElementById('editor-split-root')!.style.display = 'none';
+        document.getElementById('welcome-screen')?.classList.add('hidden');
+        this.settingsPanel.update(this.settings);
+      } else {
+        // Hide settings view, restore Monaco
+        document.getElementById('settings-view')?.classList.add('hidden');
+        document.getElementById('editor-split-root')!.style.display = '';
+        void this.switchToFile(path);
+      }
       this.syncSessionState();
     });
-    this.tabs.on('close', (path) => this.onTabClose(path));
+    this.tabs.on('close', (path) => {
+      if (path === SETTINGS_PATH) {
+        this.closeSettingsTab();
+      }
+      this.onTabClose(path);
+    });
 
     this.startFileChangeWatcher();
     this.bindCrashMoments();
@@ -688,7 +854,6 @@ class NexusApp {
 
     document.getElementById('btn-open-folder')?.addEventListener('click', () => void this.openFolder());
     document.getElementById('btn-run')?.addEventListener('click', () => void this.runActiveFile());
-    document.getElementById('btn-terminal-quick')?.addEventListener('click', () => this.terminal.toggle());
     document.getElementById('status-terminal')?.addEventListener('click', () => this.terminal.toggle());
     document.getElementById('btn-split-down')?.addEventListener('click', () => this.editor.splitDown());
     document.getElementById('status-branch')?.addEventListener('click', () => void this.showSidebarPanel('git'));
@@ -710,9 +875,26 @@ class NexusApp {
       });
     });
 
-    document.getElementById('titlebar-btn-sidebar')?.addEventListener('click', () => {
-      document.querySelector('.app-shell')?.classList.toggle('sidebar-collapsed');
+    document.getElementById('titlebar-btn-sidebar')?.addEventListener('click', (event) => {
+      const shell = document.querySelector('.app-shell');
+      const collapsed = shell?.classList.toggle('sidebar-collapsed') ?? false;
+      (event.currentTarget as HTMLElement).setAttribute('aria-pressed', String(!collapsed));
       this.syncSidebarResizer();
+      // No layout() needed — editor-area width is fixed (grid col 2);
+      // sidebar slides as an overlay via CSS transform, Monaco never resizes.
+    });
+
+    // Toggle Panel — same bottom panel (terminal/problems/output/debug console)
+    // that used to be reachable only from the editor toolbar's terminal-quick button.
+    // TerminalModule.toggle() syncs this button's active/aria-pressed state itself.
+    document.getElementById('titlebar-btn-panel')?.addEventListener('click', () => this.terminal.toggle());
+
+    // Toggle Secondary Sidebar — an empty dockable panel on the right,
+    // mirroring VS Code's Secondary Side Bar. Nothing docks into it yet.
+    document.getElementById('titlebar-btn-sidebar-right')?.addEventListener('click', (event) => {
+      const shell = document.querySelector('.app-shell');
+      const isOpen = shell?.classList.toggle('sidebar-secondary-open') ?? false;
+      (event.currentTarget as HTMLElement).setAttribute('aria-pressed', String(isOpen));
       requestAnimationFrame(() => this.editor.layout());
     });
 
@@ -790,7 +972,7 @@ class NexusApp {
     if (!this.crashAudio) return;
     try {
       this.crashAudio.currentTime = 0;
-      void this.crashAudio.play().catch(() => {});
+      void this.crashAudio.play().catch(() => { });
     } catch {
       // Best-effort
     }
@@ -798,36 +980,52 @@ class NexusApp {
 
   private bindCrashMoments(): void {
     this.initCrashAudio();
+    this.setupGlobalErrorHandling();
+  }
 
+  private isIgnoredError(message: string, stack?: string): boolean {
+    const text = `${message} ${stack ?? ''}`.toLowerCase();
+    return (
+      text.includes('canceled') ||
+      text.includes('instantiationservice has been disposed') ||
+      text.includes('object is disposed') ||
+      text.includes('editor has been disposed') ||
+      text.includes('aborterror') ||
+      text.includes('net::err_') ||
+      text.includes('failed to fetch') ||
+      text.includes('load failed') ||
+      text.includes('resizeobserver loop')
+    );
+  }
+
+  private setupGlobalErrorHandling(): void {
     window.addEventListener('error', (event) => {
-      this.playCrashAudio();
-      this.moments.showCrash();
       const target = event.error instanceof Error ? event.error : new Error(event.message || 'Renderer error');
-      window.electronAPI.reportCrash({
-        source: 'renderer.error',
-        message: target.message,
-        stack: target.stack,
-      });
+      if (this.isIgnoredError(target.message, target.stack)) {
+        event.preventDefault();
+        return;
+      }
+      console.error('[renderer.error]', target);
     });
+
     window.addEventListener('unhandledrejection', (event) => {
-      this.playCrashAudio();
-      this.moments.showCrash();
       const reason = event.reason;
       const err =
         reason instanceof Error
           ? reason
           : new Error(
-              typeof reason === 'string'
-                ? reason
-                : typeof reason?.message === 'string'
-                  ? reason.message
-                  : 'Unhandled rejection',
-            );
-      window.electronAPI.reportCrash({
-        source: 'renderer.unhandledrejection',
-        message: err.message,
-        stack: err.stack,
-      });
+            typeof reason === 'string'
+              ? reason
+              : typeof reason?.message === 'string'
+                ? reason.message
+                : 'Unhandled rejection',
+          );
+      if (this.isIgnoredError(err.message, err.stack)) {
+        event.preventDefault();
+        return;
+      }
+      console.warn('[renderer.unhandledrejection]', reason);
+      event.preventDefault();
     });
   }
 
@@ -918,7 +1116,7 @@ class NexusApp {
           { label: 'Search', action: () => void this.showSidebarPanel('search') },
           { label: 'Source Control', action: () => void this.showSidebarPanel('git') },
           { label: 'Chat AI', action: () => void this.showSidebarPanel('chat') },
-          { label: 'Settings', action: () => void this.showSidebarPanel('settings') },
+          { label: 'Settings', shortcut: 'Ctrl+,', action: () => void this.openSettingsTab() },
           { separator: true },
           { label: 'Terminal', shortcut: 'Ctrl+`', action: () => this.terminal.toggle() },
           {
@@ -940,7 +1138,14 @@ class NexusApp {
           { label: 'Go to Bracket', action: () => ed('editor.action.jumpToBracket')() },
         ];
       case 'run':
-        return [{ label: 'Run Active File', shortcut: 'F5', action: () => void this.runActiveFile() }];
+        return [
+          { label: 'Run Active File', shortcut: 'F5', action: () => void this.runActiveFile() },
+          { separator: true },
+          {
+            label: 'Open Run Configurations (actions.json)',
+            action: () => void this.openRunActionsFile(),
+          },
+        ];
       case 'terminal':
         return [
           { label: 'New Terminal', action: () => void this.terminal.createTerminal() },
@@ -1004,6 +1209,11 @@ class NexusApp {
       document.getElementById(`panel-${id}`)?.classList.toggle('hidden', id !== panel);
     });
 
+    // Switching sidebar panels can cause browser to reset SVG gradient rendering
+    // context, blanking any inline SVG icons in the tab bar. Double RAF ensures
+    // layout is fully committed before re-injecting SVG content.
+    requestAnimationFrame(() => requestAnimationFrame(() => this.tabs.refreshIcons()));
+
     const openFolderBtn = document.getElementById('btn-open-folder');
     openFolderBtn?.classList.toggle('hidden', panel === 'git' || panel === 'debug');
 
@@ -1038,10 +1248,33 @@ class NexusApp {
       this.explorer.hide();
       this.debuggerModule.syncBreakpointsUI();
     } else if (panel === 'settings') {
-      title.textContent = 'SETTINGS';
-      this.explorer.hide();
-      this.settingsPanel.update(this.settings);
+      // Settings opens as a full-page tab in the editor area, not in the sidebar.
+      void this.openSettingsTab();
+      return;
     }
+  }
+
+  /** Open Settings as a full-page tab in the editor area (like VS Code's Settings tab). */
+  private openSettingsTab(): void {
+    const SETTINGS_PATH = '__nexcode_settings__';
+    // openTab() adds the tab and marks it active but does NOT emit 'select',
+    // so we must manually show the settings view here.
+    this.tabs.openTab(SETTINGS_PATH);
+
+    document.getElementById('settings-view')?.classList.remove('hidden');
+    const splitRoot = document.getElementById('editor-split-root');
+    if (splitRoot) splitRoot.style.display = 'none';
+    document.getElementById('welcome-screen')?.classList.add('hidden');
+
+    this.settingsPanel.update(this.settings);
+  }
+
+  /** Hide the Settings tab and restore the editor view. */
+  private closeSettingsTab(): void {
+    const settingsView = document.getElementById('settings-view');
+    const splitRoot = document.getElementById('editor-split-root');
+    if (settingsView) settingsView.classList.add('hidden');
+    if (splitRoot) splitRoot.style.display = '';
   }
 
   /** Apply agent tool results — show diff review for writes, open reads, run commands. */
@@ -1051,24 +1284,36 @@ class NexusApp {
       this.moments.showBugHunter();
     }
 
-    // Collect write_file actions - these need diff review before writing
-    const writeActions = actions.filter((action) => action.type === 'write_file' && action.path);
+    // Collect write_file and delete_file actions - these need diff review before touching disk
+    const writeActions = actions.filter(
+      (action) => (action.type === 'write_file' || action.type === 'delete_file') && action.path,
+    );
 
-    // Build pending diffs
+    // Build pending diffs (a delete is shown as a diff against an empty file)
     const pendingWrites: DiffEditorPendingWrite[] = [];
     for (const action of writeActions) {
       const path = action.path!;
       const originalContent = action.originalContent ?? '';
-      const modifiedContent = action.content ?? '';
+      const isDelete = action.type === 'delete_file';
+      const rawModified: unknown = isDelete ? '' : action.content;
+      const modifiedContent = typeof rawModified === 'string' ? rawModified : '';
 
-      // Skip if there's actually no diff
-      if (originalContent === modifiedContent) continue;
+      // Defence in depth: never offer garbage (a stringified object) for approval.
+      if (!isDelete && modifiedContent.trim() === '[object Object]') {
+        console.warn('[AI] Ignored write_file with invalid "[object Object]" content for', path);
+        document.getElementById('status-file')!.textContent = 'AI returned invalid file content — change ignored';
+        continue;
+      }
+
+      // Skip if there's actually no diff (a no-op write, never for deletes)
+      if (!isDelete && originalContent === modifiedContent) continue;
 
       pendingWrites.push({
         path,
         originalContent,
         modifiedContent,
         label: action.label,
+        isDelete,
       });
     }
 
@@ -1083,7 +1328,14 @@ class NexusApp {
       console.log('[DiffEditor] Showing diff for', pendingWrites.length, 'file(s)');
 
       this.diffEditor.show(pendingWrites, {
-        onApprove: async (path: string, content: string) => {
+        onApprove: async (path: string, content: string, isDelete?: boolean) => {
+          if (isDelete) {
+            // Delete the file on disk
+            await window.electronAPI.unlink(path);
+            document.getElementById('status-file')!.textContent = `Deleted ${path.split(/[/\\]/).pop()}`;
+            if (this.workspacePath) await this.explorer.refresh();
+            return;
+          }
           // Write approved content to disk
           await window.electronAPI.writeFile(path, content);
           // Run validation after approval
@@ -1113,7 +1365,7 @@ class NexusApp {
       cleanup();
     }
 
-    // Handle non-write actions (reads, commands)
+    // Handle non-write actions (reads, directory listings, searches, commands)
     for (const action of actions) {
       if (action.type === 'read_file' && action.path) {
         await this.openFile(action.path);
@@ -1121,6 +1373,8 @@ class NexusApp {
         await this.terminal.show();
         await this.terminal.sendCommand(action.command, true);
       }
+      // list_directory and search_files are informational only — their
+      // results already appear in the chat action log, nothing to apply.
     }
   }
 
@@ -1205,6 +1459,16 @@ class NexusApp {
     const spec = getRunSpec(path, this.settings.terminalShell, {
       cwd: this.terminal.getTerminalCwd(),
     });
+
+    if (this.workspacePath) {
+      const projectConfig = await this.resolveProjectRunConfiguration(spec);
+      if (projectConfig) {
+        await this.terminal.show();
+        await this.runProjectConfiguration(projectConfig, path);
+        return;
+      }
+    }
+
     await this.terminal.show();
 
     if (!spec) {
@@ -1218,6 +1482,119 @@ class NexusApp {
 
     await this.terminal.sendCommand(spec.command, true);
     document.getElementById('status-file')!.textContent = `Ran (${spec.label})`;
+  }
+
+  /**
+   * Ensure `.nexcode/run/actions.json` exists for the open workspace (creating
+   * a starter file seeded from `fallbackSpec` on first run), then return the
+   * configuration to execute: the only one, the user's pick among several, or
+   * null if the file has no configurations / can't be used (caller then falls
+   * back to the default per-extension run logic).
+   */
+  private async resolveProjectRunConfiguration(
+    fallbackSpec: RunSpec | null,
+  ): Promise<RunActionConfiguration | null> {
+    if (!this.workspacePath) return null;
+    const actionsPath = getRunActionsPath(this.workspacePath);
+
+    let raw: string;
+    const fileExists = await window.electronAPI.exists(actionsPath);
+    if (!fileExists) {
+      const starter = buildDefaultRunActionsFile(fallbackSpec);
+      raw = stringifyRunActionsFile(starter);
+      try {
+        await window.electronAPI.writeFile(actionsPath, raw);
+      } catch {
+        return null;
+      }
+    } else {
+      try {
+        raw = await window.electronAPI.readFile(actionsPath);
+      } catch {
+        return null;
+      }
+    }
+
+    const parsed = parseRunActionsFile(raw);
+    if (!parsed || parsed.configurations.length === 0) return null;
+    if (parsed.configurations.length === 1) return parsed.configurations[0];
+    return this.pickRunConfiguration(parsed.configurations);
+  }
+
+  /** Shows a picker anchored on the Run button when a project defines more than one configuration. */
+  private pickRunConfiguration(
+    configs: RunActionConfiguration[],
+  ): Promise<RunActionConfiguration | null> {
+    return new Promise((resolve) => {
+      const btn = document.getElementById('btn-run');
+      const rect = btn?.getBoundingClientRect();
+      const x = rect ? rect.left : 0;
+      const y = rect ? rect.bottom + 2 : 0;
+      let settled = false;
+      const settle = (value: RunActionConfiguration | null) => {
+        if (settled) return;
+        settled = true;
+        resolve(value);
+      };
+      this.contextMenu.show(
+        x,
+        y,
+        configs.map((config) => ({
+          label: config.name,
+          action: () => settle(config),
+        })),
+        () => settle(null), // dismissed without picking anything
+      );
+    });
+  }
+
+  /** Opens (creating a starter file first if needed) `.nexcode/run/actions.json` for editing. */
+  private async openRunActionsFile(): Promise<void> {
+    if (!this.workspacePath) {
+      await this.terminal.show();
+      await this.terminal.sendCommand(
+        this.formatTerminalMessage('Open a folder first to use run configurations.'),
+        true,
+      );
+      return;
+    }
+    const activePath = this.tabs.getActivePath();
+    const fallbackSpec = activePath
+      ? getRunSpec(activePath, this.settings.terminalShell, { cwd: this.terminal.getTerminalCwd() })
+      : null;
+    const actionsPath = getRunActionsPath(this.workspacePath);
+    if (!(await window.electronAPI.exists(actionsPath))) {
+      await window.electronAPI.writeFile(
+        actionsPath,
+        stringifyRunActionsFile(buildDefaultRunActionsFile(fallbackSpec)),
+      );
+      if (this.workspacePath) void this.explorer.refresh();
+    }
+    await this.openFile(actionsPath);
+  }
+
+  /**
+   * Runs a `.nexcode/run/actions.json` configuration in the integrated
+   * terminal, substituting `autofile` / `${file}`-style tokens in `actions`
+   * with the file currently active in the editor (`activeFilePath`) so one
+   * configuration works for whichever tab/language is open.
+   */
+  private async runProjectConfiguration(
+    config: RunActionConfiguration,
+    activeFilePath: string,
+  ): Promise<void> {
+    if (config.preLaunchTask) {
+      await this.terminal.sendCommand(
+        this.formatTerminalMessage(`Running preLaunchTask: ${config.preLaunchTask}`),
+        true,
+      );
+    }
+    const command = substituteRunVariables(config.actions, {
+      filePath: activeFilePath,
+      workspacePath: this.workspacePath ?? '',
+    });
+    await this.terminal.sendCommand(command, true);
+    document.getElementById('status-file')!.textContent = `Ran (${config.name})`;
   }
 
   private bindContextMenus(): void {
@@ -1263,7 +1640,7 @@ class NexusApp {
   }
 
   private insertConfiguredFont(): void {
-    const inserted = this.editor.insertFontFamily(this.settings.insertFontFamily);
+    const inserted = this.editor.insertFontFamily(this.settings.editorFontFamily);
     if (inserted) {
       document.getElementById('status-file')!.textContent = 'Inserted font';
     }
@@ -1385,40 +1762,40 @@ class NexusApp {
     if (!overlay || !input || !list) return;
 
     const commands: { label: string; shortcut?: string; action: () => void }[] = [
-      { label: 'Open File…',             shortcut: 'Ctrl+O',         action: () => void this.pickFile() },
-      { label: 'Open Folder…',           shortcut: 'Ctrl+Shift+O',   action: () => void this.openFolder() },
-      { label: 'New File',               shortcut: 'Ctrl+N',         action: () => void this.newUntitledFile() },
-      { label: 'Save',                   shortcut: 'Ctrl+S',         action: () => void this.saveActiveFile() },
-      { label: 'Save As…',              shortcut: 'Ctrl+Shift+S',   action: () => void this.saveActiveFileAs() },
-      { label: 'Revert File',                                         action: () => void this.revertActiveFile() },
-      { label: 'Close Tab',              shortcut: 'Ctrl+W',         action: () => { const p = this.tabs.getActivePath(); if (p) this.tabs.closeTab(p); } },
-      { label: 'Run Active File',        shortcut: 'F5',             action: () => void this.runActiveFile() },
-      { label: 'Toggle Terminal',        shortcut: 'Ctrl+`',         action: () => this.terminal.toggle() },
-      { label: 'New Terminal',                                        action: () => void this.terminal.createTerminal() },
-      { label: 'Find',                   shortcut: 'Ctrl+F',         action: () => this.search.show(false) },
-      { label: 'Find and Replace',       shortcut: 'Ctrl+H',         action: () => this.search.show(true) },
-      { label: 'Go to Line…',           shortcut: 'Ctrl+G',         action: () => void this.editor.runEditorAction('editor.action.gotoLine') },
-      { label: 'Go to Symbol…',         shortcut: 'Ctrl+Shift+O',   action: () => void this.editor.runEditorAction('editor.action.quickOutline') },
-      { label: 'Toggle Comment',         shortcut: 'Ctrl+/',         action: () => void this.editor.runEditorAction('editor.action.commentLine') },
-      { label: 'Format Document',        shortcut: 'Shift+Alt+F',    action: () => void this.editor.runEditorAction('editor.action.formatDocument') },
-      { label: 'Explorer',                                            action: () => void this.showSidebarPanel('explorer') },
-      { label: 'Source Control',                                      action: () => void this.showSidebarPanel('git') },
-      { label: 'Chat AI',                                             action: () => void this.showSidebarPanel('chat') },
-      { label: 'Run and Debug',                                       action: () => void this.showSidebarPanel('debug') },
-      { label: 'Settings',               shortcut: 'Ctrl+,',         action: () => void this.showSidebarPanel('settings') },
-      { label: 'Toggle Sidebar',                                      action: () => { document.querySelector('.app-shell')?.classList.toggle('sidebar-collapsed'); requestAnimationFrame(() => this.editor.layout()); } },
-      { label: 'Toggle Markdown Preview',                             action: () => { const p = this.tabs.getActivePath(); if (p) { const c = this.editor.getContent(p) ?? ''; const f = p.split(/[\/\\]/).pop() ?? ''; this.mdPreview.toggle(c, f); } } },
-      { label: 'Extension Marketplace',                               action: () => void this.openExtensionMarketplace() },
-      { label: "What's New",                                          action: () => void this.openReleaseNotes() },
-      { label: 'About NexCode IDE',                                   action: () => window.electronAPI.showAboutWindow() },
-      { label: 'Toggle Developer Tools', shortcut: 'F12',            action: () => window.electronAPI.toggleDevtools() },
-      { label: 'Zoom In',                                             action: () => void this.editor.runEditorAction('editor.action.fontZoomIn') },
-      { label: 'Zoom Out',                                            action: () => void this.editor.runEditorAction('editor.action.fontZoomOut') },
-      { label: 'Reset Zoom',                                          action: () => void this.editor.runEditorAction('editor.action.fontZoomReset') },
-      { label: 'Select All',             shortcut: 'Ctrl+A',         action: () => void this.editor.runEditorAction('editor.action.selectAll') },
-      { label: 'Start Debugging',        shortcut: 'F5',             action: () => this.debuggerModule.start() },
-      { label: 'Stop Debugging',         shortcut: 'Shift+F5',       action: () => this.debuggerModule.stop() },
-      { label: 'Step Over',              shortcut: 'F10',            action: () => this.debuggerModule.stepOver() },
+      { label: 'Open File…', shortcut: 'Ctrl+O', action: () => void this.pickFile() },
+      { label: 'Open Folder…', shortcut: 'Ctrl+Shift+O', action: () => void this.openFolder() },
+      { label: 'New File', shortcut: 'Ctrl+N', action: () => void this.newUntitledFile() },
+      { label: 'Save', shortcut: 'Ctrl+S', action: () => void this.saveActiveFile() },
+      { label: 'Save As…', shortcut: 'Ctrl+Shift+S', action: () => void this.saveActiveFileAs() },
+      { label: 'Revert File', action: () => void this.revertActiveFile() },
+      { label: 'Close Tab', shortcut: 'Ctrl+W', action: () => { const p = this.tabs.getActivePath(); if (p) this.tabs.closeTab(p); } },
+      { label: 'Run Active File', shortcut: 'F5', action: () => void this.runActiveFile() },
+      { label: 'Toggle Terminal', shortcut: 'Ctrl+`', action: () => this.terminal.toggle() },
+      { label: 'New Terminal', action: () => void this.terminal.createTerminal() },
+      { label: 'Find', shortcut: 'Ctrl+F', action: () => this.search.show(false) },
+      { label: 'Find and Replace', shortcut: 'Ctrl+H', action: () => this.search.show(true) },
+      { label: 'Go to Line…', shortcut: 'Ctrl+G', action: () => void this.editor.runEditorAction('editor.action.gotoLine') },
+      { label: 'Go to Symbol…', shortcut: 'Ctrl+Shift+O', action: () => void this.editor.runEditorAction('editor.action.quickOutline') },
+      { label: 'Toggle Comment', shortcut: 'Ctrl+/', action: () => void this.editor.runEditorAction('editor.action.commentLine') },
+      { label: 'Format Document', shortcut: 'Shift+Alt+F', action: () => void this.editor.runEditorAction('editor.action.formatDocument') },
+      { label: 'Explorer', action: () => void this.showSidebarPanel('explorer') },
+      { label: 'Source Control', action: () => void this.showSidebarPanel('git') },
+      { label: 'Chat AI', action: () => void this.showSidebarPanel('chat') },
+      { label: 'Run and Debug', action: () => void this.showSidebarPanel('debug') },
+      { label: 'Settings', shortcut: 'Ctrl+,', action: () => void this.showSidebarPanel('settings') },
+      { label: 'Toggle Sidebar', action: () => { document.querySelector('.app-shell')?.classList.toggle('sidebar-collapsed'); this.syncSidebarResizer(); } },
+      { label: 'Toggle Markdown Preview', action: () => { const p = this.tabs.getActivePath(); if (p) { const c = this.editor.getContent(p) ?? ''; const f = p.split(/[\/\\]/).pop() ?? ''; this.mdPreview.toggle(c, f); } } },
+      { label: 'Extension Marketplace', action: () => void this.openExtensionMarketplace() },
+      { label: "What's New", action: () => void this.openReleaseNotes() },
+      { label: 'About NexCode IDE', action: () => window.electronAPI.showAboutWindow() },
+      { label: 'Toggle Developer Tools', shortcut: 'F12', action: () => window.electronAPI.toggleDevtools() },
+      { label: 'Zoom In', action: () => void this.editor.runEditorAction('editor.action.fontZoomIn') },
+      { label: 'Zoom Out', action: () => void this.editor.runEditorAction('editor.action.fontZoomOut') },
+      { label: 'Reset Zoom', action: () => void this.editor.runEditorAction('editor.action.fontZoomReset') },
+      { label: 'Select All', shortcut: 'Ctrl+A', action: () => void this.editor.runEditorAction('editor.action.selectAll') },
+      { label: 'Start Debugging', shortcut: 'F5', action: () => this.debuggerModule.start() },
+      { label: 'Stop Debugging', shortcut: 'Shift+F5', action: () => this.debuggerModule.stop() },
+      { label: 'Step Over', shortcut: 'F10', action: () => this.debuggerModule.stepOver() },
     ];
 
     let activeIdx = -1;
@@ -1488,7 +1865,7 @@ class NexusApp {
         return;
       }
       if (e.key === 'ArrowDown') { setActive(Math.min(activeIdx + 1, filtered.length - 1)); e.preventDefault(); }
-      if (e.key === 'ArrowUp')   { setActive(Math.max(activeIdx - 1, 0)); e.preventDefault(); }
+      if (e.key === 'ArrowUp') { setActive(Math.max(activeIdx - 1, 0)); e.preventDefault(); }
     });
 
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
@@ -1520,8 +1897,13 @@ class NexusApp {
     const apply = async () => {
       this.settings = await window.electronAPI.setSettings(partial);
       document.body.dataset.theme = this.settings.theme;
+      document.body.classList.toggle('reduce-motion', this.settings.reducedMotion ?? false);
       this.applyGlobalFont();
       this.editor.applySettings(this.settings);
+      this.idleEasterEgg.setEnabled(this.settings.easterEggEnabled ?? true);
+      if (partial.showHiddenFiles !== undefined) {
+        void this.explorer.setShowHidden(this.settings.showHiddenFiles);
+      }
       this.terminal.applySettings(this.settings);
       this.chatPanel.updateSettings();
       if (partial.terminalShell !== undefined && this.terminal.isVisible()) {
@@ -1539,6 +1921,10 @@ class NexusApp {
 
   private applyGlobalFont(): void {
     document.documentElement.style.setProperty('--font-ui', this.settings.fontFamily);
+    // Keep every code-oriented UI surface (chat, Markdown, Git, Debug and
+    // terminal-adjacent components) in sync with the Editor Font setting.
+    document.documentElement.style.setProperty('--font-mono', this.settings.editorFontFamily);
+    document.documentElement.style.setProperty('--font-code', this.settings.editorFontFamily);
     document.body.style.fontFamily = this.settings.fontFamily;
   }
 
@@ -1601,7 +1987,15 @@ class NexusApp {
 
   private async restoreSavedSession(): Promise<void> {
     const session = this.sessionManager.getState();
-    if (!session) return;
+    // In the Web edition the virtual filesystem itself is persisted in the
+    // browser. Restore it even when no desktop-style Hot Exit session exists.
+    if (!session) {
+      const savedWorkspace = await window.electronAPI.getWorkspacePath();
+      if (savedWorkspace && await window.electronAPI.exists(savedWorkspace)) {
+        await this.setWorkspaceFolder(savedWorkspace, false);
+      }
+      return;
+    }
 
     // 1. Restore previous workspace folder
     if (session.workspacePath) {
@@ -1612,6 +2006,11 @@ class NexusApp {
         }
       } catch {
         /* ignore */
+      }
+    } else {
+      const savedWorkspace = await window.electronAPI.getWorkspacePath();
+      if (savedWorkspace && await window.electronAPI.exists(savedWorkspace)) {
+        await this.setWorkspaceFolder(savedWorkspace, false);
       }
     }
 
@@ -1739,6 +2138,10 @@ class NexusApp {
     this.tabs.openTab(path);
     this.statusBar.setFile(path);
     this.welcome.hide();
+    // If settings tab was visible, hide it and restore the editor area
+    document.getElementById('settings-view')?.classList.add('hidden');
+    const splitRoot = document.getElementById('editor-split-root');
+    if (splitRoot) splitRoot.style.display = '';
     this.updateViewState();
 
     // Track the file in the recent-files list (MRU). The list is consulted by
@@ -2203,7 +2606,7 @@ class NexusApp {
       return;
     }
 
-    const version = '3.5.7-Insider.10';
+    const version = __NEXCODE_VERSION__;
     const edition = isDesktop ? 'Desktop' : 'Web Edition';
     const userAgent = navigator.userAgent;
     const metaText = [
@@ -2436,13 +2839,13 @@ class NexusApp {
     const recentSubmenu: MenuItem[] = recent.length === 0
       ? [{ label: '(No recent files)', disabled: true }]
       : [
-          ...recent.map((filePath) => ({
-            label: this.shortenRecentLabel(filePath),
-            action: () => void this.openRecentFile(filePath),
-          })),
-          { separator: true },
-          { label: 'Clear Recent', action: () => void this.clearRecentFiles() },
-        ];
+        ...recent.map((filePath) => ({
+          label: this.shortenRecentLabel(filePath),
+          action: () => void this.openRecentFile(filePath),
+        })),
+        { separator: true },
+        { label: 'Clear Recent', action: () => void this.clearRecentFiles() },
+      ];
 
     const items: MenuItem[] = [
       { label: 'New Text File', shortcut: 'Ctrl+N', action: () => void this.newUntitledFile() },
@@ -2817,4 +3220,3 @@ window.addEventListener('error', (event) => {
     event.preventDefault();
   }
 });
-

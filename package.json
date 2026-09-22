@@ -1,14 +1,18 @@
 {
   "name": "NexCode-ide",
   "productName": "NexCode IDE",
-  "version": "3.5.7-Insider.10",
-  "description": "NexCode IDE — desktop code editor",
+  "version": "4.0.0",
+  "description": "NexCode IDE \u2014 desktop code editor",
   "main": "dist/main/main.js",
   "author": {
     "name": "Hyggshi OS major project center",
     "email": "hyggshidev@gmail.com"
   },
   "homepage": "https://github.com/Hyggshi-OS-project-center/NexCode",
+  "bin": {
+    "nexcode": "cli/bin/nexcode.js",
+    "nex": "cli/bin/nexcode.js"
+  },
   "license": "MIT",
   "scripts": {
     "buildfast:Nocompile": "cross-env VITE_NO_SOURCEMAP=1 vite build",
@@ -23,6 +27,7 @@
     "icons": "node scripts/generate-icons.mjs && node scripts/ensure-default-win32-icon.mjs && node scripts/normalize-win32-icons.mjs && node scripts/copy-win32-icons.mjs",
     "build": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" npm run icons && npm run build:main && npm run build:renderer",
     "build:main": "tsc -p tsconfig.main.json",
+    "cli": "node cli/bin/nexcode.js",
     "build:renderer": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" VITE_NO_SOURCEMAP=1 vite build && npm run build:agent-renderer",
     "build:agent-renderer": "node scripts/copy-agent-renderer.mjs",
     "build:themes-hsixet": "node scripts/build-theme-hsixet.cjs",
@@ -43,7 +48,7 @@
     "node-pty": "^1.1.0"
   },
   "devDependencies": {
-    "@types/node": "^22.13.10",
+    "@types/node": "^22.20.4",
     "@xterm/addon-clipboard": "^0.2.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-ligatures": "^0.10.0",
@@ -55,7 +60,7 @@
     "concurrently": "^9.1.2",
     "cross-env": "^10.1.0",
     "decode-ico": "^0.4.1",
-    "electron": "37.2.1",
+    "electron": "^37.2.1",
     "electron-builder": "^25.1.8",
     "fflate": "^0.8.3",
     "monaco-editor": "^0.55.1",
@@ -63,7 +68,7 @@
     "rcedit": "^5.0.2",
     "sharp": "^0.33.5",
     "to-ico": "^1.1.5",
-    "typescript": "^5.8.2",
+    "typescript": "5.8",
     "vite": "^6.2.2",
     "wait-on": "^8.0.3"
   },

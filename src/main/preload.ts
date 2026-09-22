@@ -2,9 +2,14 @@
  * Preload script — exposes a safe, typed API to the renderer via contextBridge.
  */
 import { contextBridge, ipcRenderer } from 'electron';
+import type { IpcRendererEvent } from 'electron';
 import type {
   AiChatMessage,
   AiChatResult,
+  AiStreamDelta,
+  AiStreamStatus,
+  ChatConversation,
+  ChatConversationSummary,
   AppSettings,
   CodeValidationResult,
   AboutInfo,
@@ -125,9 +130,35 @@ const api: ElectronAPI = {
     ipcRenderer.invoke('ai:chat', messages, workspacePath ?? null, editorContext ?? null) as Promise<AiChatResult>,
   aiValidate: (filePath, workspacePath) =>
     ipcRenderer.invoke('ai:validate', filePath, workspacePath ?? null) as Promise<CodeValidationResult | null>,
+  aiChatStream: (requestId, messages, workspacePath, editorContext) =>
+    ipcRenderer.invoke(
+      'ai:chat-stream',
+      requestId,
+      messages,
+      workspacePath ?? null,
+      editorContext ?? null,
+    ) as Promise<AiChatResult>,
+  aiChatCancel: (requestId) => ipcRenderer.send('ai:chat-cancel', requestId),
+  chatList: () => ipcRenderer.invoke('chat:list') as Promise<ChatConversationSummary[]>,
+  chatLoad: (id) => ipcRenderer.invoke('chat:load', id) as Promise<ChatConversation | null>,
+  chatSave: (conversation) =>
+    ipcRenderer.invoke('chat:save', conversation) as Promise<ChatConversation | null>,
+  chatDelete: (id) => ipcRenderer.invoke('chat:delete', id) as Promise<boolean>,
+  chatClear: () => ipcRenderer.invoke('chat:clear') as Promise<number>,
+  onAiChatDelta: (callback) => {
+    const handler = (_e: IpcRendererEvent, delta: AiStreamDelta) => callback(delta);
+    ipcRenderer.on('ai:chat-delta', handler);
+    return () => ipcRenderer.removeListener('ai:chat-delta', handler);
+  },
+  onAiChatStatus: (callback) => {
+    const handler = (_e: IpcRendererEvent, status: AiStreamStatus) => callback(status);
+    ipcRenderer.on('ai:chat-status', handler);
+    return () => ipcRenderer.removeListener('ai:chat-status', handler);
+  },
   listGeminiModels: () => ipcRenderer.invoke('models:list-gemini') as Promise<{ value: string; label: string; supportsImages: boolean }[]>,
   listOpenRouterModels: () => ipcRenderer.invoke('models:list-openrouter') as Promise<{ value: string; label: string; supportsImages: boolean }[]>,
   listClaudeModels: () => ipcRenderer.invoke('models:list-claude') as Promise<{ value: string; label: string; supportsImages: boolean }[]>,
+  listLocalModels: () => ipcRenderer.invoke('models:list-local') as Promise<{ value: string; label: string; supportsImages: boolean }[]>,
   setEditorContext: (ctx) => ipcRenderer.send('ai:set-editor-context', ctx),
   openAgent: () => ipcRenderer.send('agent:open'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),

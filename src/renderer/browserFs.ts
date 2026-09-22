@@ -25,6 +25,55 @@ let fileMap: FileMap = new Map();
 let fileRefs: FileRefMap = new Map();
 let roots = new Set<string>();
 
+const WORKSPACE_STORAGE_KEY = 'nexcode.web-workspace.v1';
+const MAX_PERSISTED_FILE_BYTES = 1024 * 1024;
+const TEXT_FILE_EXTENSIONS = new Set([
+  'c', 'cc', 'cpp', 'cs', 'css', 'csv', 'go', 'h', 'hpp', 'html', 'java',
+  'js', 'json', 'jsx', 'md', 'mjs', 'php', 'py', 'rb', 'rs', 'scss', 'sh',
+  'sql', 'svg', 'toml', 'ts', 'tsx', 'txt', 'vue', 'xml', 'yaml', 'yml',
+]);
+
+interface PersistedWorkspace {
+  version: 1;
+  roots: string[];
+  entries: BrowserFileEntry[];
+}
+
+function canPersistTextFile(file: File): boolean {
+  if (file.size > MAX_PERSISTED_FILE_BYTES) return false;
+  if (file.type.startsWith('text/')) return true;
+  const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+  return TEXT_FILE_EXTENSIONS.has(extension);
+}
+
+function persistWorkspace(): void {
+  try {
+    // Files that have not been read are backed by a browser File object, which
+    // is not serializable. Store only directories and materialized text files.
+    const entries = [...fileMap.values()]
+      .filter((entry) => entry.isDirectory || entry.content !== undefined)
+      .map(({ blobUrl: _blobUrl, ...entry }) => entry);
+    const snapshot: PersistedWorkspace = { version: 1, roots: [...roots], entries };
+    localStorage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(snapshot));
+  } catch (error) {
+    // Quota/security failures must not prevent editing the current workspace.
+    console.warn('[BrowserFs] Could not persist web workspace:', error);
+  }
+}
+
+function restoreWorkspace(): void {
+  try {
+    const raw = localStorage.getItem(WORKSPACE_STORAGE_KEY);
+    if (!raw) return;
+    const snapshot = JSON.parse(raw) as PersistedWorkspace;
+    if (snapshot.version !== 1 || !Array.isArray(snapshot.entries) || !Array.isArray(snapshot.roots)) return;
+    fileMap = new Map(snapshot.entries.map((entry) => [normalizePath(entry.path), { ...entry, blobUrl: undefined }]));
+    roots = new Set(snapshot.roots.map(normalizePath));
+  } catch (error) {
+    console.warn('[BrowserFs] Could not restore saved web workspace:', error);
+  }
+}
+
 /**
  * Normalize a path to use forward slashes and lowercase drive letter.
  */
@@ -50,6 +99,7 @@ function parentDir(p: string): string {
  */
 export function captureDirectoryFiles(files: FileList): string {
   fileMap = new Map();
+  fileRefs = new Map();
   roots = new Set();
 
   const dirs = new Set<string>();
@@ -101,7 +151,25 @@ export function captureDirectoryFiles(files: FileList): string {
     roots.add(root);
   }
 
+  // Browser File references vanish on reload. Materialize ordinary source files
+  // in the background so a web workspace can be reopened later.
+  void cacheSelectedTextFiles(files);
   return [...roots][0] || '/';
+}
+
+async function cacheSelectedTextFiles(files: FileList): Promise<void> {
+  const reads: Promise<void>[] = [];
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    if (!canPersistTextFile(file)) continue;
+    const path = normalizePath((file as any).path || file.webkitRelativePath || file.name);
+    reads.push(file.text().then((content) => {
+      const entry = fileMap.get(path);
+      if (entry) entry.content = content;
+    }).catch(() => undefined));
+  }
+  await Promise.all(reads);
+  persistWorkspace();
 }
 
 /**
@@ -122,6 +190,13 @@ export function captureSingleFile(file: File): string {
     blobUrl: undefined,
   });
   fileRefs.set(normalized, file);
+  if (canPersistTextFile(file)) {
+    void file.text().then((content) => {
+      const entry = fileMap.get(normalized);
+      if (entry) entry.content = content;
+      persistWorkspace();
+    }).catch(() => undefined);
+  }
 
   return normalized;
 }
@@ -141,6 +216,7 @@ export async function readFileContent(path: string): Promise<string> {
   if (fileRef) {
     const text = await fileRef.text();
     entry.content = text;
+    persistWorkspace();
     return text;
   }
 
@@ -149,6 +225,7 @@ export async function readFileContent(path: string): Promise<string> {
     const resp = await fetch(entry.blobUrl);
     const text = await resp.text();
     entry.content = text;
+    persistWorkspace();
     return text;
   }
 
@@ -197,7 +274,13 @@ export function readDir(dirPath: string, _options?: { showHidden?: boolean }): B
     }
   }
 
-  return [...entries.values()];
+  // Mirror the native Explorer: folders first, then files; names remain
+  // alphabetical inside each group. Map insertion order otherwise puts files
+  // selected by the browser ahead of the generated directory entries.
+  return [...entries.values()].sort((a, b) => {
+    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  });
 }
 
 /** Check if a path exists */
@@ -224,12 +307,15 @@ export function writeFile(path: string, content: string): void {
     mtimeMs: Date.now(),
     content,
   });
+  persistWorkspace();
 }
 
 /** Delete a file */
 export function unlink(path: string): void {
   const n = normalizePath(path);
   fileMap.delete(n);
+  fileRefs.delete(n);
+  persistWorkspace();
 }
 
 /** Create a directory */
@@ -248,6 +334,7 @@ export function mkdir(path: string): void {
   if (parent && parent !== n && !fileMap.has(parent)) {
     mkdir(parent);
   }
+  persistWorkspace();
 }
 
 /** Rename a file or directory */
@@ -271,11 +358,23 @@ export function rename(oldPath: string, newPath: string): void {
       const rel = key.substring(oldN.length);
       const newKey = newN + rel;
       fileMap.set(newKey, { ...entry, path: newKey, name: newKey.split('/').pop() || '' });
+      const fileRef = fileRefs.get(key);
+      if (fileRef) {
+        fileRefs.delete(key);
+        fileRefs.set(newKey, fileRef);
+      }
     }
   } else {
     fileMap.delete(oldN);
     fileMap.set(newN, { ...oldEntry, path: newN, name: newN.split('/').pop() || '' });
+    const fileRef = fileRefs.get(oldN);
+    if (fileRef) {
+      fileRefs.delete(oldN);
+      fileRefs.set(newN, fileRef);
+    }
   }
+  if (roots.delete(oldN)) roots.add(newN);
+  persistWorkspace();
 }
 
 /**
@@ -303,10 +402,23 @@ export function createFileBlobUrl(path: string): string | null {
 /** Clear all stored files */
 export function reset(): void {
   fileMap = new Map();
+  fileRefs = new Map();
   roots = new Set();
+  try {
+    localStorage.removeItem(WORKSPACE_STORAGE_KEY);
+  } catch {
+    // Ignore storage security failures in embedded browser previews.
+  }
+}
+
+/** Return the previously opened browser workspace root, if one was saved. */
+export function getWorkspaceRoot(): string | null {
+  return [...roots][0] ?? null;
 }
 
 /** Get all stored paths (for debugging) */
 export function getPaths(): string[] {
   return [...fileMap.keys()];
 }
+
+restoreWorkspace();

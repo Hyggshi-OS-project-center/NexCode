@@ -1,7 +1,7 @@
 /**
  * Tab bar — manages open file tabs, with drag-and-drop reordering (free towing).
  */
-import { renderFileIconHtml } from '../../utils/fileIcons';
+import { renderFileIconTabHtml } from '../../utils/fileIcons';
 import { RELEASE_NOTES_TAB_PATH } from '../releaseNotes/ReleaseNotesView';
 import { WELCOME_TAB_PATH } from '../welcome/WelcomeScreen';
 
@@ -69,7 +69,9 @@ export class TabManager {
         ? "What's New"
         : path === WELCOME_TAB_PATH
           ? 'Welcome'
-          : path.split(/[/\\]/).pop() ?? path;
+          : path === '__nexcode_settings__'
+            ? 'Settings'
+            : path.split(/[/\\]/).pop() ?? path;
     const existing = this.tabs.find((t) => t.path === path);
     if (!existing) {
       this.tabs.push({ path, name, dirty: false });
@@ -193,6 +195,14 @@ export class TabManager {
       window.addEventListener('resize', () => this.updateTabScrollbar());
     }
   }
+
+  /** No-op kept for compatibility — tab icons now use <img> data URIs
+   * and do not suffer from SVG gradient loss. */
+  refreshIcons(): void {
+    // No longer needed: icons are rendered as <img src="data:image/svg+xml,...">
+    // which are immune to DOM-layout-triggered gradient rendering resets.
+  }
+
 
   private updateTabScrollbar(): void {
     if (!this.scrollFrame || !this.scrollThumb) return;
@@ -325,7 +335,7 @@ export class TabManager {
       el.dataset.tabIdx = String(idx);
       el.dataset.path = tab.path;
       el.innerHTML = `
-        ${renderFileIconHtml(tab.name, false)}
+        ${renderFileIconTabHtml(tab.name)}
         <span class="tab-name">${escHtml(tab.name)}</span>
         <button class="tab-close" title="Close">×</button>
       `;

@@ -1,7 +1,7 @@
 {
   "name": "NexCode-ide",
   "productName": "NexCode IDE",
-  "version": "4.0.2",
+  "version": "4.0.3",
   "description": "NexCode IDE — desktop code editor",
   "main": "dist/main/main.js",
   "author": {
@@ -61,7 +61,7 @@
     "concurrently": "^9.1.2",
     "cross-env": "^10.1.0",
     "decode-ico": "^0.4.1",
-    "electron": "^37.2.1",
+    "electron": "^37.10.3",
     "electron-builder": "^25.1.8",
     "fflate": "^0.8.3",
     "monaco-editor": "^0.55.1",

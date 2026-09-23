@@ -1,6 +1,8 @@
 /**
  * Electron main process — window lifecycle, IPC routing, and native integrations.
- * Optimized for reduced RAM usage (< 300 MB).
+ * Idle RAM target: <=150MB total (main + renderer + GPU), measured via
+ * Private Bytes on Windows / RSS-minus-shared on Linux with an empty
+ * workspace, no terminal, no extension host, devtools closed.
  */
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, shell, type NativeImage } from 'electron';
 import fs from 'fs';
@@ -60,12 +62,29 @@ function appendCrashLog(msg: string): void {
   }
 }
 
-app.commandLine.appendSwitch('max_old_space_size', '512');
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=512 --optimize-for-size');
+// Idle target: <=150MB total RSS (main + renderer + gpu). 512MB old-space was
+// sized for a ~300-500MB budget; cap it much lower so V8 doesn't grow the heap
+// past what the idle target allows.
+app.commandLine.appendSwitch('max_old_space_size', '96');
+app.commandLine.appendSwitch(
+  'js-flags',
+  '--max-old-space-size=96 --max-semi-space-size=4 --optimize-for-size',
+);
 app.commandLine.appendSwitch('disable-gpu-vsync');
 app.commandLine.appendSwitch('disable-gpu-program-cache');
-app.commandLine.appendSwitch('enable-features', 'Vulkan');
 app.commandLine.appendSwitch('log-level', '0');
+
+if (process.platform === 'linux') {
+  // GPU process on many Linux distros (Mesa/Vulkan driver overhead) costs an
+  // extra 40-80MB at idle for no real benefit in a text editor. Force
+  // software rendering to remove that process's memory entirely.
+  app.disableHardwareAcceleration();
+} else if (process.platform === 'win32') {
+  // Windows GPU drivers are typically lighter than Linux's Mesa/Vulkan path,
+  // so keep hardware acceleration but drop compositing features the editor
+  // doesn't need.
+  app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
+}
 
 process.title = APP_NAME;
 app.setName(APP_NAME);
@@ -195,6 +214,8 @@ function createWindow(): void {
       nodeIntegration: false,
       sandbox: false,
       backgroundThrottling: true,
+      spellcheck: false, // dictionary load costs a few MB at idle, not needed for a code editor
+      v8CacheOptions: 'bypassHeatCheck',
       // webSecurity is left at its secure default (true). Binary file previews
       // (images / video / audio) work in both modes without disabling it:
       //   - Electron: fs:readFileForEditor returns base64 data URLs.

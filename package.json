@@ -5,7 +5,7 @@
     "web"
   ],
   "version": "4.0.3",
-  "description": "NexCode IDE — desktop code editor",
+  "description": "NexCode IDE \u2014 desktop code editor",
   "main": "dist/main/main.js",
   "author": {
     "name": "Hyggshi OS major project center",
@@ -206,5 +206,11 @@
         "libasound2"
       ]
     }
+  },
+  "allowScripts": {
+    "electron@37.10.3": true,
+    "esbuild@0.25.12": true,
+    "sharp@0.33.5": true,
+    "node-pty@1.1.0": true
   }
 }

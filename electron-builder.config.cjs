@@ -13,6 +13,17 @@ module.exports = {
    */
   npmRebuild: true,
   buildDependenciesFromSource: false,
+
+  /**
+   * node-pty ships a native .node binary. Electron cannot dlopen/require
+   * native addons from inside app.asar, so it must be unpacked to
+   * app.asar.unpacked at build time — otherwise the app fails on launch
+   * with "Cannot find module './prebuilds/linux-x64//pty.node'".
+   */
+  asarUnpack: [
+    'node_modules/node-pty/**/*'
+  ],
+
   fileAssociations: associations.flatMap((item) =>
     (Array.isArray(item.ext) ? item.ext : [item.ext]).map((ext) => ({
       ext,

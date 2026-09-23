@@ -1,9 +1,6 @@
 {
   "name": "NexCode-ide",
   "productName": "NexCode IDE",
-  "workspaces": [
-    "web"
-  ],
   "version": "4.0.3",
   "description": "NexCode IDE \u2014 desktop code editor",
   "main": "dist/main/main.js",

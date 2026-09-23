@@ -1,8 +1,8 @@
 {
   "name": "NexCode-ide",
   "productName": "NexCode IDE",
-  "version": "4.0.1",
-  "description": "NexCode IDE \u2014 desktop code editor",
+  "version": "4.0.2",
+  "description": "NexCode IDE — desktop code editor",
   "main": "dist/main/main.js",
   "author": {
     "name": "Hyggshi OS major project center",
@@ -40,6 +40,7 @@
     "pack:linux": "npm run build && node scripts/pack-linux.mjs",
     "pack:portable:linux": "npm run build && node scripts/pack-portable.mjs --linux",
     "start": "electron . --no-sandbox",
+    "startno-sandbox": "electron .",
     "check": "npm run typecheck && npm run build:main && npm run build:renderer",
     "typecheck": "tsc -p tsconfig.main.json --noEmit && tsc -p tsconfig.renderer.json --noEmit"
   },

@@ -14,10 +14,11 @@ export class SplashScreen {
   private statusEl: HTMLElement;
   private imageEl: HTMLImageElement | null;
   private readonly minDisplayMs: number;
-  private readonly shownAt = Date.now();
+  private shownAt = Date.now();
   private ready = false;
   private hidden = false;
   private hideTimer: ReturnType<typeof setTimeout> | null = null;
+  private maxHideTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: SplashScreenOptions = {}) {
     this.minDisplayMs = options.minDisplayMs ?? 1999;
@@ -39,6 +40,40 @@ export class SplashScreen {
     }
 
     document.body.classList.add('app-is-loading');
+
+    // The desktop BrowserWindow is created with show:false, so this code can run well before the
+    // user sees anything. Start the minimum-display clock only when the main process reports the
+    // window is actually on screen (it dispatches 'nexcode:window-shown'); otherwise on slower
+    // machines the splash expires before it was ever visible.
+    //
+    // IMPORTANT: Use the LATER of (window-shown, constructor-time) as the baseline. When the
+    // internal Vite dev server takes several seconds to start, __nexcodeWindowShown is set very
+    // early but the splash UI doesn't render until the JS modules load. Using the early timestamp
+    // causes elapsed > minDisplayMs → splash hides instantly before the user ever sees it.
+    const now = Date.now();
+    const w = window as unknown as { __nexcodeWindowShown?: number; electronAPI?: { isDesktop?: boolean; isWeb?: boolean } };
+    const isDesktop = Boolean(w.electronAPI?.isDesktop && !w.electronAPI?.isWeb);
+    if (isDesktop && w.__nexcodeWindowShown) {
+      // Window was already shown: use the later of the two timestamps so the splash
+      // is guaranteed to stay visible for minDisplayMs from *this* moment.
+      this.shownAt = Math.max(w.__nexcodeWindowShown, now);
+    } else if (isDesktop) {
+      const onShown = (): void => {
+        window.removeEventListener('nexcode:window-shown', onShown);
+        this.shownAt = Date.now();
+        this.scheduleHide();
+      };
+      window.addEventListener('nexcode:window-shown', onShown);
+    }
+
+    // Safety net: never let the splash overlay block the UI forever. If hide() is never called
+    // (e.g. init() hangs on an IPC call), auto-hide after 15 seconds so clicks are not blocked.
+    this.maxHideTimer = window.setTimeout(() => {
+      if (!this.hidden) {
+        console.warn('[SplashScreen] Force-hiding splash after max timeout (15s).');
+        this.doHide();
+      }
+    }, 15000);
   }
 
   setStatus(message: string): void {
@@ -65,6 +100,7 @@ export class SplashScreen {
   private doHide(): void {
     if (this.hidden) return;
     this.hidden = true;
+    if (this.maxHideTimer) { clearTimeout(this.maxHideTimer); this.maxHideTimer = null; }
 
     this.el.classList.add('app-splash--hide');
     document.body.classList.remove('app-is-loading');

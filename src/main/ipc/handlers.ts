@@ -11,7 +11,6 @@ import type { AppSettings, FileEntry, ReadFileForEditorResult } from '../../shar
 import type { UpdateChannel } from '../../shared/types';
 import { TerminalManager } from '../terminal/TerminalManager';
 import { getSettings, setSettings } from '../settings/store';
-import { pathToFileURL } from 'url';
 import {
   getExtension,
   getMediaKind,
@@ -518,8 +517,11 @@ export function registerIpcHandlers(
       ];
     for (const file of iconCandidates) {
       try {
-        await fs.access(file);
-        iconUrl = pathToFileURL(path.resolve(file)).href;
+        // data: URL works whether About is served from file:// or the Vite dev server
+        // (http:// pages are not allowed to load file:// images).
+        const buf = await fs.readFile(file);
+        const mime = file.toLowerCase().endsWith('.png') ? 'image/png' : 'image/x-icon';
+        iconUrl = `data:${mime};base64,${buf.toString('base64')}`;
         break;
       } catch {
         /* try next */

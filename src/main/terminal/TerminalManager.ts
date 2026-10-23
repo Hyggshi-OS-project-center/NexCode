@@ -4,7 +4,7 @@
  * multi-session lifecycle, and graceful fallback.
  */
 import { type BrowserWindow } from 'electron';
-import * as pty from 'node-pty';
+import type * as PtyModule from 'node-pty';
 import { existsSync, statSync } from 'fs';
 import os from 'os';
 import path from 'path';
@@ -12,9 +12,34 @@ import type { TerminalCreateOptions, TerminalShell, TerminalShellInfo } from '..
 import { getSettings } from '../settings/store';
 import { getAvailableShells, resolveShellProfile } from './shellConfig';
 
+type PtyApi = typeof PtyModule;
+
+let ptyModule: PtyApi | null = null;
+let ptyLoadError: string | null = null;
+
+/**
+ * node-pty is a native addon. Loading it eagerly at the top of the file made the whole
+ * main process crash on startup (no window) whenever the binary was missing or built
+ * for the wrong Electron ABI. Load it lazily so the GUI always starts and only the
+ * integrated terminal degrades.
+ */
+function loadPty(): PtyApi | null {
+  if (ptyModule) return ptyModule;
+  if (ptyLoadError) return null;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    ptyModule = require('node-pty') as PtyApi;
+    return ptyModule;
+  } catch (err: unknown) {
+    ptyLoadError = err instanceof Error ? err.message : String(err);
+    console.error('[terminal] node-pty failed to load:', ptyLoadError);
+    return null;
+  }
+}
+
 interface TerminalSession {
   id: number;
-  ptyProcess: pty.IPty;
+  ptyProcess: PtyModule.IPty;
   shell: TerminalShell;
   shellName: string;
   title: string;
@@ -27,6 +52,19 @@ export class TerminalManager {
 
   create(window: BrowserWindow, options?: TerminalCreateOptions | string): number {
     const id = this.nextId++;
+    const pty = loadPty();
+    if (!pty) {
+      if (!window.isDestroyed()) {
+        window.webContents.send('terminal:data', {
+          id,
+          data:
+            '\r\n\x1b[31;1m[Terminal unavailable: native module node-pty could not be loaded.]\x1b[0m\r\n' +
+            `\x1b[33m${ptyLoadError ?? ''}\x1b[0m\r\n` +
+            '\x1b[33mFix: run "npm run rebuild:native" (needs python3, make, g++) and restart.\x1b[0m\r\n',
+        });
+      }
+      return -1;
+    }
     const opts: TerminalCreateOptions =
       typeof options === 'string'
         ? { cwd: options }
@@ -54,7 +92,7 @@ export class TerminalManager {
       ...profile.env,
     };
 
-    let ptyProc: pty.IPty;
+    let ptyProc: PtyModule.IPty;
     try {
       ptyProc = pty.spawn(profile.exe, profile.args, {
         name: 'xterm-256color',

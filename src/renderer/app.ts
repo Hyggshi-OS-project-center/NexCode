@@ -463,6 +463,8 @@ class NexusApp {
   private forceTextOpen = new Set<string>();
   private fileSnapshots = new Map<string, WatchedFileSnapshot>();
   private fileWatchTimer: number | null = null;
+  private gitRefreshTimer: number | null = null;
+  private gitRefreshDebounce: number | null = null;
   private checkingFileChanges = false;
   private unicodeHighlightDisabled = false;
   /** Temporarily prevents auto-save while the unsaved changes dialog is showing */
@@ -592,8 +594,9 @@ class NexusApp {
     // the browser chrome rather than the application titlebar.
     document.body.classList.toggle('web-edition', (window.electronAPI as any)?.isWeb === true);
     const legacySplash2025 = this.isLegacySplash2025Enabled();
+    const isDesktop = Boolean((window.electronAPI as any)?.isDesktop && !(window.electronAPI as any)?.isWeb);
     const splash = new SplashScreen({
-      minDisplayMs: 1999,
+      minDisplayMs: isDesktop ? 4000 : 1999,
       imageSrc: getRandomSplashImageUrl(),
       imageWidth: 480,
       imageHeight: 270,
@@ -601,241 +604,280 @@ class NexusApp {
     document.getElementById('app-splash')?.classList.toggle('app-splash--legacy-2025', legacySplash2025);
     splash.setStatus(legacySplash2025 ? 'Starting NexCode 2025…' : 'Starting…');
 
-    window.electronAPI.onOpenPaths((payload) => void this.handleOpenPaths(payload));
+    // Always remove the splash, even if startup throws: its full-screen overlay (z-index 100000)
+    // would otherwise block every click and make the whole UI look frozen / un-clickable.
+    try {
+      window.electronAPI.onOpenPaths((payload) => void this.handleOpenPaths(payload));
 
-    splash.setStatus('Loading settings…');
-    this.settings = await window.electronAPI.getSettings();
-    document.body.dataset.theme = this.settings.theme;
-    document.body.classList.toggle('reduce-motion', this.settings.reducedMotion ?? false);
-    this.applyGlobalFont();
-    // Sync the saved update channel to main process on startup
-    void window.electronAPI.setUpdateChannel(this.settings.updateChannel ?? 'stable');
+      splash.setStatus('Loading settings…');
+      this.settings = await window.electronAPI.getSettings();
+      document.body.dataset.theme = this.settings.theme;
+      document.body.classList.toggle('reduce-motion', this.settings.reducedMotion ?? false);
+      this.applyGlobalFont();
+      // Sync the saved update channel to main process on startup
+      void window.electronAPI.setUpdateChannel(this.settings.updateChannel ?? 'stable');
 
-    // Pre-warm the recent-files cache so the File menu opens instantly.
-    this.recentFilesCache = await this.refreshRecentFiles();
-    this.recentFilesCacheAt = Date.now();
+      splash.setStatus('Loading recent files…');
+      // Pre-warm the recent-files cache so the File menu opens instantly.
+      this.recentFilesCache = await this.refreshRecentFiles();
+      this.recentFilesCacheAt = Date.now();
 
-    splash.setStatus('Preparing editor…');
-    EditorManager.registerSnippets();
+      splash.setStatus('Registering code snippets…');
+      EditorManager.registerSnippets();
 
-    this.statusBar = new StatusBar();
-    this.trustManager = new WorkspaceTrustManager('status-trust', (trusted) => {
-      console.log(`[WorkspaceTrust] Trust status changed: ${trusted}`);
-    });
-    this.moments = new NexCodeMoments();
-    this.updates = new UpdateController();
-    this.statusBar.applySettings(this.settings);
+      splash.setStatus('Initializing status bar…');
+      this.statusBar = new StatusBar();
+      this.trustManager = new WorkspaceTrustManager('status-trust', (trusted) => {
+        console.log(`[WorkspaceTrust] Trust status changed: ${trusted}`);
+      });
+      this.moments = new NexCodeMoments();
+      this.updates = new UpdateController();
+      this.statusBar.applySettings(this.settings);
 
-    this.editor = new EditorManager('monaco-host', this.settings);
-    this.idleEasterEgg = new EditorIdleEasterEgg('editor-container');
-    this.idleEasterEgg.setEnabled(this.settings.easterEggEnabled ?? true);
-    this.binaryView = new BinaryFileView('editor-container');
-    this.editorBanner = new EditorBanner('editor-container');
-    this.diffEditor = new DiffEditor('editor-container');
-    this.mdPreview = new MarkdownPreview('editor-container');
-    this.releaseNotes = new ReleaseNotesView('editor-container');
-    this.mdPreview.onHide(() => {
-      // Restore editor layout after closing preview
-      this.editor.show();
-      requestAnimationFrame(() => this.editor.layout());
-    });
-    this.contextMenu = new ContextMenu('context-menu');
-    this.renameService = new RenameService({
-      isSpecialTab: (path) => this.releaseNotes.isReleaseNotesPath(path) || path === WELCOME_TAB_PATH,
-      getParentPath: (path) => {
-        const lastSlash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
-        return lastSlash >= 0 ? path.substring(0, lastSlash) : '';
-      },
-      pathExists: (path) => window.electronAPI.exists(path),
-      renamePath: (oldPath, newPath) => window.electronAPI.rename(oldPath, newPath),
-      showAlert: (message) => window.alert(message),
-      refreshExplorer: () => this.explorer.refresh(),
-      getWorkspacePath: () => this.workspacePath,
-      closeTab: (path) => this.tabs.closeTab(path),
-    });
-    // Wire up the rename service to call the tab manager's inline rename
-    this.renameService.setStartInlineRenameCallback((path) => this.tabs.startInlineRename(path));
-    this.explorer = new Explorer(
-      'panel-explorer',
-      (path) => void this.openFile(path),
-      this.contextMenu,
-      () => void this.openFolder(),
-      (line) => this.editor.revealLine(line),
-      (oldPath, newPath, isDirectory) => this.handleRenamedPath(oldPath, newPath, isDirectory),
-    );
-    void this.explorer.setShowHidden(this.settings.showHiddenFiles ?? false);
-    this.explorer.setExtensionHost(this.pluginHost);
-    this.explorer.setOnInstallExtension(() => void this.installExtensionFromDialog());
-    void this.vsixStore.loadGlobalExtensions(this.pluginHost).then(() => {
-      this.explorer.updateConvenienceStore(this.vsixStore.getExtensions());
-    });
-    this.pluginHost.configure({
-      getWorkspacePath: () => this.workspacePath,
-      getSettings: () => this.settings,
-      getActiveFilePath: () => this.tabs.getActivePath(),
-      getActiveText: () => {
-        const path = this.tabs.getActivePath();
-        return path ? this.editor.getContent(path) : '';
-      },
-      getActiveLanguageId: () => this.editor.getActiveModel()?.getLanguageId() ?? 'plaintext',
-      replaceActiveText: (text) => {
-        const path = this.tabs.getActivePath();
-        if (!path) return;
-        if (this.editor.replaceActiveText(text)) {
-          this.onEditorChange(path);
+      splash.setStatus('Loading Monaco editor…');
+      this.editor = new EditorManager('monaco-host', this.settings);
+      this.idleEasterEgg = new EditorIdleEasterEgg('editor-container');
+      this.idleEasterEgg.setEnabled(this.settings.easterEggEnabled ?? true);
+      this.binaryView = new BinaryFileView('editor-container');
+      this.editorBanner = new EditorBanner('editor-container');
+
+      splash.setStatus('Loading diff editor…');
+      this.diffEditor = new DiffEditor('editor-container');
+
+      splash.setStatus('Loading Markdown preview…');
+      this.mdPreview = new MarkdownPreview('editor-container');
+      this.releaseNotes = new ReleaseNotesView('editor-container');
+      this.mdPreview.onHide(() => {
+        // Restore editor layout after closing preview
+        this.editor.show();
+        requestAnimationFrame(() => this.editor.layout());
+      });
+
+      splash.setStatus('Loading context menus…');
+      this.contextMenu = new ContextMenu('context-menu');
+      this.renameService = new RenameService({
+        isSpecialTab: (path) => this.releaseNotes.isReleaseNotesPath(path) || path === WELCOME_TAB_PATH,
+        getParentPath: (path) => {
+          const lastSlash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+          return lastSlash >= 0 ? path.substring(0, lastSlash) : '';
+        },
+        pathExists: (path) => window.electronAPI.exists(path),
+        renamePath: (oldPath, newPath) => window.electronAPI.rename(oldPath, newPath),
+        showAlert: (message) => window.alert(message),
+        refreshExplorer: () => this.explorer.refresh(),
+        getWorkspacePath: () => this.workspacePath,
+        closeTab: (path) => this.tabs.closeTab(path),
+      });
+      // Wire up the rename service to call the tab manager's inline rename
+      this.renameService.setStartInlineRenameCallback((path) => this.tabs.startInlineRename(path));
+
+      splash.setStatus('Loading file explorer…');
+      this.explorer = new Explorer(
+        'panel-explorer',
+        (path) => void this.openFile(path),
+        this.contextMenu,
+        () => void this.openFolder(),
+        (line) => this.editor.revealLine(line),
+        (oldPath, newPath, isDirectory) => this.handleRenamedPath(oldPath, newPath, isDirectory),
+      );
+      void this.explorer.setShowHidden(this.settings.showHiddenFiles ?? false);
+
+      splash.setStatus('Loading extensions…');
+      this.explorer.setExtensionHost(this.pluginHost);
+      this.explorer.setOnInstallExtension(() => void this.installExtensionFromDialog());
+      void this.vsixStore.loadGlobalExtensions(this.pluginHost).then(() => {
+        this.explorer.updateConvenienceStore(this.vsixStore.getExtensions());
+      });
+
+      splash.setStatus('Configuring plugin host…');
+      this.pluginHost.configure({
+        getWorkspacePath: () => this.workspacePath,
+        getSettings: () => this.settings,
+        getActiveFilePath: () => this.tabs.getActivePath(),
+        getActiveText: () => {
+          const path = this.tabs.getActivePath();
+          return path ? this.editor.getContent(path) : '';
+        },
+        getActiveLanguageId: () => this.editor.getActiveModel()?.getLanguageId() ?? 'plaintext',
+        replaceActiveText: (text) => {
+          const path = this.tabs.getActivePath();
+          if (!path) return;
+          if (this.editor.replaceActiveText(text)) {
+            this.onEditorChange(path);
+          }
+        },
+        insertIntoActiveEditor: (text) => this.editor.insertTextAtCursor(text),
+        openTextDocument: async (path) => {
+          const result = await window.electronAPI.readFileForEditor(path);
+          return {
+            uri: path,
+            fileName: path,
+            languageId: result.isBinary ? 'plaintext' : (this.editor.getActiveModel()?.getLanguageId() ?? 'plaintext'),
+            getText: () => result.content ?? '',
+          };
+        },
+        showMessage: (message, severity) => {
+          const prefix = severity === 'error' ? 'Error' : severity === 'warning' ? 'Warning' : 'Info';
+          document.getElementById('status-file')!.textContent = `${prefix}: ${message}`;
+        },
+        setStatus: (message) => {
+          document.getElementById('status-file')!.textContent = message;
+        },
+        readFile: (path) => window.electronAPI.readFile(path),
+        writeFile: (path, content) => window.electronAPI.writeFile(path, content),
+      });
+
+      splash.setStatus('Loading tab manager…');
+      this.tabs = new TabManager(
+        'tab-bar',
+        (path, x, y) => this.onTabContextMenu(path, x, y),
+        (path, newName) => void this.onTabRename(path, newName),
+        (path) => this.onBeforeTabClose(path),
+      );
+      this.tabBrowser = new TabBrowser();
+
+      splash.setStatus('Binding keyboard shortcuts…');
+      this.shortcuts = new KeyboardShortcuts(this.createShortcutActions());
+      this.shortcuts.bind();
+      window.electronAPI.onShortcut((action) => this.executeShortcut(action));
+
+      splash.setStatus('Loading terminal…');
+      this.terminal = new TerminalModule(
+        'terminal-panel',
+        'terminal-container',
+        this.settings,
+        (e) => this.shortcuts.handleEvent(e),
+        (cwd) => void this.syncWorkspaceFromTerminal(cwd),
+        (cwd) => this.statusBar.setTerminalCwd(cwd),
+        (data) => this.handleTerminalOutput(data),
+        (moment) => {
+          if (moment === 'legacySplash2025') this.moments.showLegacySplashEnabled();
+        },
+      );
+
+      splash.setStatus('Loading search & replace…');
+      this.search = new SearchReplace(this.editor);
+
+      splash.setStatus('Loading settings panel…');
+      // Settings panel renders inside the full-page #settings-view tab
+      this.settingsPanel = new SettingsPanel('settings-view', this.settings, (partial) =>
+        void this.applySettings(partial),
+      );
+
+      splash.setStatus('Loading source control…');
+      this.gitPanel = new GitPanel(
+        'panel-git',
+        (command) => {
+          void this.terminal.show();
+          void this.terminal.sendCommand(command, true);
+        },
+        async (filePath) => {
+          try {
+            const content = await window.electronAPI.readFile(filePath);
+            await this.editor.openFile(filePath, content);
+          } catch { /* ignore */ }
+        },
+        async (filePath, _staged) => {
+          // Diff is rendered in the GitPanel's inline diff viewer; just open the file
+          try {
+            const content = await window.electronAPI.readFile(filePath);
+            await this.editor.openFile(filePath, content);
+          } catch { /* ignore */ }
+        },
+      );
+
+      splash.setStatus('Loading AI chat…');
+      this.chatPanel = new ChatPanel(
+        'panel-chat',
+        () => void this.openSettingsTab(),
+        (actions) => this.handleAgentActions(actions),
+        () => this.workspacePath,
+        () => this.editor.getAiContext(),
+        () => this.settings,
+        (partial) => void this.applySettings(partial),
+      );
+
+      splash.setStatus('Loading welcome screen…');
+      this.welcome = new WelcomeScreen('welcome-screen', {
+        onOpenFolder: () => void this.openFolder(),
+        onOpenFile: () => void this.pickFile(),
+        onNewFile: () => void this.newUntitledFile(),
+        onAIAgent: () => void this.showSidebarPanel('chat'),
+        onToggleTerminal: () => this.terminal.toggle(),
+      });
+
+      this.editor.setHandlers(
+        (path) => this.onEditorChange(path),
+        (path, value) => void this.onAutoSave(path, value),
+        (line, col, lang) => {
+          this.statusBar.setPosition(line, col);
+          this.statusBar.setLanguage(lang);
+        },
+      );
+
+      splash.setStatus('Loading browser view…');
+      // Initialize BrowserView for HTML file preview
+      this.browserView = new BrowserView('editor-container');
+
+      splash.setStatus('Loading debugger…');
+      // Initialize integrated debugger
+      this.debuggerModule = new NexDebugger('panel-debug', this.editor, this.terminal);
+
+      const SETTINGS_PATH = '__nexcode_settings__';
+
+      this.tabs.on('select', (path) => {
+        if (path === SETTINGS_PATH) {
+          // Show settings view, hide Monaco
+          document.getElementById('settings-view')?.classList.remove('hidden');
+          document.getElementById('editor-split-root')!.style.display = 'none';
+          document.getElementById('welcome-screen')?.classList.add('hidden');
+          this.settingsPanel.update(this.settings);
+        } else {
+          // Hide settings view, restore Monaco
+          document.getElementById('settings-view')?.classList.add('hidden');
+          document.getElementById('editor-split-root')!.style.display = '';
+          void this.switchToFile(path);
         }
-      },
-      insertIntoActiveEditor: (text) => this.editor.insertTextAtCursor(text),
-      openTextDocument: async (path) => {
-        const result = await window.electronAPI.readFileForEditor(path);
-        return {
-          uri: path,
-          fileName: path,
-          languageId: result.isBinary ? 'plaintext' : (this.editor.getActiveModel()?.getLanguageId() ?? 'plaintext'),
-          getText: () => result.content ?? '',
-        };
-      },
-      showMessage: (message, severity) => {
-        const prefix = severity === 'error' ? 'Error' : severity === 'warning' ? 'Warning' : 'Info';
-        document.getElementById('status-file')!.textContent = `${prefix}: ${message}`;
-      },
-      setStatus: (message) => {
-        document.getElementById('status-file')!.textContent = message;
-      },
-      readFile: (path) => window.electronAPI.readFile(path),
-      writeFile: (path, content) => window.electronAPI.writeFile(path, content),
-    });
-    this.tabs = new TabManager(
-      'tab-bar',
-      (path, x, y) => this.onTabContextMenu(path, x, y),
-      (path, newName) => void this.onTabRename(path, newName),
-      (path) => this.onBeforeTabClose(path),
-    );
-    this.tabBrowser = new TabBrowser();
-    this.shortcuts = new KeyboardShortcuts(this.createShortcutActions());
-    this.shortcuts.bind();
-    window.electronAPI.onShortcut((action) => this.executeShortcut(action));
-    this.terminal = new TerminalModule(
-      'terminal-panel',
-      'terminal-container',
-      this.settings,
-      (e) => this.shortcuts.handleEvent(e),
-      (cwd) => void this.syncWorkspaceFromTerminal(cwd),
-      (cwd) => this.statusBar.setTerminalCwd(cwd),
-      (data) => this.handleTerminalOutput(data),
-      (moment) => {
-        if (moment === 'legacySplash2025') this.moments.showLegacySplashEnabled();
-      },
-    );
-    this.search = new SearchReplace(this.editor);
+        this.syncSessionState();
+      });
+      this.tabs.on('close', (path) => {
+        if (path === SETTINGS_PATH) {
+          this.closeSettingsTab();
+        }
+        this.onTabClose(path);
+      });
 
-    // Settings panel renders inside the full-page #settings-view tab
-    this.settingsPanel = new SettingsPanel('settings-view', this.settings, (partial) =>
-      void this.applySettings(partial),
-    );
+      splash.setStatus('Binding UI components…');
+      this.startFileChangeWatcher();
+      this.bindCrashMoments();
+      this.bindUI();
+      this.bindTitlebarMenus();
+      this.bindSidebarResizer();
+      this.syncSidebarResizer();
+      this.bindContextMenus();
+      this.bindCommandPalette();
+      this.bindTerminalPanelTabs();
 
-    this.gitPanel = new GitPanel(
-      'panel-git',
-      (command) => {
-        void this.terminal.show();
-        void this.terminal.sendCommand(command, true);
-      },
-      async (filePath) => {
-        try {
-          const content = await window.electronAPI.readFile(filePath);
-          await this.editor.openFile(filePath, content);
-        } catch { /* ignore */ }
-      },
-      async (filePath, _staged) => {
-        // Diff is rendered in the GitPanel's inline diff viewer; just open the file
-        try {
-          const content = await window.electronAPI.readFile(filePath);
-          await this.editor.openFile(filePath, content);
-        } catch { /* ignore */ }
-      },
-    );
+      splash.setStatus('Checking for updates…');
+      this.updates.init();
+      void this.showSidebarPanel('explorer');
+      this.updateViewState();
 
-    this.chatPanel = new ChatPanel(
-      'panel-chat',
-      () => void this.openSettingsTab(),
-      (actions) => this.handleAgentActions(actions),
-      () => this.workspacePath,
-      () => this.editor.getAiContext(),
-      () => this.settings,
-      (partial) => void this.applySettings(partial),
-    );
-
-    this.welcome = new WelcomeScreen('welcome-screen', {
-      onOpenFolder: () => void this.openFolder(),
-      onOpenFile: () => void this.pickFile(),
-      onNewFile: () => void this.newUntitledFile(),
-      onAIAgent: () => void this.showSidebarPanel('chat'),
-      onToggleTerminal: () => this.terminal.toggle(),
-    });
-
-    this.editor.setHandlers(
-      (path) => this.onEditorChange(path),
-      (path, value) => void this.onAutoSave(path, value),
-      (line, col, lang) => {
-        this.statusBar.setPosition(line, col);
-        this.statusBar.setLanguage(lang);
-      },
-    );
-
-    // Initialize BrowserView for HTML file preview
-    this.browserView = new BrowserView('editor-container');
-
-    // Initialize integrated debugger
-    this.debuggerModule = new NexDebugger('panel-debug', this.editor, this.terminal);
-
-    const SETTINGS_PATH = '__nexcode_settings__';
-
-    this.tabs.on('select', (path) => {
-      if (path === SETTINGS_PATH) {
-        // Show settings view, hide Monaco
-        document.getElementById('settings-view')?.classList.remove('hidden');
-        document.getElementById('editor-split-root')!.style.display = 'none';
-        document.getElementById('welcome-screen')?.classList.add('hidden');
-        this.settingsPanel.update(this.settings);
-      } else {
-        // Hide settings view, restore Monaco
-        document.getElementById('settings-view')?.classList.add('hidden');
-        document.getElementById('editor-split-root')!.style.display = '';
-        void this.switchToFile(path);
+      // Hot Exit / Session Restore: Restore previous workspace, open tabs, and unsaved drafts
+      if (!this.hasCommandLineOpenPaths) {
+        splash.setStatus('Restoring previous session…');
+        await this.restoreSavedSession();
       }
-      this.syncSessionState();
-    });
-    this.tabs.on('close', (path) => {
-      if (path === SETTINGS_PATH) {
-        this.closeSettingsTab();
-      }
-      this.onTabClose(path);
-    });
 
-    this.startFileChangeWatcher();
-    this.bindCrashMoments();
-    this.bindUI();
-    this.bindTitlebarMenus();
-    this.bindSidebarResizer();
-    this.syncSidebarResizer();
-    this.bindContextMenus();
-    this.bindCommandPalette();
-    this.bindTerminalPanelTabs();
-    this.updates.init();
-    void this.showSidebarPanel('explorer');
-    this.updateViewState();
-
-    // Hot Exit / Session Restore: Restore previous workspace, open tabs, and unsaved drafts
-    if (!this.hasCommandLineOpenPaths) {
-      await this.restoreSavedSession();
+      window.addEventListener('beforeunload', () => {
+        this.syncSessionState();
+        this.sessionManager.flush();
+      });
+    } catch (error) {
+      console.error('[init] Startup failed:', error);
+    } finally {
+      splash.hide();
     }
-
-    window.addEventListener('beforeunload', () => {
-      this.syncSessionState();
-      this.sessionManager.flush();
-    });
-
-    splash.hide();
     void this.openReleaseNotesAfterUpdate();
   }
 
@@ -1787,7 +1829,7 @@ class NexusApp {
       { label: 'Toggle Markdown Preview', action: () => { const p = this.tabs.getActivePath(); if (p) { const c = this.editor.getContent(p) ?? ''; const f = p.split(/[\/\\]/).pop() ?? ''; this.mdPreview.toggle(c, f); } } },
       { label: 'Extension Marketplace', action: () => void this.openExtensionMarketplace() },
       { label: "What's New", action: () => void this.openReleaseNotes() },
-      { label: 'About NexCode IDE', action: () => window.electronAPI.showAboutWindow() },
+      { label: 'About NexCode IDE', action: () => void this.showAbout() },
       { label: 'Toggle Developer Tools', shortcut: 'F12', action: () => window.electronAPI.toggleDevtools() },
       { label: 'Zoom In', action: () => void this.editor.runEditorAction('editor.action.fontZoomIn') },
       { label: 'Zoom Out', action: () => void this.editor.runEditorAction('editor.action.fontZoomOut') },
@@ -2088,6 +2130,39 @@ class NexusApp {
     this.gitPanel.setWorkspace(folder);
     void this.refreshGitBranch();
     this.updateViewState();
+    // Auto-add .nexcode to .gitignore so NexCode's own data (custom assets,
+    // run configs, easter eggs) don't pollute the user's Source Control panel.
+    void this.ensureNexcodeGitignored(folder);
+  }
+
+  /** Ensures `.nexcode` is listed in the workspace's `.gitignore`. */
+  private async ensureNexcodeGitignored(folder: string): Promise<void> {
+    try {
+      const gitignorePath = `${folder}/.gitignore`;
+      let content = '';
+      try {
+        content = await window.electronAPI.readFile(gitignorePath);
+      } catch {
+        // No .gitignore yet — we'll create one.
+      }
+      // Check if .nexcode is already ignored (exact line or pattern covering it).
+      const lines = content.split('\n').map((l) => l.trim());
+      const alreadyIgnored = lines.some(
+        (l) => l === '.nexcode' || l === '.nexcode/' || l === '/.nexcode' || l === '/.nexcode/',
+      );
+      if (alreadyIgnored) return;
+      const addition = content.length > 0 && !content.endsWith('\n')
+        ? '\n\n# NexCode IDE data\n.nexcode\n'
+        : '\n# NexCode IDE data\n.nexcode\n';
+      await window.electronAPI.writeFile(gitignorePath, content + addition);
+      console.log('[NexCode] Added .nexcode to', gitignorePath);
+      // Refresh git panel so the newly-ignored files disappear from Source Control.
+      setTimeout(() => {
+        void this.gitPanel.refresh().then((s) => this.statusBar.setBranch(s?.branch ?? null, s?.isRepo));
+      }, 800);
+    } catch (err) {
+      console.warn('[NexCode] Could not update .gitignore:', err);
+    }
   }
 
   private async installExtensionFromDialog(): Promise<void> {
@@ -2985,6 +3060,11 @@ class NexusApp {
     this.explorer.getTimeline().push(path, 'Saved');
     void this.explorer.refreshGitDecorations();
     this.pluginHost.emit('fileSaved', path);
+    // Debounced git status refresh so Source Control updates after every save.
+    if (this.gitRefreshDebounce !== null) window.clearTimeout(this.gitRefreshDebounce);
+    this.gitRefreshDebounce = window.setTimeout(() => {
+      void this.gitPanel.refresh().then((s) => this.statusBar.setBranch(s?.branch ?? null, s?.isRepo));
+    }, 500);
     console.log('[SAVE FILE]', path);
 
     if (this.autoSaveSuspended) {
@@ -3014,6 +3094,13 @@ class NexusApp {
     this.fileWatchTimer = window.setInterval(() => {
       void this.pollOpenFileChanges();
     }, 1200);
+    // Also periodically refresh git status so Source Control stays up to date
+    // even when files change outside the editor (e.g. git operations in terminal).
+    if (this.gitRefreshTimer === null) {
+      this.gitRefreshTimer = window.setInterval(() => {
+        void this.gitPanel.refresh().then((s) => this.statusBar.setBranch(s?.branch ?? null, s?.isRepo));
+      }, 10000);
+    }
   }
 
   private async pollOpenFileChanges(): Promise<void> {

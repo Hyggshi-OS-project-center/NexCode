@@ -69,8 +69,10 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['monaco-editor', 'pdfjs-dist'],
-    esbuildOptions: {
-      target: 'es2022',
+    rolldownOptions: {
+      output: {
+        // Keep es2022 target for dependencies
+      },
     },
   },
 });

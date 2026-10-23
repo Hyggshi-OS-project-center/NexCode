@@ -481,7 +481,9 @@ export class SettingsPanel {
     this.bind('set-easterEggEnabled', 'change', el => this.patch({ easterEggEnabled: (el as HTMLInputElement).checked }));
     this.bind('set-reducedMotion', 'change', el => this.patch({ reducedMotion: (el as HTMLInputElement).checked }));
     this.bind('set-showHiddenFiles', 'change', el => this.patch({ showHiddenFiles: (el as HTMLInputElement).checked }));
-    this.container.querySelector('#btn-settings-about')?.addEventListener('click', () => window.electronAPI.showAboutWindow());
+    this.container.querySelector('#btn-settings-about')?.addEventListener('click', () => {
+      try { window.electronAPI.showAboutWindow(); } catch { /* ignore */ }
+    });
   }
 
   private bind(id: string, event: string, handler: (el: HTMLElement) => void): void {

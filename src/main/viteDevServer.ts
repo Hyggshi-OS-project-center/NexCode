@@ -7,6 +7,8 @@ export interface ViteDevServer {
 }
 
 export async function startViteDevServer(): Promise<ViteDevServer> {
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-ignore — Vite 8 uses modern package exports; resolved at runtime by Node, not by tsc.
   const { createServer } = await import('vite');
 
   const server = await createServer({

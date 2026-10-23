@@ -62,14 +62,9 @@ function appendCrashLog(msg: string): void {
   }
 }
 
-// Idle target: <=150MB total RSS (main + renderer + gpu). 512MB old-space was
-// sized for a ~300-500MB budget; cap it much lower so V8 doesn't grow the heap
-// past what the idle target allows.
-app.commandLine.appendSwitch('max_old_space_size', '96');
-app.commandLine.appendSwitch(
-  'js-flags',
-  '--max-old-space-size=96 --max-semi-space-size=4 --optimize-for-size',
-);
+// NOTE: do NOT cap V8 with --max-old-space-size here. A 96MB cap applies to the
+// renderer too; Monaco + xterm + pdfjs exceed it during startup, the renderer dies with
+// an OOM, 'ready-to-show' never fires and the (show:false) window never appears.
 app.commandLine.appendSwitch('disable-gpu-vsync');
 app.commandLine.appendSwitch('disable-gpu-program-cache');
 app.commandLine.appendSwitch('log-level', '0');
@@ -225,11 +220,44 @@ function createWindow(): void {
 
   mainWindow.webContents.setZoomFactor(1);
 
-  mainWindow.once('ready-to-show', () => {
+  let windowShown = false;
+  const showMainWindow = (): void => {
+    if (windowShown || !mainWindow || mainWindow.isDestroyed()) return;
+    windowShown = true;
     if (icon && process.platform === 'win32') {
-      mainWindow?.setIcon(icon);
+      mainWindow.setIcon(icon);
     }
-    mainWindow?.show();
+    mainWindow.show();
+    // Tell the renderer the window is really visible so the splash screen's minimum
+    // display time starts now (the renderer boots while the window is still hidden).
+    mainWindow.webContents
+      .executeJavaScript(
+        "window.__nexcodeWindowShown = Date.now(); window.dispatchEvent(new Event('nexcode:window-shown'));",
+      )
+      .catch(() => {});
+  };
+
+  mainWindow.once('ready-to-show', showMainWindow);
+  // Safety net: never leave the user without a window if 'ready-to-show' doesn't fire.
+  setTimeout(showMainWindow, 5000);
+
+  mainWindow.webContents.on('did-fail-load', (_e, code, desc, url, isMainFrame) => {
+    if (!isMainFrame || code === -3) return; // -3 = ERR_ABORTED (navigation cancelled)
+    appendCrashLog(`did-fail-load ${code} ${desc} ${url}`);
+    console.error('[main] did-fail-load', code, desc, url);
+    showMainWindow();
+  });
+
+  mainWindow.webContents.on('render-process-gone', (_e, details) => {
+    appendCrashLog(`render-process-gone reason=${details.reason} exitCode=${details.exitCode}`);
+    console.error('[main] render-process-gone', details);
+    showMainWindow();
+    if (details.reason !== 'clean-exit' && mainWindow && !mainWindow.isDestroyed()) {
+      dialog.showErrorBox(
+        'NexCode renderer crashed',
+        `Reason: ${details.reason} (exit code ${details.exitCode}).\nLog: ${getCrashLogPath()}`,
+      );
+    }
   });
 
   mainWindow.webContents.once('did-finish-load', () => {
